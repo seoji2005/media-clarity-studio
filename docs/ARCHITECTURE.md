@@ -2,34 +2,240 @@
 
 모듈 경계와 인터페이스 계약. **구현이 아니라 계약의 정의입니다.**
 
-마지막 갱신: 2026-08-09 (Phase 0)
-상태: **제안됨 (Proposed)** — 경계 원칙은 승인, 구체 기술은 미정
+마지막 갱신: 2026-08-09 (Phase 0, REVIEW-001 반영)
+상태: **제안됨 (Proposed)** — 경계 원칙 일부만 승인됨, 구체 기술은 미정
 
 > 이 문서의 코드 블록은 전부 **계약 스케치(pseudo-contract)** 입니다.
 > 실행 가능한 코드가 아니며 특정 언어를 강제하지 않습니다.
 > 필드 이름은 제안이며, 구현 시 조정될 수 있습니다.
+>
+> **상태 표기:** 각 절 제목 옆의 라벨은 [`DECISIONS.md`](DECISIONS.md)의 상태와 일치합니다.
+> 라벨이 없는 절은 **제안됨**으로 간주합니다.
 
 ---
 
 ## 1. 설계 원칙
 
-| # | 원칙 | 구체적 의미 |
-|---|---|---|
-| A1 | **파이프라인 분리** | 자막 경로와 영상 재구성 경로는 서로를 호출하지 않는다 |
-| A2 | **계약 우선** | 모듈은 데이터 계약으로만 만난다. 내부 구현을 서로 모른다 |
-| A3 | **모델 교체 가능** | 어떤 ASR·재구성 모델도 어댑터 뒤에 있다. 코어가 모델 API에 의존하지 않는다 |
-| A4 | **단계별 산출물 보존** | 중간 결과를 디스크에 남긴다. 재실행·디버깅·평가의 전제 |
-| A5 | **결정론 우선** | 시드·버전·설정을 기록한다. 비결정적 요소는 명시적으로 표시한다 |
-| A6 | **평가는 일급 시민** | `eval`은 부가 도구가 아니라 모듈이다 |
-| A7 | **UI는 껍데기** | 모든 기능은 UI 없이 실행 가능해야 한다 |
+| # | 원칙 | 상태 | 구체적 의미 |
+|---|---|---|---|
+| A1 | **도메인 산출물 독립, 공통 기반 공유** | 승인됨 | 자막 도메인 산출물과 시각 도메인 산출물은 서로를 입력으로 쓰지 않는다. 반면 **횡단 기반(cross-cutting infrastructure)은 공유한다** |
+| A2 | **계약 우선** | 제안됨 | 모듈은 데이터 계약으로만 만난다. 내부 구현을 서로 모른다 |
+| A3 | **모델 교체 가능** | 제안됨 | 어떤 ASR·재구성 모델도 어댑터 뒤에 있다. 코어가 모델 API에 의존하지 않는다 |
+| A4 | **단계별 산출물 보존** | 제안됨 | 중간 결과를 디스크에 남긴다. 재실행·디버깅·평가의 전제 |
+| A5 | **재현성 등급 명시** | 제안됨 | 비트 단위 결정성 / 허용오차 내 반복성 / 출처 재현성을 **구분**한다 (§6) |
+| A6 | **평가는 일급 시민** | 승인됨 | `eval`은 부가 도구가 아니라 모듈이다 |
+| A7 | **UI는 껍데기** | 제안됨 | 모든 기능은 UI 없이 실행 가능해야 한다 |
+| A8 | **안전 게이트 우선** | 승인됨 | 재구성은 `ReconstructionPolicy` 통과 후에만 수행된다 (§5) |
 
-**A3이 중요한 이유:** 지금 우리는 어떤 모델이 최선인지 모릅니다.
+### A1의 정확한 의미 (오해 방지)
+
+**독립인 것 — 도메인 산출물과 도메인 로직**
+
+- 자막 파이프라인은 `ReconstructionResult`를 읽지 않습니다.
+- 시각 파이프라인은 `SubtitleDocument`나 `Transcript`를 읽지 않습니다.
+- 한쪽이 실패해도 다른 쪽은 끝까지 진행됩니다.
+
+**공유하는 것 — 횡단 기반 (공유가 정상이며, 중복 구현이 오히려 결함)**
+
+| 공유 자산 | 내용 |
+|---|---|
+| `ingest` | 미디어 조사·디코딩·해시 |
+| `storage` | 프로젝트/작업/산출물 배치, manifest |
+| `orchestrator` | 작업 그래프, 캐시, 재개, 자원 |
+| 공통 계약 | `ArtifactRef`, `Timebase`, `TimeMapping`, `RegionMask` (§2) |
+| `ReferenceBundle` | 두 도메인의 정답을 담는 단일 컨테이너 (§3) |
+| `eval` 하네스 | 실행·리포트·통계 처리 골격 (지표 계산기는 도메인별) |
+
+> **A1은 "따로 만들어라"가 아니라 "도메인 산출물이 서로를 오염시키지 않게 하라"입니다.**
+> 기반을 중복 구현하면 timebase가 갈라지고 평가가 비교 불가능해집니다.
+
+### A3이 중요한 이유
+
+지금 우리는 어떤 모델이 최선인지 모릅니다 (U-22).
 모델을 어댑터 뒤에 두면 나중에 측정 결과로 교체할 수 있습니다.
 코어에 특정 모델 API를 박아 넣으면 그 선택이 영구적 부채가 됩니다.
 
 ---
 
-## 2. 모듈 지도
+## 2. 공통 계약 (Cross-cutting Contracts) — **버전 관리 대상**
+
+두 도메인이 함께 쓰는 기본 자료형입니다. **모든 공통 계약은 `schema_version`을 가집니다.**
+
+### 2.1 `ArtifactRef/v1` — 산출물 참조
+
+파일 경로를 직접 주고받지 않습니다. 모든 산출물은 `ArtifactRef`로 참조됩니다.
+
+```
+ArtifactRef/v1:
+  schema_version   : "1.0.0"
+  artifact_id      : 문자열                 # 프로젝트 내 고유
+  kind             : "audio" | "video" | "frames" | "text" | "mask"
+                     | "subtitle" | "report" | "reference_bundle" | "blob"
+  uri              : 문자열                 # storage 상대 경로
+  content_hash     : 문자열                 # 무결성·캐시 키
+  byte_size        : 정수
+  media_type       : 문자열                 # 예: "audio/wav", "application/json"
+  timebase_ref?    : Timebase 참조          # 시간축이 있는 산출물만
+  produced_by      : { stage_id, job_id, adapter_id?, adapter_version? }
+  created_at       : 타임스탬프
+  parent_refs[]    : artifact_id            # 계보(lineage) 추적
+  is_estimate      : 불리언                 # 재구성 계열은 항상 true (§5)
+```
+
+**규칙**
+
+- `content_hash`가 같으면 같은 산출물로 취급합니다 (캐시 적중).
+- `parent_refs`로 **계보 추적**이 가능해야 합니다. 어떤 입력에서 나왔는지 역추적할 수 없는 산출물은 평가에 쓰지 않습니다.
+- 형식이 바뀌면 `schema_version`의 major를 올립니다. **하위 호환이 깨진 산출물끼리 비교하지 않습니다.**
+
+### 2.2 `Timebase/v1` — 정준 시간축 (Canonical Timeline)
+
+시간 관련 버그의 대부분은 "누구의 시간인가"가 정의되지 않아서 생깁니다.
+
+```
+Timebase/v1:
+  schema_version   : "1.0.0"
+  timebase_id      : 문자열
+  domain           : "source" | "degraded" | "output"
+  origin_artifact  : artifact_id            # 이 시간축의 기준 산출물
+  unit             : "seconds"              # 정준 단위는 항상 초
+  rate_num         : 정수                   # 프레임/샘플 격자 (예: 30000)
+  rate_den         : 정수                   #                 (예: 1001)
+  start_offset_seconds : 실수               # 컨테이너 시작 오프셋
+  is_variable_rate : 불리언                 # VFR 여부
+  frame_index_base : 0 | 1
+```
+
+**정준 규칙**
+
+1. **모든 시간 값은 초(seconds) 실수로 표현합니다.** 프레임 번호·샘플 인덱스는 보조 정보입니다.
+2. 시간이 붙은 모든 계약은 **어떤 `timebase_id`를 쓰는지 명시**합니다.
+3. `domain`이 다른 시간 값을 **직접 비교하지 않습니다.** 반드시 `TimeMapping`을 거칩니다.
+4. 가변 프레임레이트(VFR) 입력은 `is_variable_rate: true`로 표시하고, 프레임 번호 기반 연산을 금지합니다.
+
+### 2.3 `TimeMapping/v1` — 시간축 변환
+
+**무음 삽입, 프레임 드롭/중복 같은 시간 변경 열화는 원본과 열화본의 시간축을 어긋나게 합니다.**
+이 경우 열화 산출물은 **반드시** `TimeMapping`을 함께 반환합니다.
+
+```
+TimeMapping/v1:
+  schema_version   : "1.0.0"
+  from_timebase    : timebase_id            # 보통 source
+  to_timebase      : timebase_id            # 보통 degraded
+  method           : "identity" | "piecewise_linear" | "step" | "explicit_pairs"
+  is_monotonic     : 불리언
+  is_invertible    : 불리언
+  segments[]       : { from_start, from_end, to_start, to_end, scale }
+  inserted_spans[] : { to_start, to_end, kind: "silence"|"duplicate"|"other" }
+                     # 원본에 대응이 없는 구간
+  dropped_spans[]  : { from_start, from_end }
+                     # 열화본에 대응이 없는 구간
+```
+
+**필수 규칙**
+
+- `method: "identity"`가 아닌 열화는 **`TimeMapping` 없이 평가에 투입할 수 없습니다.**
+  매핑이 없으면 타임스탬프 지표가 조용히 틀립니다.
+- `inserted_spans`는 **정답이 존재하지 않는 구간**입니다. 지표 계산에서 어떻게 다룰지는
+  [`EVALS.md`](EVALS.md) §4에서 지표별로 정의합니다.
+- 역변환이 불가능하면(`is_invertible: false`) 그 열화 조건에서 계산할 수 없는 지표를
+  **"미지원"으로 명시 보고**합니다. 근사값으로 채우지 않습니다.
+
+### 2.4 `RegionMask/v1` — 공간 영역 (이동 지원)
+
+열화 영역은 정지해 있지 않습니다. 인물이 움직이면 모자이크도 따라 움직입니다.
+
+```
+RegionMask/v1:
+  schema_version   : "1.0.0"
+  timebase_ref     : timebase_id
+  representation   : "rle" | "polygon" | "bitmap_ref" | "bbox"
+  is_static        : 불리언
+  keyframes[]      :
+    time_seconds   : 실수
+    shape          : 표현 형식에 따른 데이터
+    confidence?    : 0..1
+  interpolation    : "none" | "nearest" | "linear"   # keyframe 사이 처리
+  coverage_ratio   : 0..1                            # 프레임 면적 대비 평균 비율
+```
+
+**규칙**
+
+- `is_static: false`면 `keyframes`가 2개 이상이어야 합니다.
+- `interpolation: "none"`이면 keyframe이 없는 시각의 마스크는 **정의되지 않음**입니다.
+  정의되지 않은 구간을 "영역 없음"으로 간주하지 않습니다.
+- 마스크 면적(`coverage_ratio`)은 지표 정규화에 필요합니다 ([`EVALS.md`](EVALS.md) §5).
+
+---
+
+## 3. `ReferenceBundle/v1` — 정답 계약 *(제안됨)*
+
+**평가에 필요한 모든 정답을 담는 단일 컨테이너입니다.**
+지금까지 "정답"이 문서마다 다른 뜻으로 쓰였고, 그래서 어떤 지표는 계산 가능 여부조차 불명확했습니다.
+`ReferenceBundle`은 그 모호함을 없애기 위한 계약입니다.
+
+```
+ReferenceBundle/v1:
+  schema_version     : "1.0.0"
+  bundle_id          : 문자열
+  source_media       : ArtifactRef            # 깨끗한 원본 미디어
+  source_timebase    : Timebase               # 이 번들의 정준 시간축 (domain: "source")
+  provenance         : { origin, license_id, consent_status, curated_by, curated_at }
+  completeness       : { 아래 각 절의 제공 여부 플래그 }
+
+  # ── 음성/자막 도메인 ─────────────────────────────
+  speaker_streams[]  :                        # 화자별 독립 스트림 (겹침 표현의 핵심)
+    speaker_id       : 문자열
+    utterances[]     : { start_seconds, end_seconds, text, language,
+                         tokens[]? : { text, start_seconds, end_seconds } }
+    is_complete      : 불리언                 # 이 화자 전사가 완전한가
+
+  reference_cues[]   :                        # 자막 형태의 정답 (스타일 규칙 포함)
+    cue_id, start_seconds, end_seconds, lines[], language, speaker_id?
+
+  speech_mask        :                        # 발화/무음 구간 (환각 지표의 전제)
+    segments[]       : { start_seconds, end_seconds,
+                         kind: "speech"|"silence"|"non_speech_audio"|"unknown" }
+    overlap_spans[]  : { start_seconds, end_seconds, speaker_ids[] }
+
+  language_spans[]   :                        # 시간축 언어 구간 (문장 내 전환 포함)
+    start_seconds, end_seconds, language, speaker_id?,
+    switch_kind      : "inter_sentential" | "intra_sentential" | "unknown"
+
+  # ── 시각 도메인 ──────────────────────────────────
+  clean_video        : ArtifactRef?           # 깨끗한 영상 (full-reference 지표용)
+  degradation_masks[]:                        # 어디를 망가뜨렸는지 (합성 열화 시)
+    recipe_id        : 문자열                 # 예: "D-V3"
+    mask             : RegionMask
+    severity         : 0..5
+
+  # ── 시간축 대응 ──────────────────────────────────
+  degraded_media     : ArtifactRef?           # 열화본 (합성 열화 시)
+  degraded_timebase  : Timebase?              # domain: "degraded"
+  time_mapping       : TimeMapping?           # source ↔ degraded (§2.3)
+
+  known_limitations[]: 문자열                 # 이 번들이 보증하지 못하는 것
+```
+
+### 3.1 부분 번들 (Partial Bundle)
+
+**모든 필드가 항상 채워지지는 않습니다.** 실제 입력에는 `clean_video`가 없습니다.
+
+- `completeness` 플래그가 **어떤 지표를 계산할 수 있는지 결정**합니다.
+- 필요한 정답이 없으면 해당 지표는 **"미지원(unsupported)"으로 보고**합니다.
+  0점이나 결측 평균으로 처리하지 않습니다.
+- 지표별 필요 조건은 [`EVALS.md`](EVALS.md) §4–§5의 각 지표 정의에 명시합니다.
+
+### 3.2 버전 규칙
+
+- 필드 추가(하위 호환) → minor 증가
+- 의미 변경·필드 제거 → major 증가
+- **major가 다른 번들 사이의 점수를 비교하지 않습니다.**
+
+---
+
+## 4. 모듈 지도
 
 ```
                         ┌──────────────┐
@@ -41,15 +247,11 @@
                         └──┬────────┬──┘
                            │        │
           ┌────────────────┘        └────────────────┐
+   ══ 자막 도메인 ══                        ══ 시각 도메인 ══
           │                                          │
-   ══ 자막 경로 (Phase 1) ══             ══ 영상 재구성 경로 (Phase 2) ══
-          │                                          │
-   ┌──────▼──────┐                            ┌──────▼──────┐
-   │   ingest    │◄───────── 공유 ───────────►│   ingest    │
-   └──────┬──────┘                            └──────┬──────┘
-   ┌──────▼──────┐                            ┌──────▼──────┐
-   │    audio    │ VAD·잡음·분리·분절          │   restore   │ 탐지·재구성·일관성
-   └──────┬──────┘                            └──────┬──────┘
+   ┌──────▼──────┐                            ┌──────▼───────┐
+   │    audio    │ VAD·잡음·분리·분절          │  reconstruct  │ 탐지·재구성·일관성
+   └──────┬──────┘                            └──────┬───────┘
    ┌──────▼──────┐                                   │
    │     asr     │ 전사·언어식별                      │
    └──────┬──────┘                                   │
@@ -59,172 +261,333 @@
           │                                          │
           └──────────────┐          ┌────────────────┘
                          │          │
-                    ┌────▼──────────▼────┐
-                    │       storage       │  프로젝트 · 작업 · 산출물 · manifest
-                    └──────────┬──────────┘
-                               │
-                    ┌──────────▼──────────┐        ┌──────────┐
-                    │        eval         │        │  export  │ (Phase 4, 선택)
-                    └─────────────────────┘        └──────────┘
+   ══ 횡단 기반 (양쪽이 공유) ══
+                         │          │
+              ┌──────────▼──────────▼──────────┐
+              │  ingest · storage · 공통 계약   │
+              └──────────────┬─────────────────┘
+                             │
+                  ┌──────────▼──────────┐        ┌──────────┐
+                  │        eval         │        │  export  │ (Phase 4, 선택)
+                  └─────────────────────┘        └──────────┘
 ```
 
-**두 경로가 공유하는 것은 `ingest`와 `storage`뿐입니다.** 그 외에는 서로 독립입니다.
+**모듈 ID 목록 (전 문서 공통):**
+`ingest` · `audio` · `asr` · `subtitle` · `reconstruct` · `eval` · `orchestrator` · `storage` · `ui` · `export`
+
+> **명칭 주의:** 시각 도메인 모듈 이름은 `reconstruct`입니다. `restore`는 사용하지 않습니다
+> (`AGENTS.md` §1 용어 정책). 어댑터 이름도 `ReconstructionAdapter`입니다.
 
 ---
 
-## 3. 모듈별 책임과 경계
+## 5. `ReconstructionPolicy/v1` — 안전 게이트 *(정책 승인됨 / 세부 제안됨)*
 
-### 3.1 `ingest` — 미디어 입력
+**모든 재구성은 이 게이트를 통과한 뒤에만 실행됩니다.** 기본값은 "하지 않음"입니다.
+
+일부 흐림·모자이크는 **의도적 비식별 처리(intentional redaction)** 입니다.
+그것을 자동으로 되돌리려 시도하는 것은 제품 범위 밖이며 (`PRODUCT_SPEC.md` N2–N3),
+윤리적·법적 위험이 큽니다.
+
+```
+ReconstructionPolicy/v1:
+  schema_version        : "1.0.0"
+  policy_id             : 문자열
+  default_action        : "skip"              # 기본값은 항상 skip
+  region_rules[]        :
+    region_class        : "face" | "identity_document" | "license_plate"
+                          | "text_protected" | "intentional_redaction"
+                          | "generic_degradation" | "unknown"
+    action              : "skip" | "require_confirmation" | "allow"
+    rationale           : 문자열
+  require_user_confirmation_for[] : region_class
+  audit_log_ref         : ArtifactRef         # 어떤 결정이 내려졌는지 기록
+```
+
+### 5.1 강제 규칙
+
+| # | 규칙 |
+|---|---|
+| P1 | `face`, `identity_document`, `license_plate`, `text_protected`, `intentional_redaction`은 **기본 `skip`** |
+| P2 | 위 분류를 `allow`로 바꾸려면 **사용자의 명시적 확인**이 필요하다. 기본 설정으로는 불가능하다 |
+| P3 | 분류가 `unknown`이면 `require_confirmation`으로 처리한다. **모르면 진행하지 않는다** |
+| P4 | 의도적 비식별 처리로 판정된 영역은 사용자가 확인해도 **신원 식별 목적으로는 지원하지 않는다** (N2–N3) |
+| P5 | 모든 게이트 판정은 `audit_log_ref`에 기록한다. 조용히 통과시키지 않는다 |
+
+### 5.2 정직한 한계
+
+`intentional_redaction`과 `generic_degradation`을 **자동으로 정확히 구분할 수 없습니다.**
+분류기는 틀립니다. 그래서 P3(모르면 확인 요구)이 존재합니다.
+분류 임계값과 기본 정책 수준은 미해결 **U-28**입니다.
+
+---
+
+## 6. 재현성 등급 (Reproducibility Tiers) *(제안됨)*
+
+**"재현 가능하다"는 한 가지 뜻이 아닙니다.** 세 등급을 구분해 사용합니다.
+manifest만으로 동일 출력이 보장된다고 주장하지 않습니다.
+
+| 등급 | 이름 | 보증 내용 | 확인 방법 |
+|---|---|---|---|
+| **T1** | 비트 단위 결정성 (bitwise determinism) | 동일 입력·설정·환경에서 **바이트 단위로 동일한** 출력 | 산출물 해시 일치 |
+| **T2** | 허용오차 내 반복성 (repeatability within tolerance) | 동일 입력·설정에서 **정의된 허용오차 내** 동일 결과 | 지표 차이가 tolerance 이하 |
+| **T3** | 출처 재현성 (provenance reproducibility) | **무엇으로 어떻게 만들었는지 완전히 기록**됨. 출력 동일성은 보증하지 않음 | manifest 완전성 검사 |
+
+**적용 방침**
+
+- `manifest`는 **T3만 보증합니다.** T1·T2는 별도 확인이 필요합니다.
+- GPU 비결정 커널, 비결정적 스레드 축약, 라이브러리 버전 차이가 있는 경로는 **T1을 주장하지 않습니다.**
+- 각 파이프라인 단계는 자신이 어느 등급인지 manifest에 기록합니다.
+
+```
+ReproducibilityClaim:
+  tier              : "T1" | "T2" | "T3"
+  scope             : "stage" | "pipeline"
+  tolerance?        : { metric_name -> 허용 차이 }    # T2에만 존재
+  nondeterminism_sources[] : 문자열
+                      # 예: "gpu_atomics", "cudnn_autotune", "thread_reduction_order"
+  verified_by       : "hash_match" | "tolerance_check" | "not_verified"
+```
+
+- 평가 비교에서 T2를 쓸 때는 **허용오차를 리포트에 명시**합니다.
+- `verified_by: "not_verified"`인 주장을 근거로 개선을 선언하지 않습니다.
+
+**허용오차 수치는 미정입니다 (U-29).** 기준선 측정 후 정합니다.
+
+---
+
+## 7. 모듈별 책임과 경계
+
+### 7.1 `ingest` — 미디어 입력 *(횡단 기반, 공유)*
 
 | 항목 | 내용 |
 |---|---|
-| 책임 | 미디어 파일 조사, 트랙 정보 추출, 오디오/프레임 접근 제공, 입력 해시 계산 |
+| 책임 | 미디어 조사, 트랙 정보 추출, 오디오/프레임 접근 제공, 해시 계산, `Timebase` 확정 |
 | 하지 않는 것 | 품질 판단, 잡음 제거, 전사, 화면 수정 |
-| 받는 것 | 파일 경로 |
-| 주는 것 | `MediaProfile` + 정규화된 오디오/프레임 접근자 |
 
 ```
-MediaProfile:
-  source_path        : 경로
-  content_hash       : 내용 해시 (재현성 키)
+MediaProfile/v1:
+  schema_version     : "1.0.0"
+  source_ref         : ArtifactRef
+  content_hash       : 문자열
   duration_seconds   : 실수
   container          : 문자열
+  timebase           : Timebase                # domain: "source"
   audio_tracks[]     : { index, codec, sample_rate, channels, language_hint? }
-  video_tracks[]     : { index, codec, width, height, fps, bit_depth? }
+  video_tracks[]     : { index, codec, width, height, fps_num, fps_den,
+                         is_variable_rate, bit_depth? }
   has_video          : 불리언
-  probe_warnings[]   : 문자열   # 깨진 인덱스, 가변 프레임레이트 등
+  probe_warnings[]   : 문자열                  # 깨진 인덱스, VFR, 불일치 등
 ```
 
 > `language_hint`는 **힌트일 뿐** 신뢰하지 않습니다. 컨테이너 메타데이터는 자주 틀립니다.
 
 ---
 
-### 3.2 `audio` — 오디오 프론트엔드
+### 7.2 `audio` — 오디오 프론트엔드
 
 | 항목 | 내용 |
 |---|---|
-| 책임 | 정규화, 발화 구간 탐지(VAD), 잡음 처리, 화자/음원 분리 검토, 분절(segmentation) |
+| 책임 | 정규화, 발화 구간 탐지(VAD), 잡음 처리, 화자/음원 분리 검토, 분절 |
 | 하지 않는 것 | 전사, 언어 판정, 자막 형식 |
-| 받는 것 | `MediaProfile` + 오디오 접근자 |
-| 주는 것 | `SpeechSegment[]` |
+
+**겹치는 발화를 표현할 수 있어야 합니다.** 단일 선형 구간 목록으로는 불가능합니다.
 
 ```
-SpeechSegment:
-  segment_id       : 문자열
-  start_seconds    : 실수
-  end_seconds      : 실수
-  audio_ref        : 잘라낸 오디오 참조
-  speech_confidence: 0..1
-  overlap_flag     : 불리언        # 겹친 발화로 의심됨
-  speaker_label?   : 문자열         # diarization 채택 시에만
-  snr_estimate?    : 실수
-  processing_chain[]: 문자열        # 어떤 처리를 거쳤는지 기록
+SpeechSegment/v1:
+  schema_version     : "1.0.0"
+  segment_id         : 문자열
+  timebase_ref       : timebase_id
+  start_seconds      : 실수
+  end_seconds        : 실수
+  audio_ref          : ArtifactRef
+  speech_confidence  : 0..1
+
+  # ── 겹침 표현 ──────────────────────────────
+  stream_id          : 문자열       # 동일 시각에 복수 스트림이 존재할 수 있음
+  concurrent_stream_ids[] : 문자열  # 이 구간과 시간이 겹치는 다른 스트림
+  overlap_kind       : "none" | "partial" | "full" | "unknown"
+  separation_method  : "none" | "diarization" | "source_separation" | "channel"
+  speaker_label?     : 문자열       # diarization 채택 시에만 (U-15)
+  speaker_confidence?: 0..1
+
+  snr_estimate?      : 실수
+  processing_chain[] : { step, params_hash }   # 어떤 처리를 거쳤는지
+  provenance         : { adapter_id?, adapter_version?, config_hash }
 ```
+
+**핵심 설계**
+
+- `stream_id`가 있어 **같은 시각에 여러 SpeechSegment가 공존**할 수 있습니다.
+  이것이 겹치는 발화를 표현하는 유일한 방법입니다.
+- `overlap_kind: "unknown"`은 정상 상태입니다. 겹침 탐지에 실패했음을 정직하게 표시합니다.
+- `separation_method: "none"`이면 하나의 스트림만 존재하며, 겹침 구간의 두 번째 화자는
+  **표현되지 않습니다.** 이 경우 평가는 해당 지표를 "미지원"으로 보고합니다.
 
 **이 모듈이 어려운 입력의 1차 방어선입니다.**
-
-- 긴 무음 → 여기서 걸러야 `asr`이 환각을 만들 기회 자체가 줄어듭니다.
-- 겹친 발화 → `overlap_flag`로 표시해 하류에서 다르게 다룰 수 있게 합니다.
-- 잡음 → 과도한 잡음 제거는 오히려 인식률을 떨어뜨릴 수 있습니다.
-  **잡음 제거 강도는 평가로 결정할 항목입니다** (미해결 U-12).
+긴 무음을 여기서 걸러야 `asr`이 환각을 만들 기회가 줄어듭니다.
+다만 과도한 잡음 제거·과도한 VAD는 실제 발화를 버립니다.
+**강도는 평가로 결정할 항목입니다 (U-12).**
 
 ---
 
-### 3.3 `asr` — 음성 인식
+### 7.3 `asr` — 음성 인식
 
 | 항목 | 내용 |
 |---|---|
-| 책임 | 구간별 전사, 언어 식별, 단어/토큰 단위 타이밍, 신뢰도 산출 |
+| 책임 | 구간별 전사, 언어 식별, 토큰 타이밍, 신뢰도 산출 |
 | 하지 않는 것 | 자막 줄 나누기, 형식 규칙, 파일 출력 |
-| 받는 것 | `SpeechSegment[]` |
-| 주는 것 | `Transcript` |
+
+**문장 내 언어 전환(intra-sentential code-switching)을 표현할 수 있어야 합니다.**
+구간에 언어 하나를 붙이는 구조로는 불가능합니다.
 
 ```
-Transcript:
-  segments[]:
-    segment_id     : 문자열
-    text           : 문자열
-    language       : 언어 코드 (BCP-47 제안)
-    language_confidence : 0..1
-    tokens[]       : { text, start_seconds, end_seconds, confidence }
-    is_low_confidence : 불리언
-    alternatives[]?: 문자열      # n-best, 사후 재채점 여지
-  model_info       : { adapter_id, version, params_hash }
+Transcript/v1:
+  schema_version     : "1.0.0"
+  timebase_ref       : timebase_id
+  streams[]          :
+    stream_id        : 문자열
+    speaker_label?   : 문자열
+    segments[]       :
+      segment_id     : 문자열
+      text           : 문자열
+      tokens[]?      : { text, start_seconds?, end_seconds?, confidence? }
+      language_spans[]:                        # 문장 내 전환 표현
+        char_start   : 정수                    # text 내 문자 오프셋
+        char_end     : 정수
+        language     : BCP-47
+        confidence?  : 0..1
+        switch_kind  : "inter_sentential" | "intra_sentential" | "unknown"
+      dominant_language? : BCP-47              # 편의 필드 (파생값)
+      segment_confidence?: 0..1
+      is_low_confidence  : 불리언
+      alternatives[]?    : { text, score }     # n-best
+  capability_report  : AdapterCapabilityReport # 아래 §7.3.1
+  provenance         : { adapter_id, adapter_version, params_hash, seed? }
 ```
 
-**어댑터 경계 (A3의 핵심)**
+**설계 근거**
+
+- `language_spans`가 **문자 오프셋 기반**이라 한 문장 안의 전환을 표현합니다.
+  `dominant_language`는 편의용 파생값일 뿐 정답이 아닙니다.
+- `tokens`, `confidence`, `language_spans`는 **전부 선택 필드(optional)** 입니다.
+  모든 ASR 모델이 이를 제공하지는 않기 때문입니다.
+
+#### 7.3.1 어댑터 능력 보고와 대체 동작 (Fallback)
+
+**능력이 없는 것과 값이 0인 것은 다릅니다.** 이를 혼동하면 평가가 조용히 틀립니다.
 
 ```
 AsrAdapter (인터페이스):
-  capabilities() -> { languages, supports_word_timing, supports_language_id,
-                      supports_batching, requires_gpu }
+  capabilities() -> AdapterCapabilityReport
   transcribe(segments, options) -> Transcript
+
+AdapterCapabilityReport:
+  adapter_id, adapter_version
+  languages[]                 : BCP-47 목록 또는 "unknown"
+  supports_word_timing        : 불리언
+  supports_token_confidence   : 불리언
+  supports_language_id        : 불리언
+  supports_intra_sentential_lid : 불리언
+  supports_overlap_streams    : 불리언
+  supports_nbest              : 불리언
+  requires_gpu                : 불리언
+  determinism_tier            : "T1" | "T2" | "T3"
 ```
 
-코어는 `AsrAdapter`만 압니다. 어떤 모델이 뒤에 있는지 모릅니다.
-**다국어 전환은 두 가지 전략이 가능**하며 어느 쪽이 나은지 아직 모릅니다 (미해결 U-13).
+| 없는 능력 | 대체 동작 | 평가에 미치는 영향 |
+|---|---|---|
+| 단어 타이밍 없음 | `tokens` 생략. 세그먼트 경계만 사용. 강제 정렬(forced alignment)을 **별도 단계로** 시도할 수 있으나, 그 사실을 `provenance`에 기록 | 토큰 단위 타임스탬프 지표는 **미지원** |
+| 신뢰도 없음 | `confidence` 필드 **생략**. 1.0으로 채우지 않는다 | 신뢰도 기반 지표는 **미지원**. `needs_review` 판정은 다른 신호로 대체 |
+| 언어 식별 없음 | `language_spans` 생략. `dominant_language`를 설정에서 받은 값으로 기록하되 `switch_kind: "unknown"` | 언어 식별 정확도 지표는 **미지원** |
+| 문장 내 LID 없음 | 세그먼트 전체를 하나의 span으로 기록 | 문장 내 전환 지표는 **미지원** |
+| 겹침 스트림 없음 | 단일 스트림만 생성 | cpWER은 **미지원**, 완화 지표로 대체 ([`EVALS.md`](EVALS.md) §4.2) |
 
-- (a) 구간별 언어 식별 후 언어별 모델 호출
-- (b) 다국어 통합 모델에 그대로 맡김
+> **금지:** 없는 값을 기본값으로 채우는 것. `confidence = 1.0`, `language = "en"` 같은
+> 조용한 채움은 지표를 오염시키고 오염 사실을 숨깁니다.
+
+**다국어 전략은 아직 미정입니다 (U-13).** (a) 구간별 LID 후 언어별 모델, (b) 다국어 통합 모델.
 
 ---
 
-### 3.4 `subtitle` — 자막 구성
+### 7.4 `subtitle` — 자막 구성
 
 | 항목 | 내용 |
 |---|---|
 | 책임 | 시간 정렬 다듬기, 자막 단위 분할, 줄바꿈, 형식 규칙 적용, 파일 출력 |
 | 하지 않는 것 | 전사 내용 변경, 오디오 접근 |
-| 받는 것 | `Transcript` |
-| 주는 것 | `SubtitleDocument` + 자막 파일 |
 
 ```
-SubtitleDocument:
-  cues[]:
-    cue_id         : 문자열
-    start_seconds  : 실수
-    end_seconds    : 실수
-    lines[]        : 문자열      # 보통 1–2줄
-    language       : 언어 코드
-    speaker?       : 문자열
-    confidence     : 0..1
-    needs_review   : 불리언       # 사람이 볼 곳을 표시
-  style_profile    : { max_chars_per_line, max_lines, max_cps,
-                       min_duration, max_duration, min_gap }
-  provenance       : { input_hash, config_hash, generated_at, pipeline_version }
+SubtitleDocument/v1:
+  schema_version     : "1.0.0"
+  timebase_ref       : timebase_id
+  cues[]             :
+    cue_id           : 문자열
+    start_seconds    : 실수
+    end_seconds      : 실수
+    lines[]          : 문자열
+    language_spans[] : { line_index, char_start, char_end, language }
+                       # 한 cue 안에서 언어가 바뀔 수 있음
+    dominant_language?: BCP-47
+    speaker_label?   : 문자열
+    stream_id?       : 문자열
+    concurrent_cue_ids[] : 문자열      # 동시 표시되는 다른 화자의 cue
+    overlap_kind     : "none" | "partial" | "full" | "unknown"
+    confidence?      : 0..1            # 없으면 생략 (채우지 않음)
+    needs_review     : 불리언
+    review_reason[]  : "low_confidence" | "overlap" | "language_switch"
+                       | "timing_uncertain" | "format_violation" | "silence_adjacent"
+  style_profile      : { max_chars_per_line, max_lines, max_cps,
+                         min_duration, max_duration, min_gap, language_overrides{} }
+  unsupported_features[] : 문자열      # 출력 형식이 표현하지 못한 것
+  provenance         : { input_hash, config_hash, pipeline_version,
+                         adapter_versions{}, seed?, reproducibility_claim }
 ```
 
-**`needs_review`가 제품적으로 중요합니다.** 자동 결과는 초안입니다.
-어디를 봐야 하는지 알려주는 것이 "다 맞다고 우기는 것"보다 유용합니다.
+**설계 근거**
+
+- `concurrent_cue_ids`로 **동시 발화를 표현**합니다. 겹침을 하나의 cue로 뭉개지 않습니다.
+- `unsupported_features`가 중요합니다. 출력 형식(U-09)에 따라 화자 표기·위치 지정·동시 자막이
+  표현되지 않을 수 있습니다. **표현하지 못한 것을 조용히 버리지 않고 기록**합니다.
+- `review_reason`은 사람이 어디를 봐야 하는지 알려줍니다.
+  자동 결과는 초안이며, **어디가 불확실한지 말해주는 것이 "다 맞다"보다 유용**합니다.
 
 ---
 
-### 3.5 `restore` — 영상 재구성 (Phase 2)
+### 7.5 `reconstruct` — 시각 재구성 (Phase 2)
 
 | 항목 | 내용 |
 |---|---|
-| 책임 | 열화 영역 탐지, 재구성 **추정**, 시간적 일관성, 인공물 검사 |
+| 책임 | 열화 영역 탐지, 재구성 **추정**, 시간적 일관성, 인공물 검사, 안전 게이트 집행 |
 | 하지 않는 것 | 오디오·자막 관련 일체. 원본 복구 주장 (`AGENTS.md` §1) |
-| 받는 것 | `MediaProfile` + 프레임 접근자 |
-| 주는 것 | `ReconstructionResult` |
 
 ```
-DegradedRegion:
-  frame_range      : { start_frame, end_frame }
-  bbox_or_mask     : 영역 표현
-  degradation_kind : "blur" | "mosaic" | "low_resolution" | "compression" | "unknown"
-  severity_estimate: 0..1
-  detector_confidence : 0..1
+DegradedRegion/v1:
+  schema_version     : "1.0.0"
+  region_id          : 문자열
+  mask               : RegionMask              # 이동 영역 지원 (§2.4)
+  degradation_kind   : "blur" | "mosaic" | "low_resolution" | "compression"
+                       | "sensor_noise" | "unknown"
+  region_class       : ReconstructionPolicy의 region_class (§5)
+  severity_estimate  : 0..1
+  detector_confidence: 0..1
 
-ReconstructionResult:
-  regions[]        : DegradedRegion
-  output_ref       : 재구성된 영상 참조
-  is_estimate      : 항상 true            # 상수. 절대 false가 되지 않는다
-  confidence_map?  : 영역별 추정 신뢰도
-  temporal_consistency_score : 실수
-  artifact_flags[] : { frame_range, kind, note }
-  disclaimer       : "재구성 결과는 추정치이며 원본과 다를 수 있습니다"
-  model_info       : { adapter_id, version, params_hash }
+ReconstructionResult/v1:
+  schema_version     : "1.0.0"
+  timebase_ref       : timebase_id
+  regions[]          : DegradedRegion
+  output_ref         : ArtifactRef
+  is_estimate        : 항상 true               # 상수. false가 되는 경로 없음
+  policy_decisions[] : { region_id, action_taken: "skipped"|"reconstructed"
+                                              |"awaiting_confirmation",
+                         policy_id, reason }
+  confidence_map?    : ArtifactRef             # 영역별 추정 신뢰도
+  temporal_consistency : { warping_error, flicker_index, method, window_seconds }
+  artifact_flags[]   : { region_id?, time_range, kind, severity, note }
+  clean_region_delta : { changed_pixel_ratio, mean_abs_change }
+                       # 손대지 않아야 할 영역이 얼마나 변했는가
+  disclaimer         : "재구성 결과는 추정치이며 원본과 다를 수 있습니다"
+  provenance         : { adapter_id, adapter_version, params_hash, seed?,
+                         reproducibility_claim }
 ```
 
 > **`is_estimate`가 상수 true인 것은 의도된 설계입니다.**
@@ -232,158 +595,154 @@ ReconstructionResult:
 > 원본을 모르는 상태에서 추정이 아닌 결과는 나올 수 없습니다.
 
 ```
-RestoreAdapter (인터페이스):
-  capabilities() -> { handles, max_resolution, temporal_aware, requires_gpu }
-  reconstruct(frames, regions, options) -> ReconstructionResult
+ReconstructionAdapter (인터페이스):
+  capabilities() -> { handles[], max_resolution, temporal_aware,
+                      requires_gpu, determinism_tier }
+  detect(frames) -> DegradedRegion[]
+  reconstruct(frames, regions, policy, options) -> ReconstructionResult
 ```
+
+- `policy`는 **선택 인자가 아닙니다.** 정책 없이 재구성을 호출할 수 없습니다 (A8).
+- `clean_region_delta`는 "건드리지 말아야 할 곳을 건드렸는가"를 재는 필수 출력입니다
+  ([`EVALS.md`](EVALS.md) §5.3).
 
 ---
 
-### 3.6 `eval` — 평가
+### 7.6 `eval` — 평가 *(횡단 기반, 공유)*
 
 | 항목 | 내용 |
 |---|---|
-| 책임 | 합성 열화 생성, 지표 계산, 리포트 출력, 실행 간 비교 |
+| 책임 | 평가 세트 관리, 지표 계산, 통계 처리, 리포트 출력, 실행 간 비교 |
 | 하지 않는 것 | 파이프라인 내부 수정, 모델 학습 |
-| 받는 것 | 산출물 + 정답(있는 경우) |
-| 주는 것 | `EvalReport` |
-
-설계 상세는 [`EVALS.md`](EVALS.md)에 있습니다. 여기서는 경계만 정의합니다.
 
 ```
-EvalReport:
-  run_id           : 문자열
-  pipeline_version : 문자열
-  config_hash      : 문자열
-  seed             : 정수
-  dataset_id       : 문자열
-  metrics          : { 지표명 -> 값 }
-  per_condition[]  : { condition_id, severity, metrics }
-  compared_to?     : 이전 run_id
-  notes[]          : 문자열
+EvalReport/v1:
+  schema_version     : "1.0.0"
+  run_id             : 문자열
+  split              : "dev" | "test"          # frozen-test 분리 (EVALS §2)
+  pipeline_version   : 문자열
+  config_hash        : 문자열
+  seeds[]            : 정수                    # 복수 시드
+  dataset_id         : 문자열
+  bundle_schema_version : 문자열
+  sample_counts      : { total, per_condition{}, per_language{}, per_source{} }
+  metrics            : { 지표명 -> { value, ci_low?, ci_high?, n, status } }
+                       # status: "computed" | "unsupported" | "insufficient_n"
+  per_condition[]    : { condition_id, severity, metrics }
+  per_stratum[]      : { stratum_key, metrics }
+  paired_comparison? : { baseline_run_id, deltas{}, ci{}, n_pairs,
+                         meets_minimum_effect: 불리언 }
+  unsupported_metrics[] : { metric, reason }
+  notes[]            : 문자열
 ```
 
 **`eval`은 파이프라인을 수정할 권한이 없습니다.** 측정만 합니다.
 측정자와 피측정자를 분리해야 자기충족적 결과를 피할 수 있습니다.
 
+상세 설계는 [`EVALS.md`](EVALS.md).
+
 ---
 
-### 3.7 `orchestrator` — 실행 조율
-
-| 항목 | 내용 |
-|---|---|
-| 책임 | 단계 순서, 의존성, 캐시·재개, 자원 할당, 진행 보고, 오류 격리 |
-| 하지 않는 것 | 미디어 처리 자체 |
+### 7.7 `orchestrator` — 실행 조율 *(횡단 기반, 공유)*
 
 ```
-Job:
-  job_id, project_id, pipeline ("subtitle" | "restore" | "eval")
-  input_ref, config, seed
-  stages[]: { stage_id, status, started_at, finished_at, artifact_refs[], error? }
-  status  : "queued"|"running"|"paused"|"failed"|"completed"|"cancelled"
+Job/v1:
+  job_id, project_id
+  pipeline           : "subtitle" | "reconstruct" | "eval"
+  input_ref          : ArtifactRef
+  config, seed
+  stages[]           : { stage_id, status, started_at, finished_at,
+                         artifact_refs[], reproducibility_claim, error? }
+  status             : "queued"|"running"|"paused"|"failed"|"completed"|"cancelled"
 ```
 
 **요구사항**
 
 - 단계 산출물은 캐시된다 → 뒷단계 실패 시 앞단계를 다시 돌리지 않는다
-- 한 단계의 실패가 다른 파이프라인을 중단시키지 않는다 (A1)
+- 한 도메인의 실패가 다른 도메인을 중단시키지 않는다 (A1)
 - 긴 작업은 중단·재개 가능하다 (사용자 PC는 껐다 켜집니다)
-- 자원 정책은 **벤더 중립 추상화** 뒤에 둔다 (미해결 U-03)
+- 자원 정책은 **벤더 중립 추상화** 뒤에 둔다 (U-03)
 
 ---
 
-### 3.8 `storage` — 저장과 파일 정리
-
-| 항목 | 내용 |
-|---|---|
-| 책임 | 프로젝트/작업/산출물 배치, manifest 기록, 원본 보호 |
-| 하지 않는 것 | 처리, 클라우드 전송 (`export` 담당) |
-
-**디렉터리 배치 (제안)**
+### 7.8 `storage` — 저장과 파일 정리 *(횡단 기반, 공유)*
 
 ```
 <project_root>/
-├── project.json              # 프로젝트 메타데이터
+├── project.json
 ├── inputs/                   # 원본 참조 (기본: 복사하지 않고 참조 + 해시)
+├── references/               # ReferenceBundle (평가용 정답)
 ├── jobs/
 │   └── <job_id>/
-│       ├── manifest.json     # 설정·버전·시드·입력 해시
+│       ├── manifest.json     # 설정·버전·시드·입력 해시·재현성 등급
 │       ├── stages/           # 단계별 중간 산출물 (A4)
 │       └── logs/
 ├── outputs/
 │   ├── subtitles/
 │   └── reconstructions/      # 항상 "추정 결과"로 라벨링
 └── evals/
-    └── <run_id>/
+    ├── dev/<run_id>/
+    └── test/<run_id>/        # frozen-test (EVALS §2.1)
 ```
 
-**안전 규칙 (품질 속성 4: 안전한 기본값)**
+**안전 규칙**
 
-- 원본 입력 파일은 **절대 수정하거나 덮어쓰지 않습니다.**
+- 원본 입력 파일은 **절대 수정하거나 덮어쓰지 않습니다.** (ADR-0010)
 - 출력은 항상 새 파일로 씁니다. 같은 이름이 있으면 덮어쓰지 않고 알립니다.
 - 삭제는 사용자의 명시적 행동으로만 일어납니다.
+- 보관 정책은 미정입니다 (U-16).
 
 ---
 
-### 3.9 `ui` — 사용자 인터페이스 (Phase 3)
+### 7.9 `ui` — 사용자 인터페이스 (Phase 3)
 
 **A7: UI는 껍데기입니다.** `orchestrator`가 노출하는 것만 씁니다.
-UI에만 있는 기능은 존재할 수 없습니다.
 
 필수 요구 (프레임워크와 무관):
 
 - 진행 상황과 남은 작업을 보여준다
-- 자막을 직접 고칠 수 있다
+- 자막을 직접 고칠 수 있다 (`needs_review` 우선 표시)
 - **원본과 추정 결과를 나란히 비교**할 수 있다
 - 재구성 결과에 **추정임을 명시**한다 (`AGENTS.md` §1)
+- **`ReconstructionPolicy` 확인 요청을 사용자에게 제시**한다 (§5 P2)
 - 무엇이 왜 실패했는지 사람 말로 설명한다
 
-프레임워크는 미정입니다 (미해결 U-02).
+프레임워크는 미정입니다 (U-02).
 
 ---
 
-### 3.10 `export` — 내보내기 (Phase 4)
+### 7.10 `export` — 내보내기 (Phase 4)
 
 - 기본값은 **로컬**입니다. 클라우드 전송은 사용자가 켜야 합니다.
 - 무엇을 보낼지 사용자가 선택합니다. 전체 미디어 자동 업로드는 없습니다.
-- 대상 서비스는 미정입니다 (미해결 U-14).
+- 대상 서비스는 미정입니다 (U-14).
 
 ---
 
-## 4. 데이터 흐름 요약
+## 8. 데이터 흐름 요약
 
-**자막 경로 (Phase 1)**
-
-```
-파일 → MediaProfile → SpeechSegment[] → Transcript → SubtitleDocument → 자막 파일
-                                                            ↓
-                                                       EvalReport
-```
-
-**영상 재구성 경로 (Phase 2)**
+**자막 도메인**
 
 ```
-파일 → MediaProfile → DegradedRegion[] → ReconstructionResult → 추정 영상 + 리포트
-                                                    ↓
-                                               EvalReport
+파일 → MediaProfile → SpeechSegment[] (다중 스트림) → Transcript → SubtitleDocument → 자막 파일
+                                                                          ↓
+                                            ReferenceBundle + eval → EvalReport
 ```
 
-두 흐름은 `storage`에서만 만납니다. 서로의 산출물을 입력으로 쓰지 않습니다.
+**시각 도메인**
+
+```
+파일 → MediaProfile → DegradedRegion[] → [ReconstructionPolicy 게이트] → ReconstructionResult
+                                                                          ↓
+                                            ReferenceBundle + eval → EvalReport
+```
+
+두 도메인의 **산출물은 서로를 입력으로 쓰지 않습니다.**
+`ingest`·`storage`·`orchestrator`·`eval` 하네스·공통 계약은 **공유합니다** (A1).
 
 ---
 
-## 5. 횡단 관심사 (Cross-cutting)
-
-### 재현성
-
-모든 작업은 다음을 manifest에 기록합니다.
-
-```
-input_hash · config_hash · pipeline_version · adapter versions · seed · timestamp
-```
-
-비결정적 요소(GPU 커널 비결정성 등)가 있으면 **manifest에 명시**합니다.
-"재현 가능하다"는 주장은 확인된 범위에서만 합니다.
+## 9. 횡단 관심사
 
 ### 오류 처리
 
@@ -401,14 +760,16 @@ input_hash · config_hash · pipeline_version · adapter versions · seed · tim
 
 ---
 
-## 6. 이 문서에서 파생된 미해결 항목
+## 10. 이 문서에서 파생된 미해결 항목
 
 | ID | 질문 | 영향 |
 |---|---|---|
-| U-12 | 잡음 제거 강도는 어디가 최적인가 | `audio` 설계 |
+| U-12 | 잡음 제거·VAD 강도의 최적점 | `audio` 설계 |
 | U-13 | 다국어를 언어별 모델로 나눌 것인가, 통합 모델에 맡길 것인가 | `asr` 구조 |
 | U-14 | 개인 클라우드 대상은 무엇인가 | `export` (Phase 4) |
 | U-15 | diarization을 Phase 1에 넣을 것인가 | `audio`·`subtitle` 복잡도 |
-| U-16 | 중간 산출물을 얼마나 오래 보관하는가 (디스크 비용) | `storage` |
+| U-16 | 중간 산출물 보관 정책 | `storage` |
+| U-28 | `ReconstructionPolicy` 기본 정책 수준과 분류 임계값 | §5 안전 게이트 |
+| U-29 | 재현성 T2 허용오차 수치 | §6 |
 
 전체 목록: [`DECISIONS.md`](DECISIONS.md)

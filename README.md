@@ -41,6 +41,19 @@ Local-first multilingual subtitle generation and AI-assisted media restoration s
 - 장기적으로는 크리에이터가 **비용을 지불하고 쓸 만한 로컬 상용 제품**으로 발전할 수 있습니다.
   다만 상용화는 **Phase 4** 이후의 이야기이며, 지금 그것을 전제로 설계를 고정하지 않습니다.
 
+### 과제 범위와 상용 제품 범위는 다릅니다
+
+| | 대학 과제 (고정된 요구사항) | 상용 제품 (우리가 정함) |
+|---|---|---|
+| 자막 | **필수** | Phase 1 |
+| 시각 재구성 | **필수 — 생략 불가** | Phase 2 |
+| 배점 비중 | **모름 (U-24)** | 해당 없음 |
+
+> **`PLAN.md`의 Phase 번호는 착수 순서이지 중요도 순위가 아닙니다.**
+> "Phase 2니까 급하면 버려도 된다"는 해석은 틀렸습니다. 과제는 두 산출물을 모두 요구합니다.
+> 일정 부족으로 범위를 줄여야 한다면 **사람 제품 오너가 결정**합니다.
+> 자세한 구분은 [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md) §2.
+
 ---
 
 ## 문서 지도
@@ -55,9 +68,12 @@ Local-first multilingual subtitle generation and AI-assisted media restoration s
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 모듈 경계와 인터페이스 계약 | 구현 담당 |
 | [`docs/EVALS.md`](docs/EVALS.md) | 자막/영상 재구성 평가 설계, 합성 열화 전략 | 구현·리뷰 담당 |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | 결정 기록 — **제안됨 / 승인됨 / 미해결** 로 명시 | 전원 |
-| [`docs/tasks/`](docs/tasks/) | 작업 단위 명세 (TASK-001 …) | 담당 에이전트 |
+| [`docs/tasks/`](docs/tasks/) | 작업 단위 명세 (TASK-000, TASK-001 …) | 담당 에이전트 |
+| [`docs/reviews/`](docs/reviews/) | 독립 리뷰 기록 (REVIEW-001 …) | 전원 |
 
-**읽는 순서 추천:** `README.md` → `PLAN.md` → `docs/PRODUCT_SPEC.md` → `docs/ARCHITECTURE.md` → `docs/EVALS.md` → `AGENTS.md`
+**에이전트 읽기 순서:** `AGENTS.md`가 **항상 첫 번째**입니다. 전체 순서는 [`AGENTS.md`](AGENTS.md) §0.2를 따르십시오.
+
+**사람이 처음 볼 때 추천 순서:** `README.md`(이 파일) → [`AGENTS.md`](AGENTS.md) → [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md) §2 → [`PLAN.md`](PLAN.md) → [`STATUS.md`](STATUS.md)
 
 ---
 
@@ -66,17 +82,21 @@ Local-first multilingual subtitle generation and AI-assisted media restoration s
 ```
 media-clarity-studio/
 ├── README.md              # 이 파일
-├── AGENTS.md              # 공용 규칙 (authoritative)
+├── AGENTS.md              # 공용 규칙 (authoritative, 항상 먼저 읽음)
 ├── CLAUDE.md              # Claude 전용 진입점
 ├── PLAN.md                # 단계별 로드맵
 ├── STATUS.md              # 현재 상태 / 소유권 보드
 └── docs/
-    ├── PRODUCT_SPEC.md
-    ├── ARCHITECTURE.md
-    ├── EVALS.md
-    ├── DECISIONS.md
-    └── tasks/
-        └── TASK-001.md    # 다음 작업: Codex의 독립 저장소·아키텍처 리뷰
+    ├── PRODUCT_SPEC.md    # 과제 범위 vs 상용 범위, MVP, 비목표
+    ├── ARCHITECTURE.md    # 모듈 경계 + 공통 계약 + 안전 게이트
+    ├── EVALS.md           # 평가 설계, 지표 계산 규약, 통계 규칙
+    ├── DECISIONS.md       # ADR + 미해결 목록
+    ├── tasks/
+    │   ├── TASK-000.md    # 소급 기록: Phase 0 문서 기반 (닫힘)
+    │   ├── TASK-001.md    # 독립 저장소·아키텍처 리뷰
+    │   └── TASK-002.md    # REVIEW-001 지적 반영
+    └── reviews/
+        └── REVIEW-001.md  # TASK-001 리뷰 결과 (변경 요청)
 ```
 
 - 소스 코드: **없음**
@@ -98,7 +118,11 @@ media-clarity-studio/
 - 데스크톱 UI 프레임워크
 - 대상 운영체제 및 배포 형식
 - GPU 벤더 및 가속 백엔드 (NVIDIA/AMD/Apple 중 무엇도 전제하지 않음)
-- 라이선스 및 수익 모델
+- 가격·수익 모델
+
+> **단, 모델·데이터의 라이선스와 재배포 조건은 미루지 않습니다.**
+> 모델 후보를 고르는 시점에 **선정 기준의 일부**로 확인합니다 (ADR-0019).
+> 나중에 알게 되면 파이프라인을 다시 만들어야 하기 때문입니다.
 
 전체 목록과 판단 근거는 [`docs/DECISIONS.md`](docs/DECISIONS.md)의 **미해결(Unresolved)** 절에 있습니다.
 모르는 것은 문서에 "모른다"고 적는 것이 이 프로젝트의 규칙입니다. 추측으로 채우지 않습니다.
@@ -109,12 +133,16 @@ media-clarity-studio/
 
 개발 경험이 많지 않아도 진행할 수 있도록, 사람이 판단해야 하는 지점만 문서에 모아두었습니다.
 
-1. [`docs/DECISIONS.md`](docs/DECISIONS.md)의 **미해결** 항목 중 답할 수 있는 것에 답하기
-   (예: "내 PC의 GPU는 무엇인가", "과제 제출 기한은 언제인가")
-2. [`STATUS.md`](STATUS.md)에서 현재 진행 상황 확인
+1. [`STATUS.md`](STATUS.md) §5의 **차단 항목**에 답하기
+   (예: "정답 자막이 원어인가 번역인가", "제출 기한은 언제인가")
+2. 에이전트가 조사해 온 **비교표를 보고 고르기** (예: seed 코퍼스 후보 — 조사는 에이전트가 합니다)
 3. 각 에이전트가 올린 **Pull Request를 검토하고 병합 여부 결정**
 
-에이전트는 `main`에 직접 쓰지 않습니다. 항상 리뷰 가능한 PR로 제안합니다.
+> **조사는 사람의 몫이 아닙니다.** 후보를 찾고 라이선스를 정리하고 장단점을 비교하는 일은
+> 에이전트가 합니다. 오너에게는 **결정**만 요청합니다 (ADR-0024).
+
+**병합에 대하여:** 에이전트는 `main`에 직접 쓰지 않고 **어떤 PR도 병합하지 않습니다.**
+검토 후 병합하는 것은 **사람 오너의 정상 권한**입니다 (ADR-0009).
 
 ---
 
@@ -126,4 +154,6 @@ media-clarity-studio/
 - 에이전트끼리는 서로의 대화 기록을 볼 수 없습니다.
   **모든 인계(handoff)는 저장소 안의 파일과 PR 설명으로만 이루어집니다.**
 
-다음 작업은 [`docs/tasks/TASK-001.md`](docs/tasks/TASK-001.md) — **Codex**가 수행하는 독립 저장소·아키텍처 리뷰입니다.
+**현재 진행 상황:** TASK-001(독립 리뷰)이 완료되어 `변경 요청` 판정을 받았고
+([`docs/reviews/REVIEW-001.md`](docs/reviews/REVIEW-001.md)), 그 지적 사항이 문서 전반에 반영되었습니다.
+다음 단계는 [`STATUS.md`](STATUS.md) §4를 보십시오.
