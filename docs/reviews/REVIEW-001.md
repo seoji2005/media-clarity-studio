@@ -2,7 +2,8 @@
 
 | 항목 | 값 |
 |---|---|
-| **대상 TASK** | [`../tasks/TASK-001.md`](../tasks/TASK-001.md) |
+| **수행 TASK** | [`../tasks/TASK-001.md`](../tasks/TASK-001.md) — 이 리뷰를 **수행한** TASK |
+| **검토 대상** | **TASK-000의 산출물** (`38146ae`) — 이 리뷰가 **검토한** 것 |
 | **대상 커밋** | `38146ae` (PR #1, 브랜치 `claude/media-clarity-foundation-4fveu9`) |
 | **판정** | **변경 요청 (REQUEST CHANGES)** |
 | **날짜** | 2026-08-09 |

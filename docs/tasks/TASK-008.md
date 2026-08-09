@@ -6,7 +6,7 @@
 | **Owner (수행 소유)** | **Claude Code 주 세션** |
 | **Reviewer** | **REVIEW-002를 작성한 독립 Claude Code 리뷰 세션** (`claude-review/task-004-pr-1-foundation`, TASK-004 Owner) |
 | **Phase** | Phase 0 — Foundation |
-| **Status** | `In progress` → push 시 `In review` |
+| **Status** | `In review` (push 완료 — 재검토 대기) |
 | **선행 조건** | [`../reviews/REVIEW-002.md`](../reviews/REVIEW-002.md) 존재 — 충족 |
 | **브랜치** | `claude/media-clarity-foundation-4fveu9` (PR #1에 후속 커밋) |
 | **대상 리뷰** | REVIEW-002 — 판정 **변경 요청**, 차단 0 · 중대 8 · 경미 6 · 의견 1 |
@@ -103,7 +103,8 @@ REVIEW-002 작성 세션은 **작업을 완료했습니다.** 따라서 이 시�
 | `docs/PRODUCT_SPEC.md` | N2의 "기계적으로 차단" 완화 | M-08 |
 | `docs/reviews/REVIEW-001.md` | 머리말을 수행 TASK / 검토 대상으로 분리 | R-14 |
 | `STATUS.md` | TASK-004·TASK-008 행, 날짜, 위험 등록부 | 상태 일치 |
-| `PLAN.md` · `README.md` · `CLAUDE.md` | ADR 상태 표현·역할 서술 동기화 | M-01·R-10 |
+| `PLAN.md` | 갱신 날짜 동기화 |  — |
+| `README.md` · `CLAUDE.md` | **변경 없음.** 두 문서의 ADR 상태 서술은 라벨 종류만 언급하고 특정 ADR의 상태를 주장하지 않으므로 동기화가 필요 없었습니다 | — |
 | PR #1 설명 | `941410c` 변경량 `+534 / −150` 정정 및 전면 갱신 | **R-09** |
 
 ---
@@ -123,22 +124,22 @@ REVIEW-002 작성 세션은 **작업을 완료했습니다.** 따라서 이 시�
 
 ## 7. 완료 조건
 
-- [ ] M-01 — 다섯 ADR이 제안됨으로 이동, 정정 사유 기록, 요약표·개수·타 문서 표현 일치
-- [ ] M-02 — `AGENTS.md` §3.3 허용 목록에 리뷰 문서·자기 TASK 파일·§6.1 `STATUS.md`·PR 코멘트 명시
-- [ ] M-03 — "구조적으로 충돌하지 않는다" 삭제, `STATUS.md`를 coordination point로 정의
-- [ ] M-04 — 좌열 우선 tie-break + TASK-002 경계 사례
-- [ ] M-05 — `degradation_masks[].degradation_kind` 신설, EVALS §5.1이 참조
-- [ ] M-06 — 계산 규약 5지점이 하나의 결정적 해석만 허용
-- [ ] M-07 — G1–G4 측정 범위 지정 + U-30 등록
-- [ ] M-08 — N2의 완전한 보증 제거, ARCHITECTURE §5.1·§5.2와 무모순
-- [ ] R-09~R-14 각각 처리
-- [ ] O-01 — 분할하지 않음을 §6에 기록
-- [ ] `TASK-004.md` · `REVIEW-002.md` 원문 보존 확인 (해시 대조)
-- [ ] U-01~U-30 · ADR-0001~0027 참조 = 정의, 상대 링크 무결
-- [ ] STATUS 보드 ↔ TASK 파일 Owner/Reviewer/Status 일치
-- [ ] 코드·의존성·모델·CI·비밀정보 **0건**, `README.md` 최초 2줄 무변경
-- [ ] PR #1 설명이 실제 HEAD·커밋 수·파일 수·diff 통계와 일치
-- [ ] PR #1 **Open / Draft / 미병합** 유지, PR #2 무변경
+- [x] M-01 — 다섯 ADR이 제안됨으로 이동, 정정 사유 기록, 요약표·개수·타 문서 표현 일치
+- [x] M-02 — `AGENTS.md` §3.3 허용 목록에 리뷰 문서·자기 TASK 파일·§6.1 `STATUS.md`·PR 코멘트 명시
+- [x] M-03 — "구조적으로 충돌하지 않는다" 삭제, `STATUS.md`를 coordination point로 정의
+- [x] M-04 — 좌열 우선 tie-break + TASK-002 경계 사례
+- [x] M-05 — `degradation_masks[].degradation_kind` 신설, EVALS §5.1이 참조
+- [x] M-06 — 계산 규약 5지점이 하나의 결정적 해석만 허용
+- [x] M-07 — G1–G4 측정 범위 지정 + U-30 등록
+- [x] M-08 — N2의 완전한 보증 제거, ARCHITECTURE §5.1·§5.2와 무모순
+- [x] R-09~R-14 각각 처리
+- [x] O-01 — 분할하지 않음을 §6에 기록
+- [x] `TASK-004.md` · `REVIEW-002.md` 원문 보존 확인 (해시 대조)
+- [x] U-01~U-30 · ADR-0001~0027 참조 = 정의, 상대 링크 무결
+- [x] STATUS 보드 ↔ TASK 파일 Owner/Reviewer/Status 일치
+- [x] 코드·의존성·모델·CI·비밀정보 **0건**, `README.md` 최초 2줄 무변경
+- [x] PR #1 설명이 실제 HEAD·커밋 수·파일 수·diff 통계와 일치
+- [x] PR #1 **Open / Draft / 미병합** 유지, PR #2 무변경
 - [ ] **REVIEW-002를 작성한 독립 세션의 재검토** (중대 8건 대상)
 - [ ] 사람 제품 오너의 PR #1 병합 판단
 

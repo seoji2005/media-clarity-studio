@@ -2,8 +2,8 @@
 
 모듈 경계와 인터페이스 계약. **구현이 아니라 계약의 정의입니다.**
 
-마지막 갱신: 2026-08-09 (Phase 0, REVIEW-001 반영)
-상태: **제안됨 (Proposed)** — 경계 원칙 일부만 승인됨, 구체 기술은 미정
+마지막 갱신: 2026-08-09 (Phase 0, REVIEW-002 반영 — TASK-008)
+상태: **제안됨 (Proposed)** — 경계 원칙과 구체 기술 모두 아직 승인 전
 
 > 이 문서의 코드 블록은 전부 **계약 스케치(pseudo-contract)** 입니다.
 > 실행 가능한 코드가 아니며 특정 언어를 강제하지 않습니다.
@@ -18,14 +18,14 @@
 
 | # | 원칙 | 상태 | 구체적 의미 |
 |---|---|---|---|
-| A1 | **도메인 산출물 독립, 공통 기반 공유** | 승인됨 | 자막 도메인 산출물과 시각 도메인 산출물은 서로를 입력으로 쓰지 않는다. 반면 **횡단 기반(cross-cutting infrastructure)은 공유한다** |
+| A1 | **도메인 산출물 독립, 공통 기반 공유** | 제안됨 (ADR-0025) | 자막 도메인 산출물과 시각 도메인 산출물은 서로를 입력으로 쓰지 않는다. 반면 **횡단 기반(cross-cutting infrastructure)은 공유한다** |
 | A2 | **계약 우선** | 제안됨 | 모듈은 데이터 계약으로만 만난다. 내부 구현을 서로 모른다 |
 | A3 | **모델 교체 가능** | 제안됨 | 어떤 ASR·재구성 모델도 어댑터 뒤에 있다. 코어가 모델 API에 의존하지 않는다 |
 | A4 | **단계별 산출물 보존** | 제안됨 | 중간 결과를 디스크에 남긴다. 재실행·디버깅·평가의 전제 |
 | A5 | **재현성 등급 명시** | 제안됨 | 비트 단위 결정성 / 허용오차 내 반복성 / 출처 재현성을 **구분**한다 (§6) |
-| A6 | **평가는 일급 시민** | 승인됨 | `eval`은 부가 도구가 아니라 모듈이다 |
+| A6 | **평가는 일급 시민** | 제안됨 | `eval`은 부가 도구가 아니라 모듈이다 |
 | A7 | **UI는 껍데기** | 제안됨 | 모든 기능은 UI 없이 실행 가능해야 한다 |
-| A8 | **안전 게이트 우선** | 승인됨 | 재구성은 `ReconstructionPolicy` 통과 후에만 수행된다 (§5) |
+| A8 | **안전 게이트 우선** | 제안됨 (ADR-0022) | 재구성은 `ReconstructionPolicy` 통과 후에만 수행된다 (§5) |
 
 ### A1의 정확한 의미 (오해 방지)
 
@@ -207,6 +207,10 @@ ReferenceBundle/v1:
   clean_video        : ArtifactRef?           # 깨끗한 영상 (full-reference 지표용)
   degradation_masks[]:                        # 어디를 망가뜨렸는지 (합성 열화 시)
     recipe_id        : 문자열                 # 예: "D-V3"
+    degradation_kind : "blur" | "mosaic" | "low_resolution" | "compression"
+                       | "sensor_noise" | "unknown"
+                       # 정답 종류. DegradedRegion/v1.degradation_kind (§7.5)와
+                       # 의미·허용값이 동일하다. §3.3 참조
     mask             : RegionMask
     severity         : 0..5
 
@@ -217,6 +221,24 @@ ReferenceBundle/v1:
 
   known_limitations[]: 문자열                 # 이 번들이 보증하지 못하는 것
 ```
+
+### 3.0 언어의 정답은 `language_spans[]` 하나뿐입니다
+
+`ReferenceBundle` 안에서 언어는 세 곳에 나타납니다. **정답은 하나입니다.**
+
+| 필드 | 지위 |
+|---|---|
+| **`language_spans[]`** | **정답(authoritative).** 시간축 구간 기반이며 문장 내 전환(intra-sentential)을 표현할 수 있는 유일한 필드 |
+| `utterances[].language` | **파생 편의 필드(derived convenience).** 그 발화의 대표 언어일 뿐 정답이 아니다 |
+| `reference_cues[].language` | **파생 편의 필드.** 그 cue의 대표 언어일 뿐 정답이 아니다 |
+
+> **충돌 시 `language_spans[]`가 우선합니다.** 두 단수 필드는 표시·정렬 편의를 위한 값이며,
+> 언어 지표(EVALS §4.5)는 **`language_spans[]`만** 정답으로 씁니다.
+> 이는 가설 쪽 `Transcript.dominant_language`가 "편의용 파생값일 뿐 정답이 아니다"(§7.3)로
+> 규정된 것과 같은 취급입니다 (REVIEW-002 R-13).
+>
+> code-switching 발화에서 단수 필드에 무엇을 넣을지 애매하면 **비워 둡니다.**
+> 추측한 대표 언어를 넣고 그것을 정답처럼 쓰는 것이 더 나쁩니다.
 
 ### 3.1 부분 번들 (Partial Bundle)
 
@@ -232,6 +254,22 @@ ReferenceBundle/v1:
 - 필드 추가(하위 호환) → minor 증가
 - 의미 변경·필드 제거 → major 증가
 - **major가 다른 번들 사이의 점수를 비교하지 않습니다.**
+
+### 3.3 `degradation_kind` — 정답 축과 계약 검증
+
+[`EVALS.md`](EVALS.md) §5.1의 **종류 정확도(`degradation_kind` 혼동 행렬)** 는 정답 축을 필요로 합니다.
+그 정답이 `degradation_masks[].degradation_kind`입니다.
+
+| 규칙 | 내용 |
+|---|---|
+| **같은 의미·같은 허용값** | `degradation_masks[].degradation_kind`의 허용값은 `DegradedRegion/v1.degradation_kind`(§7.5)와 **문자 그대로 동일한 집합**입니다: `blur` · `mosaic` · `low_resolution` · `compression` · `sensor_noise` · `unknown`. **새 종류를 추가하지 않습니다.** 한쪽에 값을 추가하려면 **양쪽을 함께** 바꾸고 major를 올립니다 |
+| **생성 시 함께 기록** | 합성 열화를 생성할 때 `recipe_id`와 `degradation_kind`를 **함께** 기록합니다. 레시피를 적용했는데 종류를 비워 두는 경로는 없습니다 ([`EVALS.md`](EVALS.md) §3.2) |
+| **불일치는 계약 검증 실패** | 같은 항목의 `recipe_id`가 가리키는 종류와 `degradation_kind`가 **다르면 계약 검증 실패**입니다. 그 번들은 평가에 투입하지 않습니다. 한쪽을 추측으로 고쳐 통과시키지 않습니다 |
+| **`unknown`의 취급** | 정답이 `unknown`인 항목은 **종류 정확도의 분모에서 제외**합니다 (탐지 지표에는 그대로 포함). "모른다"를 정답으로 채점하지 않습니다 |
+
+> `recipe_id → degradation_kind` 대응표는 [`EVALS.md`](EVALS.md) §3.2의 레시피 목록에 있습니다.
+> 실제 입력(합성이 아닌 경우)에는 `degradation_masks[]` 자체가 없으므로,
+> §3.1에 따라 종류 정확도는 **"미지원"으로 보고**합니다 (REVIEW-002 M-05).
 
 ---
 
@@ -280,7 +318,12 @@ ReferenceBundle/v1:
 
 ---
 
-## 5. `ReconstructionPolicy/v1` — 안전 게이트 *(정책 승인됨 / 세부 제안됨)*
+## 5. `ReconstructionPolicy/v1` — 안전 게이트 *(제안됨 — 정책·세부 모두)*
+
+> **상태 정정 (2026-08-09, REVIEW-002 M-01):** 이전 판은 "정책 승인됨"이었습니다.
+> **사람 제품 오너가 ADR-0022를 이전에 승인한 적이 없다고 확인했으므로 제안됨으로 정정**했습니다.
+> 게이트의 필요성 자체가 철회된 것은 아니며, **승인 라벨만** 내려간 것입니다.
+> 기본 정책 수준은 여전히 **U-28** 미해결입니다.
 
 **모든 재구성은 이 게이트를 통과한 뒤에만 실행됩니다.** 기본값은 "하지 않음"입니다.
 

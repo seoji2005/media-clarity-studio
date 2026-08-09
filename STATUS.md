@@ -15,10 +15,10 @@
 | 현재 Phase | Phase 0 (기반 문서) |
 | 기능 코드 | **없음** (의도됨 — ADR-0001) |
 | 의존성 / 모델 / CI / 비밀정보 | **없음** (`AGENTS.md` §8) |
-| 문서 기반 | 초안 → **독립 리뷰 완료 → 지적 반영 완료 → 운영 구조 전환 반영** |
-| 열린 PR | **#1** (Draft) — 병합되지 않음 |
+| 문서 기반 | 초안 → 독립 리뷰 1회 → 반영 → 운영 구조 전환 → **독립 리뷰 2회(REVIEW-002) → 반영 완료** |
+| 열린 PR | **#1** (Draft, 미병합) — 기반 문서 / **#2** (Draft, 미병합) — REVIEW-002 리뷰 기록 |
 | 운영 구조 | **전환됨** — GPT Work / Claude 주 세션 / 독립 Claude 리뷰 세션 / Claude 일반 대화 (`AGENTS.md` §3, ADR-0027) |
-| 다음 작업 | PR #1에 대한 **새 독립 Claude Code 세션의 검토** (TASK-004) |
+| 다음 작업 | **REVIEW-002를 작성한 독립 세션의 재검토** (중대 8건 대상, TASK-008 push 이후 HEAD) |
 | 차단 요인 | **Phase 1 계획 착수**에 대한 사람 오너의 답변 **2건** (§5) |
 
 ---
@@ -42,7 +42,7 @@
 | [TASK-002](docs/tasks/TASK-002.md) | REVIEW-001 지적 반영 | Claude Code 주 세션 | **독립 Claude Code 리뷰 세션** (미배정) | 0 | **In review** (PR #1의 후속 커밋) |
 | [TASK-007](docs/tasks/TASK-007.md) | 운영 구조 전환 (문서 전용) | Claude Code 주 세션 | **독립 Claude Code 리뷰 세션** (미배정) | 0 | **In review** (PR #1의 후속 커밋) |
 | [TASK-004](docs/tasks/TASK-004.md) | PR #1 (`941410c`) 독립 검토 | **독립 Claude Code 리뷰 세션** | 없음 (§3.2 — 리뷰 결과는 사람 오너가 판단) | 0 | **Done** (판정: 변경 요청 — [REVIEW-002](docs/reviews/REVIEW-002.md)) |
-| [TASK-008](docs/tasks/TASK-008.md) | REVIEW-002 지적 반영 (중대 8 · 경미 6) | Claude Code 주 세션 | **REVIEW-002를 작성한 독립 Claude Code 리뷰 세션** | 0 | **In progress** |
+| [TASK-008](docs/tasks/TASK-008.md) | REVIEW-002 지적 반영 (중대 8 · 경미 6) | Claude Code 주 세션 | **REVIEW-002를 작성한 독립 Claude Code 리뷰 세션** | 0 | **In review** (PR #1의 후속 커밋) |
 
 > Owner와 Reviewer는 절대 같을 수 없으며, **반드시 서로 다른 Claude Code 세션**입니다 (`AGENTS.md` §3.1, R8).
 > **작성자 세션은 자기 변경을 스스로 승인하지 않습니다.**
@@ -65,7 +65,7 @@
 | `docs/PRODUCT_SPEC.md` | 리뷰 반영됨 (§2 과제/상용 범위 구분 신설) |
 | `docs/ARCHITECTURE.md` | **전면 개정** (공통 계약·ReferenceBundle·안전 게이트·재현성 등급) |
 | `docs/EVALS.md` | **전면 개정** (지표 계산 규약·데이터 분할·통계 규칙·방어 지표) |
-| `docs/DECISIONS.md` | 리뷰 반영됨 (ADR-0019~0026 추가, 라벨 정정) |
+| `docs/DECISIONS.md` | 리뷰 반영됨 (ADR-0019~0026 추가, 라벨 정정). 이후 TASK-008에서 다섯 ADR을 **제안됨으로 재정정** |
 | `docs/tasks/TASK-000.md` | 신규 (소급 기록) |
 | `docs/tasks/TASK-001.md` | 리뷰 반영됨 |
 | `docs/reviews/REVIEW-001.md` | 신규 |
@@ -93,6 +93,32 @@ REVIEW-001의 F-01~F-22 전부에 대응했습니다. **다만 "대응"은 "값�
 Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에서 제거**되었습니다.
 과거 기록은 **완료된 역사 기록**으로 보존했습니다.
 
+### 3.5 독립 검토 2회차 (TASK-004) — 완료
+
+- 대상 HEAD `941410c`, 판정 **변경 요청**
+- **차단 0 · 중대 8 · 경미 6 · 의견 1** → [`docs/reviews/REVIEW-002.md`](docs/reviews/REVIEW-002.md)
+- 수행: **독립 Claude Code 리뷰 세션** (PR #1 작성자 세션이 아님). 리뷰 PR은 **#2** (Draft, 미병합)
+- 리뷰 원문은 `AGENTS.md` §4.1 4단계에 따라 Source Owner가 **byte-for-byte 그대로** 이 브랜치에 보존했습니다
+
+### 3.6 REVIEW-002 반영 (TASK-008, Claude Code 주 세션 — PR #1의 후속 커밋)
+
+중대 8건(M-01~M-08)과 경미 6건(R-09~R-14)에 대응했습니다. **"대응"은 "검증되었다"가 아닙니다.**
+
+| 발견 | 반영 위치 |
+|---|---|
+| M-01 | `docs/DECISIONS.md` — **ADR-0019·0022·0024·0025·0026을 제안됨으로 정정** (오너가 미승인 확인) |
+| M-02 | `AGENTS.md` §3.3 — 리뷰어 허용 목록 4종 명시 |
+| M-03 | `AGENTS.md` §3.4 — "구조적으로 충돌하지 않는다" 삭제, `STATUS.md`를 coordination point로 정의 |
+| M-04 | `AGENTS.md` §3.2 — A열 우선 tie-break + TASK-002 경계 사례 |
+| M-05 | `docs/ARCHITECTURE.md` §3·§3.3, `docs/EVALS.md` §3.2·§5.1 — 정답 `degradation_kind` |
+| M-06 | `docs/EVALS.md` §4.0.1 알고리즘 A–D, §4.1·§4.3·§4.4·§4.5 |
+| M-07 | `docs/EVALS.md` §5.4 — 마스크 내부 측정 범위 + **U-30** 등록 |
+| M-08 | `docs/PRODUCT_SPEC.md` §6.1 — N2의 완전한 보증 제거 |
+| R-09~R-14 | PR #1 설명 · `AGENTS.md` §6·§4.1·§1 · `docs/ARCHITECTURE.md` §3.0 · `docs/reviews/REVIEW-001.md` |
+| O-01 | **반영 의무 없음.** 이번에는 분할하지 않고 기존 진입점·R-9 대응 유지 (TASK-008 §6) |
+
+> 검증은 **REVIEW-002를 작성한 독립 세션**의 재검토로 이루어집니다 (`AGENTS.md` R8 / §3.1).
+
 ---
 
 ## 4. 다음 작업
@@ -101,12 +127,14 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 
 | 후보 | 내용 | Owner 제안 |
 |---|---|---|
-| **TASK-004** | **PR #1 현재 head에 대한 독립 검토** (TASK-002 반영 + TASK-007 운영 구조 전환) | **새 독립 Claude Code 세션** (작성자 주 세션이 아닌 세션) |
+| **TASK-008 재검토** | **REVIEW-002 중대 8건(M-01~M-08)에 대한 재검토** — 대상은 TASK-008 push 이후의 새 HEAD | **REVIEW-002를 작성한 독립 Claude Code 리뷰 세션** |
 | TASK-003 | seed 코퍼스·라이선스·합성 데이터 대안 조사 + 비교표 작성 | Claude Code 주 세션 |
 
-> **TASK-004는 이 PR의 작성자 세션이 수행할 수 없습니다.** 작성자가 자기 변경을 검토·승인하는 것은
-> 금지입니다 (`AGENTS.md` R8 / §3.1). 반드시 **새로 시작한 독립 Claude Code 세션**이 맡습니다.
-> PR #1은 기반 문서 변경이므로 §3.2의 "독립 리뷰를 쓴다" 범주에 해당합니다.
+> **TASK-004는 완료되었습니다** (판정: 변경 요청 — REVIEW-002).
+> **재검토는 이 PR의 작성자 세션이 수행할 수 없습니다.** 작성자가 자기 변경을 검토·승인하는 것은
+> 금지입니다 (`AGENTS.md` R8 / §3.1).
+> 재검토 범위는 **전체 재검토가 아니라 필요한 항목만**입니다 (`AGENTS.md` §4.1 6단계).
+> PR #1은 기반 문서·계약·핵심 알고리즘 변경이므로 §3.2의 **A열**에 해당합니다 (A열 우선 규칙).
 
 > TASK-003은 ADR-0024에 따라 **에이전트가 조사**합니다. 오너는 비교표를 보고 고르기만 합니다.
 > 이것이 U-06을 차단 항목에서 뺀 이유입니다.
@@ -187,12 +215,13 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 | R-5 | 우리 지표에만 과적합 | 실제 채점 개선 없음 | 다축 분리, 종합 점수 금지, frozen-test, 방어 지표 |
 | R-6 | 재구성 환각을 못 걸러냄 | 허위 정보 제공 | 인공물 탐지 + blind 검토 필수화 |
 | R-7 | 세션 간 문서 갈라짐 | 서로 다른 전제로 작업 | `AGENTS.md` 단일 출처 (ADR-0008), 동시 편집 금지 (R9) |
-| **R-8** | **안전 게이트 우회 또는 오분류** | 의도적 비식별 처리를 재구성 → 윤리·법적 문제 | 기본 `skip`, "모르면 확인", 감사 로그 (ADR-0022). **U-28 미정** |
+| **R-8** | **안전 게이트 우회 또는 오분류** | 의도적 비식별 처리를 재구성 → 윤리·법적 문제 | 기본 `skip`, "모르면 확인", 감사 로그 (ADR-0022, **제안됨**). 분류는 완전하지 않음 ([`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md) §6.1). **U-28 미정** |
 | **R-9** | **문서가 커져 오너가 못 읽음** | 결정이 지연됨 | 오너용 진입점은 `README.md`와 이 파일 §5로 한정 |
-| **R-10** | **반영이 형식적일 수 있음** | 구조만 만들고 실효 없음 | **새 독립 Claude Code 세션**의 검토(TASK-004 후보)로 확인 |
+| **R-10** | **반영이 형식적일 수 있음** | 구조만 만들고 실효 없음 | 독립 세션의 검토로 확인 (TASK-004 완료 → REVIEW-002). TASK-008 반영은 **아직 검증 전** |
 | **R-11** | **작성자가 자기 작업을 검토·승인함** | 검토가 형식만 남음 | 작성자 ≠ 리뷰어 세션 강제 (R8), 작성자 자기 승인 금지 (`AGENTS.md` §3.1) |
 | **R-12** | **완료 보고가 실제와 다름** | 잘못된 상태 위에서 다음 작업 시작 | GitHub 상태·diff로 확인 (R10, `AGENTS.md` §3.5) |
 | **R-13** | **Claude 사용량 소진** | 고난도 구현이 막힘 | 주 세션은 고난도 구현에 집중, 독립 리뷰는 중요한 단계에만 (`AGENTS.md` §3.2) |
+| **R-14** | **`STATUS.md`를 두 브랜치가 함께 수정** | 리뷰 기록 통합 시 충돌 | `STATUS.md`를 coordination point로 직렬화 (`AGENTS.md` §3.4). 충돌은 Source Owner가 해결, 최종 diff는 사람 오너가 확인 |
 
 ---
 
