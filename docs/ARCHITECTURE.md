@@ -139,6 +139,9 @@ TimeMapping/v1:
   매핑이 없으면 타임스탬프 지표가 조용히 틀립니다.
 - `inserted_spans`는 **정답이 존재하지 않는 구간**입니다. 지표 계산에서 어떻게 다룰지는
   [`EVALS.md`](EVALS.md) §4에서 지표별로 정의합니다.
+- `inserted_spans[].to_start`/`to_end`는 **`to_timebase`의 반개구간 `[to_start, to_end)`**입니다.
+  `from_timebase`(source) 쪽에는 애초에 대응이 없으므로, 이 구간에 속하는지 판정은
+  **`to_timebase`에서 먼저** 합니다 ([`EVALS.md`](EVALS.md) §4.0.1 알고리즘 A, REVIEW-003 §3.1).
 - 역변환이 불가능하면(`is_invertible: false`) 그 열화 조건에서 계산할 수 없는 지표를
   **"미지원"으로 명시 보고**합니다. 근사값으로 채우지 않습니다.
 
