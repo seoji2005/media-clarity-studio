@@ -13,14 +13,20 @@
 > Independent review supplied by Codex/GPT Work through the human product owner;
 > transcribed and addressed by Claude.
 
-**이 기록의 성격에 대한 주의**
+**이 기록의 성격에 대한 주의 — 완료된 역사 기록입니다**
 
 - 원 리뷰는 **Codex/GPT Work**가 수행했고, **사람 제품 오너를 통해** 전달되었습니다.
+  이것은 **실제로 일어난 일**이며, 사실이므로 바꾸지 않습니다.
 - 이 파일은 Claude가 **전사(transcribe)** 한 것이며, 원문 그대로의 사본이 아닙니다.
   지적 사항을 항목화해 정리한 것입니다.
-- **Claude는 자기 작업의 리뷰어가 아닙니다.** TASK-000의 Owner는 Claude, Reviewer는 Codex이며,
-  이 문서는 Reviewer의 판정을 Owner가 받아 적은 기록입니다 (`AGENTS.md` §3).
+- **Claude는 자기 작업의 리뷰어가 아닙니다.** TASK-000의 당시 Owner는 Claude, 당시 Reviewer는 Codex이며,
+  이 문서는 Reviewer의 판정을 Owner가 받아 적은 기록입니다.
 - 따라서 이 파일의 "반영함" 표시는 **Owner의 주장**입니다. 검증은 Reviewer의 몫입니다.
+
+> **향후 리뷰의 주체는 다릅니다.**
+> 운영 구조 전환(TASK-007, ADR-0027) 이후 **독립 리뷰는 새 독립 Claude Code 세션**이 수행합니다.
+> 위 출처 기술은 **이 리뷰 1건의 역사 기록**이며, 앞으로의 리뷰 배정 근거가 아닙니다.
+> 현재 규칙: [`../../AGENTS.md`](../../AGENTS.md) §3·§9.
 
 ---
 
@@ -86,8 +92,9 @@
 
 ---
 
-## 4. 리뷰어에게 남기는 확인 요청 (2차 검토용)
+## 4. 리뷰어에게 남기는 확인 요청 (다음 독립 검토용)
 
+**다음 검토 주체: 새 독립 Claude Code 세션** (작성자 주 세션이 아닌 세션 — `AGENTS.md` §3.1).
 이 반영이 충분한지 판단하려면 다음을 확인해야 합니다.
 
 1. **F-01이 실제로 해소되었는가** — 문서 어디에도 "시각 재구성은 버려도 된다"로 읽히는 문장이 남아 있지 않은가

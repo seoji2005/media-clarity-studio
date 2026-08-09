@@ -3,13 +3,19 @@
 | 항목 | 값 |
 |---|---|
 | **ID** | TASK-000 |
-| **Owner (수행 소유)** | **Claude** |
-| **Reviewer** | Codex |
+| **Owner (수행 소유, 당시)** | **Claude** |
+| **Reviewer (당시)** | Codex |
 | **Phase** | Phase 0 — Foundation |
-| **Status** | `Done` |
+| **Status** | `Done` — **닫힌 역사 기록** |
 | **브랜치** | `claude/media-clarity-foundation-4fveu9` |
 | **관련 PR** | #1 |
 | **리뷰 결과** | [`../reviews/REVIEW-001.md`](../reviews/REVIEW-001.md) — 변경 요청 → 반영 완료 |
+
+> **이 문서는 완료된 역사 기록입니다.**
+> 위 Owner/Reviewer는 **당시 운영 구조에서 실제로 그러했다는 사실**이며, 사실이므로 바꾸지 않습니다.
+> **향후 배정의 근거가 아닙니다.** 현재 운영 구조는 [`../../AGENTS.md`](../../AGENTS.md) §3
+> (GPT Work / Claude Code 주 세션 / 독립 Claude Code 리뷰 세션 / Claude 일반 대화)이며,
+> **향후 독립 리뷰는 새 독립 Claude Code 세션이 수행합니다** (ADR-0027).
 
 ---
 
@@ -36,8 +42,10 @@ REVIEW-001이 이 공백을 지적했습니다. 규칙이 자기 자신의 첫 �
 
 ## 1. 목표 (사후 기술)
 
-Claude, Codex, 사람 제품 오너가 **서로의 대화를 볼 수 없는 상태에서**
+당시 참여 주체(Claude, Codex, 사람 제품 오너)가 **서로의 대화를 볼 수 없는 상태에서**
 같은 전제 위에 병렬 작업할 수 있는 문서 기반을 만든다.
+
+> 이 목표 기술은 **당시 상황의 사후 기록**입니다. 현재 참여 주체는 `AGENTS.md` §3을 보십시오.
 
 ---
 

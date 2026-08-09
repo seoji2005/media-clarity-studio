@@ -13,7 +13,7 @@ Local-first multilingual subtitle generation and AI-assisted media restoration s
 로컬 우선(local-first) 미디어 처리 도구를 목표로 합니다.
 
 현재 단계는 **Phase 0 (Foundation)** 이며, 이 저장소에는 아직 **기능 코드가 없습니다.**
-지금 있는 것은 사람과 AI 에이전트(Claude, Codex)가 **같은 전제 위에서** 작업하기 위한
+지금 있는 것은 사람과 AI 에이전트(GPT Work, Claude Code 세션들)가 **같은 전제 위에서** 작업하기 위한
 설계·평가·협업 문서뿐입니다. 문서 없이 코드를 먼저 쓰지 않는 것이 이 프로젝트의 의도된 순서입니다.
 
 > **용어 원칙 (반드시 준수)**
@@ -60,7 +60,7 @@ Local-first multilingual subtitle generation and AI-assisted media restoration s
 
 | 파일 | 목적 | 주 독자 |
 |---|---|---|
-| [`AGENTS.md`](AGENTS.md) | **모든 에이전트/사람이 따르는 공용 규칙의 단일 출처(authoritative)** | Claude, Codex, 사람 |
+| [`AGENTS.md`](AGENTS.md) | **모든 에이전트/사람이 따르는 공용 규칙의 단일 출처(authoritative)** | 전원 |
 | [`CLAUDE.md`](CLAUDE.md) | Claude Code 전용 짧은 진입점 | Claude |
 | [`PLAN.md`](PLAN.md) | 단계별(Phase) 제품 전략과 로드맵 | 전원 |
 | [`STATUS.md`](STATUS.md) | 지금 무엇이 끝났고 누가 무엇을 소유하는가 | 전원 |
@@ -68,7 +68,7 @@ Local-first multilingual subtitle generation and AI-assisted media restoration s
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 모듈 경계와 인터페이스 계약 | 구현 담당 |
 | [`docs/EVALS.md`](docs/EVALS.md) | 자막/영상 재구성 평가 설계, 합성 열화 전략 | 구현·리뷰 담당 |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | 결정 기록 — **제안됨 / 승인됨 / 미해결** 로 명시 | 전원 |
-| [`docs/tasks/`](docs/tasks/) | 작업 단위 명세 (TASK-000, TASK-001 …) | 담당 에이전트 |
+| [`docs/tasks/`](docs/tasks/) | 작업 단위 명세 (TASK-000, TASK-001 …) | 담당 세션 |
 | [`docs/reviews/`](docs/reviews/) | 독립 리뷰 기록 (REVIEW-001 …) | 전원 |
 
 **에이전트 읽기 순서:** `AGENTS.md`가 **항상 첫 번째**입니다. 전체 순서는 [`AGENTS.md`](AGENTS.md) §0.2를 따르십시오.
@@ -93,8 +93,9 @@ media-clarity-studio/
     ├── DECISIONS.md       # ADR + 미해결 목록
     ├── tasks/
     │   ├── TASK-000.md    # 소급 기록: Phase 0 문서 기반 (닫힘)
-    │   ├── TASK-001.md    # 독립 저장소·아키텍처 리뷰
-    │   └── TASK-002.md    # REVIEW-001 지적 반영
+    │   ├── TASK-001.md    # 독립 저장소·아키텍처 리뷰 (닫힘)
+    │   ├── TASK-002.md    # REVIEW-001 지적 반영
+    │   └── TASK-007.md    # 운영 구조 전환 (문서 전용)
     └── reviews/
         └── REVIEW-001.md  # TASK-001 리뷰 결과 (변경 요청)
 ```
@@ -146,14 +147,27 @@ media-clarity-studio/
 
 ---
 
-## 에이전트(Claude / Codex)가 할 일
+## AI 에이전트가 할 일 (운영 구조)
+
+전체 규칙은 [`AGENTS.md`](AGENTS.md) §3에 있습니다. 요약하면 네 가지 역할입니다.
+
+| 역할 | 하는 일 | 저장소 커밋 |
+|---|---|---|
+| **GPT Work** | 전체 오케스트레이션, 작업 분해, Claude에 줄 프롬프트 작성, 결과 비교로 오너 판단 지원 | 하지 않음 |
+| **Claude Code Cloud 주 세션** | Lead Developer — 핵심 설계·구현, 복잡한 디버깅, 성능 최적화 | 함 (TASK Owner) |
+| **독립 Claude Code 리뷰 세션** | Independent Reviewer — 저장소·TASK·PR diff만 보고 검증 | 리뷰 문서만 (TASK Reviewer) |
+| **Claude 일반 대화** | 아키텍처 자문, 기술 선택 비교, 막힌 문제의 두 번째 의견 | 하지 않음 |
 
 - 작업 시작 전 **반드시** [`AGENTS.md`](AGENTS.md)를 읽습니다.
-- 각 작업은 `docs/tasks/TASK-XXX.md` 하나에 대응하며, **구현 소유자는 한 명(하나의 에이전트)** 입니다.
-- 다른 에이전트는 **리뷰어**로 참여합니다. 소유자와 리뷰어는 같을 수 없습니다.
-- 에이전트끼리는 서로의 대화 기록을 볼 수 없습니다.
+- 각 작업은 `docs/tasks/TASK-XXX.md` 하나에 대응하며, **수행 소유자는 하나의 세션**입니다.
+- **작성자와 리뷰어는 반드시 서로 다른 Claude Code 세션입니다.** 주 세션은 자기 변경을 스스로 승인하지 않습니다.
+- **Claude 사용량이 제한적이므로** 주 세션은 고난도 구현에 집중하고,
+  독립 리뷰는 **중요한 PR과 핵심 알고리즘 변경에만** 사용합니다 ([`AGENTS.md`](AGENTS.md) §3.2).
+- 세션끼리는 서로의 대화 기록을 볼 수 없습니다.
   **모든 인계(handoff)는 저장소 안의 파일과 PR 설명으로만 이루어집니다.**
+- 완료 보고만 믿지 않고, 가능한 경우 **GitHub 상태와 diff로 확인**합니다 ([`AGENTS.md`](AGENTS.md) §3.5).
 
 **현재 진행 상황:** TASK-001(독립 리뷰)이 완료되어 `변경 요청` 판정을 받았고
 ([`docs/reviews/REVIEW-001.md`](docs/reviews/REVIEW-001.md)), 그 지적 사항이 문서 전반에 반영되었습니다.
+이후 TASK-007로 위 운영 구조 전환을 문서에 반영했습니다.
 다음 단계는 [`STATUS.md`](STATUS.md) §4를 보십시오.
