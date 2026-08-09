@@ -3,7 +3,7 @@
 **"지금 무엇이 되어 있고, 누가 무엇을 들고 있는가."**
 새 세션을 시작하는 에이전트는 [`AGENTS.md`](AGENTS.md) 다음으로 이 파일을 봅니다 (`AGENTS.md` §0.2).
 
-마지막 갱신: 2026-08-09 (TASK-004 독립 검토 완료 — REVIEW-002 / TASK-008 착수)
+마지막 갱신: 2026-08-09 (TASK-009 제한 재검토 완료 — REVIEW-003 / TASK-010 착수)
 현재 단계: **Phase 0 — Foundation**
 
 ---
@@ -43,6 +43,8 @@
 | [TASK-007](docs/tasks/TASK-007.md) | 운영 구조 전환 (문서 전용) | Claude Code 주 세션 | **독립 Claude Code 리뷰 세션** (미배정) | 0 | **In review** (PR #1의 후속 커밋) |
 | [TASK-004](docs/tasks/TASK-004.md) | PR #1 (`941410c`) 독립 검토 | **독립 Claude Code 리뷰 세션** | 없음 (§3.2 — 리뷰 결과는 사람 오너가 판단) | 0 | **Done** (판정: 변경 요청 — [REVIEW-002](docs/reviews/REVIEW-002.md)) |
 | [TASK-008](docs/tasks/TASK-008.md) | REVIEW-002 지적 반영 (중대 8 · 경미 6) | Claude Code 주 세션 | **REVIEW-002를 작성한 독립 Claude Code 리뷰 세션** | 0 | **In review** (PR #1의 후속 커밋) |
+| [TASK-009](docs/tasks/TASK-009.md) | REVIEW-002 제한 재검토 | **REVIEW-002를 작성한 독립 리뷰 세션** | 없음 (§3.2 — 재귀적 리뷰를 만들지 않음) | 0 | **Done** (판정: 변경 요청 — [REVIEW-003](docs/reviews/REVIEW-003.md), M-06 부분 해소) |
+| [TASK-010](docs/tasks/TASK-010.md) | M-06 시간축·줄 결합 모호성 제거 | Claude Code 주 세션 | **REVIEW-003을 작성한 독립 리뷰 세션** | 0 | **In progress** |
 
 > Owner와 Reviewer는 절대 같을 수 없으며, **반드시 서로 다른 Claude Code 세션**입니다 (`AGENTS.md` §3.1, R8).
 > **작성자 세션은 자기 변경을 스스로 승인하지 않습니다.**
