@@ -3,7 +3,7 @@
 **"지금 무엇이 되어 있고, 누가 무엇을 들고 있는가."**
 새 세션을 시작하는 에이전트는 [`AGENTS.md`](AGENTS.md) 다음으로 이 파일을 봅니다 (`AGENTS.md` §0.2).
 
-마지막 갱신: 2026-08-09 (Phase 0 병합 완료 · U-08·U-11 답변 반영 — TASK-012)
+마지막 갱신: 2026-08-10 (TASK-013 독립 리뷰 완료 — REVIEW-005, 판정 변경 요청)
 현재 단계: **Phase 1 계획 / Phase 1a 진입**
 
 ---
@@ -64,6 +64,7 @@
 | TASK | 제목 | Owner | Reviewer | Phase | Status |
 |---|---|---|---|---|---|
 | [TASK-012](docs/tasks/TASK-012.md) | Phase 1 계획 기준선 확립 | Claude Code 주 세션 | **별도의 독립 Claude Code 리뷰 세션** (미배정) | Phase 1 planning / 1a 진입 | **In review** |
+| [TASK-013](docs/tasks/TASK-013.md) | TASK-012 고정 HEAD 독립 검토 | **이 독립 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 review | **In review** (판정: 변경 요청 — [REVIEW-005](docs/reviews/REVIEW-005.md)) |
 
 > Owner와 Reviewer는 절대 같을 수 없으며, **반드시 서로 다른 Claude Code 세션**입니다 (`AGENTS.md` §3.1, R8).
 > **작성자 세션은 자기 변경을 스스로 승인하지 않습니다.**
