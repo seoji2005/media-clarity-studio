@@ -3,7 +3,8 @@
 **"지금 무엇이 되어 있고, 누가 무엇을 들고 있는가."**
 새 세션을 시작하는 에이전트는 [`AGENTS.md`](AGENTS.md) 다음으로 이 파일을 봅니다 (`AGENTS.md` §0.2).
 
-마지막 갱신: 2026-08-10 (TASK-013 독립 리뷰 완료 — REVIEW-005, 판정 변경 요청)
+마지막 갱신: 2026-08-10 (TASK-013 독립 리뷰 완료 — REVIEW-005, **판정 변경 요청**.
+이후 **M-01·M-02 대응 완료** — 새 HEAD `f001ace` 제한 재검토 대기)
 현재 단계: **Phase 1 계획 / Phase 1a 진입**
 
 ---
@@ -63,7 +64,7 @@
 
 | TASK | 제목 | Owner | Reviewer | Phase | Status |
 |---|---|---|---|---|---|
-| [TASK-012](docs/tasks/TASK-012.md) | Phase 1 계획 기준선 확립 | Claude Code 주 세션 | **별도의 독립 Claude Code 리뷰 세션** (미배정) | Phase 1 planning / 1a 진입 | **In review** |
+| [TASK-012](docs/tasks/TASK-012.md) | Phase 1 계획 기준선 확립 | Claude Code 주 세션 | **[TASK-013](docs/tasks/TASK-013.md) 수행 세션** (사람 오너의 GPT Work 예외 승인) — [REVIEW-005](docs/reviews/REVIEW-005.md) | Phase 1 planning / 1a 진입 | **In review** (REVIEW-005 **변경 요청** → **M-01·M-02 대응 완료**, 제한 재검토 대기) |
 | [TASK-013](docs/tasks/TASK-013.md) | TASK-012 고정 HEAD 독립 검토 | **이 독립 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 review | **In review** (판정: 변경 요청 — [REVIEW-005](docs/reviews/REVIEW-005.md)) |
 
 > Owner와 Reviewer는 절대 같을 수 없으며, **반드시 서로 다른 Claude Code 세션**입니다 (`AGENTS.md` §3.1, R8).
@@ -166,7 +167,18 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 
 | TASK | 내용 | Owner |
 |---|---|---|
-| **TASK-012** | **Phase 1 계획 기준선 확립** (이 작업) — 독립 리뷰 대기 | Claude Code 주 세션 |
+| **TASK-012** | **Phase 1 계획 기준선 확립** — 독립 리뷰(REVIEW-005) 완료, **M-01·M-02 대응 완료.** 새 HEAD `f001acecc1e20f88b4625428e6ac136208d4c718`에서 **두 지적만 제한 재검토 대기** | Claude Code 주 세션 |
+
+> **판정과 반영 상태는 서로 다른 사실입니다. 섞지 마십시오.**
+>
+> | 사실 | 값 | 바뀌나 |
+> |---|---|---|
+> | REVIEW-005의 **판정** | **변경 요청** (고정 HEAD `c049090…` 기준) | **아니오 — 역사 기록** (R2, `AGENTS.md` §4.1 원문 불변) |
+> | 그 지적의 **반영 상태** | **M-01·M-02 대응 완료** (커밋 `f001ace`) | 예 — 현재 상태 |
+> | **재검토 결과** | **아직 없음** | 새 HEAD에서 리뷰 세션이 판정 |
+>
+> **"대응 완료"는 Owner의 주장이며 검증이 아닙니다** (R10 / `AGENTS.md` §3.5).
+> 작성자 세션은 자기 수정을 승인하지 않습니다 (R8 / §3.1).
 
 ### Phase 1a 실행 순서 **(제안 — 검토 중.** [`PLAN.md`](PLAN.md) §3-1d**)**
 
