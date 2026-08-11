@@ -63,7 +63,7 @@
 
 | TASK | 제목 | Owner | Reviewer | Phase | Status |
 |---|---|---|---|---|---|
-| [TASK-012](docs/tasks/TASK-012.md) | Phase 1 계획 기준선 확립 | Claude Code 주 세션 | **[TASK-013](docs/tasks/TASK-013.md) → [TASK-014](docs/tasks/TASK-014.md) 동일 GPT Work 세션** (사람 오너의 예외 승인) — [REVIEW-005](docs/reviews/REVIEW-005.md) · [REVIEW-006](docs/reviews/REVIEW-006.md) | Phase 1 planning / 1a 진입 | **In review** (REVIEW-005 변경 요청 → REVIEW-006 M-01·M-02 **부분 해소** · 최종 **변경 요청** → **잔여 항목 대응 완료**, 제한 재검토 대기) |
+| [TASK-012](docs/tasks/TASK-012.md) | Phase 1 계획 기준선 확립 | Claude Code 주 세션 | **[TASK-013](docs/tasks/TASK-013.md) → [TASK-014](docs/tasks/TASK-014.md) → [TASK-015](docs/tasks/TASK-015.md) 동일 GPT Work 세션** (사람 오너의 예외 승인) — [REVIEW-005](docs/reviews/REVIEW-005.md) · [REVIEW-006](docs/reviews/REVIEW-006.md) · [REVIEW-007](docs/reviews/REVIEW-007.md) | Phase 1 planning / 1a 진입 | **In review** (REVIEW-007 M-01 **부분 해소** · M-02 **해소** · 최종 **변경 요청** → **U-22 공급자 결정 귀속 대응 완료**, 단일 항목 제한 재검토 대기) |
 | [TASK-013](docs/tasks/TASK-013.md) | TASK-012 고정 HEAD 독립 검토 | **이 독립 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 review | **In review** (판정: 변경 요청 — [REVIEW-005](docs/reviews/REVIEW-005.md)) |
 | [TASK-014](docs/tasks/TASK-014.md) | TASK-012 M-01·M-02 제한 재검토 | **REVIEW-005를 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 limited rereview | **In review** (M-01·M-02 부분 해소 · 판정: 변경 요청 — [REVIEW-006](docs/reviews/REVIEW-006.md)) |
 | [TASK-015](docs/tasks/TASK-015.md) | REVIEW-006 잔여 6항목 한정 재검토 | **TASK-013·TASK-014 / REVIEW-005·REVIEW-006을 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 residual rereview | **In review** (M-01 부분 해소 · M-02 해소 · 판정: 변경 요청 — [REVIEW-007](docs/reviews/REVIEW-007.md)) |
@@ -168,7 +168,7 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 
 | TASK | 내용 | Owner |
 |---|---|---|
-| **TASK-012** | **Phase 1 계획 기준선 확립** — REVIEW-005(변경 요청) → 최초 실질 수정 → REVIEW-006(M-01·M-02 **부분 해소**, 최종 **변경 요청**) → **잔여 항목 대응 완료.** **PR #5의 현재 HEAD**에서 REVIEW-006이 지정한 잔여 항목만 제한 재검토 대기 | Claude Code 주 세션 |
+| **TASK-012** | **Phase 1 계획 기준선 확립** — REVIEW-005(변경 요청) → 수정 → REVIEW-006(M-01·M-02 **부분 해소**, 최종 **변경 요청**) → 수정 → REVIEW-007(M-01 **부분 해소** · M-02 **해소**, 최종 **변경 요청**) → **U-22 공급자 결정 귀속 대응 완료.** **PR #5의 현재 HEAD**에서 REVIEW-007이 지정한 **단일 항목**만 제한 재검토 대기 | Claude Code 주 세션 |
 
 > **판정과 반영 상태는 서로 다른 사실입니다. 섞지 마십시오.**
 >
@@ -177,13 +177,15 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 > | REVIEW-005의 **판정** (고정 HEAD `c049090…`) | **변경 요청** | **아니오 — 역사 기록** (R2, `AGENTS.md` §4.1 원문 불변) |
 > | REVIEW-005 이후 **최초 실질 수정 커밋** | `f001acecc1e20f88b4625428e6ac136208d4c718` (`docs: address task 012 review findings`) — **식별자일 뿐, 검토 대상 HEAD가 아닙니다** |
 > | REVIEW-006의 **판정** (고정 HEAD `e0d99cf…`) | M-01 **부분 해소** · M-02 **부분 해소** · 최종 **변경 요청** | **아니오 — 역사 기록** |
-> | REVIEW-006 이후 **잔여 항목 반영 상태** | **대응 완료** (Source Owner 주장) | 예 — 현재 상태 |
+> | REVIEW-006 이후 **잔여 6항목 수정 커밋** | `b57df672e67c1ff8ae1d001c874672e391c474c4` (`docs: address task 012 rereview findings`) — **식별자일 뿐, 검토 대상 HEAD가 아닙니다** |
+> | REVIEW-007의 **판정** (고정 HEAD `b57df67…`) | M-01 **부분 해소**(잔여 1~3 해소, U-22 귀속만 남음) · M-02 **해소** · 최종 **변경 요청** | **아니오 — 역사 기록** |
+> | REVIEW-007 이후 **잔여 1항목 반영 상태** | **대응 완료** (Source Owner 주장) | 예 — 현재 상태 |
 > | **다음 제한 재검토 대상** | **PR #5의 현재 HEAD** (대상 브랜치 `claude/task-012-phase1-plan-k3n7qw`의 최신 HEAD). **특정 SHA를 이 문서에 고정 표기하지 않습니다** | 커밋마다 갱신됨 |
 > | **재검토 결과** | **아직 없음** | 리뷰 세션이 다음에 판정 |
 >
 > **"대응 완료"는 Owner의 주장이며 검증이 아닙니다** (R10 / `AGENTS.md` §3.5).
 > 작성자 세션은 자기 수정을 승인하지 않습니다 (R8 / §3.1).
-> **`f001ace…`는 "최초 실질 수정 커밋"이라는 식별자로만 남습니다. "새 HEAD"·"현재 HEAD"로 부르지 않습니다** (REVIEW-006 §3.2 잔여 결함).
+> **어떤 실질 수정 커밋도 "새 HEAD"·"현재 HEAD"로 부르지 않습니다** — 식별자로만 표기합니다 (REVIEW-006 §3.2, REVIEW-007 §3.2 잔여 결함).
 
 ### Phase 1a 실행 순서 **(제안 — 검토 중.** [`PLAN.md`](PLAN.md) §3-1d**)**
 
