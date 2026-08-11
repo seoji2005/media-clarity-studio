@@ -3,7 +3,7 @@
 **"지금 무엇이 되어 있고, 누가 무엇을 들고 있는가."**
 새 세션을 시작하는 에이전트는 [`AGENTS.md`](AGENTS.md) 다음으로 이 파일을 봅니다 (`AGENTS.md` §0.2).
 
-마지막 갱신: 2026-08-10 (TASK-014 제한 재검토 완료 — REVIEW-006, M-01·M-02 **부분 해소** · 판정 **변경 요청**)
+마지막 갱신: 2026-08-11 (TASK-015 잔여 6항목 한정 재검토 완료 — REVIEW-007, M-01 **부분 해소** · M-02 **해소** · 판정 **변경 요청**)
 현재 단계: **Phase 1 계획 / Phase 1a 진입**
 
 ---
@@ -66,6 +66,7 @@
 | [TASK-012](docs/tasks/TASK-012.md) | Phase 1 계획 기준선 확립 | Claude Code 주 세션 | **[TASK-013](docs/tasks/TASK-013.md) → [TASK-014](docs/tasks/TASK-014.md) 동일 GPT Work 세션** (사람 오너의 예외 승인) — [REVIEW-005](docs/reviews/REVIEW-005.md) · [REVIEW-006](docs/reviews/REVIEW-006.md) | Phase 1 planning / 1a 진입 | **In review** (REVIEW-005 변경 요청 → REVIEW-006 M-01·M-02 **부분 해소** · 최종 **변경 요청** → **잔여 항목 대응 완료**, 제한 재검토 대기) |
 | [TASK-013](docs/tasks/TASK-013.md) | TASK-012 고정 HEAD 독립 검토 | **이 독립 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 review | **In review** (판정: 변경 요청 — [REVIEW-005](docs/reviews/REVIEW-005.md)) |
 | [TASK-014](docs/tasks/TASK-014.md) | TASK-012 M-01·M-02 제한 재검토 | **REVIEW-005를 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 limited rereview | **In review** (M-01·M-02 부분 해소 · 판정: 변경 요청 — [REVIEW-006](docs/reviews/REVIEW-006.md)) |
+| [TASK-015](docs/tasks/TASK-015.md) | REVIEW-006 잔여 6항목 한정 재검토 | **TASK-013·TASK-014 / REVIEW-005·REVIEW-006을 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 residual rereview | **In review** (M-01 부분 해소 · M-02 해소 · 판정: 변경 요청 — [REVIEW-007](docs/reviews/REVIEW-007.md)) |
 
 > Owner와 Reviewer는 절대 같을 수 없으며, **반드시 서로 다른 Claude Code 세션**입니다 (`AGENTS.md` §3.1, R8).
 > **작성자 세션은 자기 변경을 스스로 승인하지 않습니다.**
