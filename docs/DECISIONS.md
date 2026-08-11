@@ -196,9 +196,9 @@ Codex(및 Codex Cloud / GitHub `@codex review`)가 맡는 것을 전제했다.
 
 ---
 
-### ADR-0011 — 10개 모듈로 분해한다 *(제안됨)*
+### ADR-0011 — 11개 모듈로 분해한다 *(제안됨)*
 
-`ingest` · `audio` · `asr` · `subtitle` · `reconstruct` · `eval` · `orchestrator` · `storage` · `ui` · `export`
+`ingest` · `audio` · `asr` · `translate` · `subtitle` · `reconstruct` · `eval` · `orchestrator` · `storage` · `ui` · `export`
 
 **불확실한 점:** 모듈 수가 과할 수 있다. 실제 구현에서 경계가 성가시면 조정한다.
 
@@ -434,7 +434,7 @@ GPU 비결정 경로에서 동일 출력을 보장하지 않는다.
 | U-03 | GPU 가속 백엔드 / 벤더 | Phase 1 후반 | 사용자 하드웨어 미확인 (U-23) |
 | U-04 | 대상 OS 및 배포 형식 | Phase 3 | 사용자층 미확정 |
 | U-05 | **가격·수익 모델** (라이선스 검토는 제외 — ADR-0019) | Phase 4 | 제품 형태가 정해지지 않음 |
-| U-22 | ASR·재구성 모델 선택 **+ 그 라이선스·재배포 조건 확인** | Phase 1a 후반 | 측정 없이 고르면 근거가 없음 |
+| U-22 | **ASR·번역·재구성 모델/엔진 선택 + 실행 방식(로컬/원격)·공급자·라이선스·재배포 조건 확인.** `translate`는 [`ARCHITECTURE.md`](ARCHITECTURE.md) §7.11에서 어댑터 경계만 정의하며 이 항목이 실제 선택을 담당한다 (REVIEW-006 M-01 추적 정합) | Phase 1a 후반 | 측정 없이 고르면 근거가 없음 |
 
 ---
 
@@ -531,6 +531,7 @@ GPU 비결정 경로에서 동일 출력을 보장하지 않는다.
 | **(사람) U-31 답변** | **없음 — TASK-003과 독립된 게이트** | — |
 | TASK-005 | **TASK-003 · U-06 · U-31 (셋 모두)** | **예** |
 | TASK-006 | **TASK-005** | 예 (TASK-005를 통해) |
+| **코드 구현** | **TASK-006까지 완료** | 예 (TASK-005를 통해 간접적으로) |
 
 > 같은 표가 [`../PLAN.md`](../PLAN.md) §3-1d와 [`../STATUS.md`](../STATUS.md) §4에 있습니다.
 > **이 순서는 제안이며 사람 오너의 승인 전에는 확정이 아닙니다** (`AGENTS.md` §9-5).

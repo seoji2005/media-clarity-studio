@@ -188,7 +188,7 @@ ReferenceBundle/v1:
   completeness       : { 아래 각 절의 제공 여부 플래그 }
 
   # ── 음성/자막 도메인 ─────────────────────────────
-  # 정답 축이 둘입니다 (§3.4). 두 축을 같은 것으로 취급하지 않습니다.
+  # 정답 축이 둘입니다 (§3.0.1). 두 축을 같은 것으로 취급하지 않습니다.
   speaker_streams[]  :                        # [원문 축] 화자별 독립 스트림 (겹침 표현의 핵심)
     speaker_id       : 문자열
     utterances[]     : { start_seconds, end_seconds, text, language,
@@ -197,7 +197,7 @@ ReferenceBundle/v1:
 
   reference_cues[]   :                        # 자막 형태의 정답 (스타일 규칙 포함)
     cue_id, start_seconds, end_seconds, lines[], language, speaker_id?,
-    reference_axis   : "source" | "target"    # ★ 어느 정답 축인가 (§3.4). 생략 불가
+    reference_axis   : "source" | "target"    # ★ 어느 정답 축인가 (§3.0.1). 생략 불가
 
   target_language?   : BCP-47                 # 번역 축(`reference_axis: "target"`)의 대상 언어.
                                               # **U-31 미해결.** 값이 확정되기 전에는 비워 둡니다.
