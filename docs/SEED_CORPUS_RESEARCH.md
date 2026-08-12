@@ -360,7 +360,7 @@ here-doc은 편집기·들여쓰기·`<<-` 탭 처리에 따라 결과가 달라
 
 ```bash
 LC_ALL=C sha256sum fixture.srt
-wc -c < fixture.srt                      # 96
+wc -c < fixture.srt                      # 98
 tail -c 2 fixture.srt | od -An -tx1      # 0a 0a
 grep -c $'\r' fixture.srt || true        # 0  (CR 없음)
 grep -nP '[ \t]+$' fixture.srt || true   # 출력 없음 (trailing space 없음)
@@ -427,18 +427,43 @@ diff -u fixture.canon fixture-extracted.canon && echo "CANONICAL: identical"
 ```
 
 staging export는 **환경변수를 먼저 검증**한다. 값이 없거나 비어 있으면 파일시스템을 건드리기 전에
-중단한다 (REVIEW-010 M-02).
+중단한다 (REVIEW-010 M-02). **전체를 괄호로 묶은 서브셸 한 단위로 실행한다** (REVIEW-011 F-02).
 
 ```bash
-: "${MCS_ICLOUD_STAGING_DIR:?set MCS_ICLOUD_STAGING_DIR to the staging directory}"
-mkdir -p -- "$MCS_ICLOUD_STAGING_DIR"
-cp -- fixture-softsub.mkv "$MCS_ICLOUD_STAGING_DIR/"
-sha256sum fixture-softsub.mkv "$MCS_ICLOUD_STAGING_DIR/fixture-softsub.mkv"
+(
+  set -eu
+  : "${MCS_ICLOUD_STAGING_DIR:?set MCS_ICLOUD_STAGING_DIR to the staging directory}"
+  mkdir -p -- "$MCS_ICLOUD_STAGING_DIR"
+  cp -- fixture-softsub.mkv "$MCS_ICLOUD_STAGING_DIR/"
+  sha256sum fixture-softsub.mkv \
+    "$MCS_ICLOUD_STAGING_DIR/fixture-softsub.mkv"
+)
 ```
 
+**실행 규약 — 이 블록은 줄 단위로 나눠 실행하지 않는다.**
+
+| # | 규약 |
+|---|---|
+| 1 | **여는 `(`부터 닫는 `)`까지 전체를 한 단위로** 실행하거나 붙여넣는다. 일부만 잘라 실행하지 않는다 |
+| 2 | staging 작업은 **서브셸 안에서** 실행된다 |
+| 3 | `set -eu`는 **서브셸에만** 적용된다. 부모 대화형 셸의 옵션을 바꾸거나 부모를 종료시키지 않는다 |
+| 4 | 환경변수가 unset 또는 empty이면 `:?`가 **서브셸을 non-zero로 종료**한다 |
+| 5 | 그 경우 같은 서브셸의 `mkdir`·`cp`·`sha256sum`은 **실행되지 않는다** |
+| 6 | `mkdir` 또는 `cp`가 실패해도 `set -e`가 즉시 중단하므로 **뒤 명령으로 계속 진행하지 않는다** |
+| 7 | 유효한 값에서는 staging copy와 원본의 SHA-256을 **비교**한다 |
+| 8 | 검증은 **실제 iCloud에 쓰지 않고** `mktemp -d` 경로에서만 수행한다 |
+
+> **왜 서브셸인가 (REVIEW-011 F-02).** 이전 판은 가드 네 줄을 그대로 나열했다. 비대화형 실행
+> (`bash script`, `bash -c`)에서는 `:?` 실패가 셸을 종료시켜 안전했지만, **대화형 셸에 붙여넣으면
+> `:?`가 오류만 출력하고 대화형 셸을 종료시키지 않으므로 다음 줄의 `mkdir`·`cp`가 계속 실행되어
+> 실제로 `/fixture-softsub.mkv`가 생성됐다.** 괄호 서브셸은 실패를 그 서브셸 안에 가두면서
+> 부모 대화형 셸의 `errexit`·`nounset` 상태를 건드리지 않는다.
+>
+> **전역 `set -e`를 앞에 붙이는 방식은 쓰지 않는다.** 부모 대화형 셸의 옵션을 바꾸고,
+> 이후 사용자의 모든 명령에 영향을 주기 때문이다.
+
 `:?`는 미설정과 **빈 문자열을 모두** 오류로 처리한다. `--`는 값이 `-`로 시작해도 옵션으로 해석되지
-않게 한다. 이 가드가 없으면 `mkdir -p ""`가 실패한 뒤 `cp`의 목적지가 `/fixture-softsub.mkv`로
-해석될 수 있다.
+않게 한다.
 
 공식 [FFprobe documentation](https://ffmpeg.org/ffprobe.html)은 `-show_streams`, `-show_format`, JSON
 writer와 stream specifier를 정의한다.
@@ -520,10 +545,10 @@ CUE	2	00:00:03,000 --> 00:00:05,500	[fixture cue 2]
 
 **바이트 형태 대조 (실측, 같은 환경·같은 명령):**
 
-| 형태 | SHA-256 | §7.1.1 규약 |
-|---|---|---|
-| EOF `0a` (빈 줄 없음) | `9df382a65875ccfb1e055b219219d5eb3864751f79896b049f54952cb636c4d6` | 위반 |
-| **EOF `0a 0a`** | **`c2ed5960b423ee3d00c23d4d4f61dc62371fdb22e0fa090766bbb8262120eb97`** | **준수** |
+| 형태 | 크기 | SHA-256 | §7.1.1 규약 |
+|---|---|---|---|
+| EOF `0a` (빈 줄 없음) | **97 bytes** | `9df382a65875ccfb1e055b219219d5eb3864751f79896b049f54952cb636c4d6` | 위반 |
+| **EOF `0a 0a`** | **98 bytes** | **`c2ed5960b423ee3d00c23d4d4f61dc62371fdb22e0fa090766bbb8262120eb97`** | **준수** |
 
 `9df382a6…`는 REVIEW-010 §2.2가 재현한 값이며, 문서를 눈으로 옮겼을 때 나오는 형태다. 두 형태는
 **soft-sub `.mkv` 해시가 서로 같다**(`2f2eb1ba…`) — mux 시 자막 payload가 정규화되기 때문이며,
@@ -559,13 +584,49 @@ GNU coreutils `sha256sum`·`printf`·`od`·`wc`, GNU `sed`·`awk`·`diff`.
 | **raw 비교** | `diff -u` **통과** (§7.4.1의 성립 조건에서) |
 | **canonical 비교** | `srt-canon.sh` 출력 **동일**, cue 2건의 번호·시작·종료·텍스트 일치 |
 | canonicalization 음성 테스트 | 시각·텍스트·번호·누락 **5건 전부 검출** (§7.4.1) |
-| staging 가드 — 미설정 | 오류 메시지 + **exit 2**, `/fixture-softsub.mkv` **미생성** |
-| staging 가드 — 빈 문자열 | 오류 메시지 + **exit 2**, `/fixture-softsub.mkv` **미생성** |
+| staging 가드 — 미설정 | 오류 메시지 + **non-zero 종료**, `/fixture-softsub.mkv` **미생성** (§7.5.1) |
+| staging 가드 — 빈 문자열 | 오류 메시지 + **non-zero 종료**, `/fixture-softsub.mkv` **미생성** (§7.5.1) |
 | staging 가드 — 유효 경로 | **exit 0**, output과 staging copy SHA-256 `2f2eb1ba…` **동일** |
 
 **환경 제약:** 이 실행 환경에는 `ffmpeg`이 사전 설치되어 있지 않아 `apt-get`으로 설치했고,
 설치된 build가 문서 고정값과 **동일**했다. 라이선스 1차 출처 확인은 egress 차단으로 수행하지
 못했다 (§3.2.1, §3.6.2, §11).
+
+### 7.5.1 staging 가드 acceptance 기준 — 종료 코드 숫자를 고정하지 않는다
+
+**규범적 기준 (이것이 acceptance다):**
+
+| 입력 | 요구 결과 |
+|---|---|
+| `MCS_ICLOUD_STAGING_DIR` **unset** | **non-zero** 종료 |
+| `MCS_ICLOUD_STAGING_DIR` **empty** | **non-zero** 종료 |
+| 유효한 `mktemp -d` 경로 | **zero** 종료, staging copy 생성, 원본과 SHA-256 일치 |
+
+> **정확한 non-zero 값은 acceptance 기준이 아니다.** 셸 구현과 실행 방식에 따라 달라지기
+> 때문이다 (아래 실측에서 bash는 `1`, dash는 `2`). 이전 판이 `exit 2`로 고정한 것은
+> dash에서만 성립하는 값이었다 (REVIEW-011 F-03).
+>
+> **핵심 판정 기준은 종료 코드 숫자가 아니라 다음 두 가지다.**
+> ① **파일시스템 변경이 없을 것** — 특히 `/fixture-softsub.mkv`가 생성되지 않을 것
+> ② **후속 명령이 실행되지 않을 것** — `mkdir`·`cp`·`sha256sum`의 효과가 남지 않을 것
+
+**실측 (2026-08-12, 수정된 서브셸 블록을 그대로 실행).** 네 가지 실행 방식 전부에서 규범적
+기준을 충족했다.
+
+| 실행 방식 | unset | empty | valid | `/fixture-softsub.mkv` |
+|---|---|---|---|---|
+| `bash -c "$(cat block.sh)"` | non-zero (**1**) | non-zero (**1**) | **0**, copy 생성·해시 일치 | **미생성** |
+| bash script (`bash ./block.sh`) | non-zero (**1**) | non-zero (**1**) | **0**, copy 생성·해시 일치 | **미생성** |
+| `dash -c "$(cat block.sh)"` | non-zero (**2**) | non-zero (**2**) | **0**, copy 생성·해시 일치 | **미생성** |
+| **interactive bash — 전체 `(…)` 블록 paste** (pty) | non-zero (**1**) | non-zero (**1**) | **0**, copy 생성 | **미생성** |
+
+**대화형 셸 부작용 없음 (실측):** 세 케이스 모두에서 **부모 셸이 계속 사용 가능**했고,
+paste 직후 `$-`로 확인한 부모의 **`errexit`·`nounset`이 둘 다 OFF로 불변**이었다.
+서브셸이 실패해도 부모 대화형 셸은 종료되지 않는다.
+
+**비교 — 이전 판의 나열형 블록.** REVIEW-011 §3은 같은 대화형 조건에서 `:?`가 오류만 출력하고
+대화형 셸을 종료시키지 못해 **다음 줄의 `cp`가 실행되어 `/fixture-softsub.mkv`가 실제로
+생성**됐다고 기록했다. 서브셸 교체는 이 경로를 닫는다.
 
 ## 8. 첫 vertical slice 완료 조건
 
