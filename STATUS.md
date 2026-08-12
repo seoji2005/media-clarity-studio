@@ -3,7 +3,7 @@
 **"지금 무엇이 되어 있고, 누가 무엇을 들고 있는가."**
 새 세션을 시작하는 에이전트는 [`AGENTS.md`](AGENTS.md) 다음으로 이 파일을 봅니다 (`AGENTS.md` §0.2).
 
-마지막 갱신: 2026-08-11 (REVIEW-008 변경 요청의 직접 잔여 대응 완료 — STATUS 상단 갱신 정합성 정렬, 단일 항목 제한 재검토 대기)
+마지막 갱신: 2026-08-12 (TASK-017 STATUS 상단 직접 잔여 제한 재검토 완료 — REVIEW-009, M-01 **해소** · M-02 **해소 유지** · 판정 **승인**)
 현재 단계: **Phase 1 계획 / Phase 1a 진입**
 
 ---
@@ -68,6 +68,7 @@
 | [TASK-014](docs/tasks/TASK-014.md) | TASK-012 M-01·M-02 제한 재검토 | **REVIEW-005를 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 limited rereview | **In review** (M-01·M-02 부분 해소 · 판정: 변경 요청 — [REVIEW-006](docs/reviews/REVIEW-006.md)) |
 | [TASK-015](docs/tasks/TASK-015.md) | REVIEW-006 잔여 6항목 한정 재검토 | **TASK-013·TASK-014 / REVIEW-005·REVIEW-006을 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 residual rereview | **In review** (M-01 부분 해소 · M-02 해소 · 판정: 변경 요청 — [REVIEW-007](docs/reviews/REVIEW-007.md)) |
 | [TASK-016](docs/tasks/TASK-016.md) | REVIEW-007 U-22 공급자 결정 귀속 단일 항목 재검토 | **TASK-013·TASK-014·TASK-015 / REVIEW-005·REVIEW-006·REVIEW-007을 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 U-22 attribution rereview | **In review** (M-01 부분 해소 · M-02 해소 유지 · 판정: 변경 요청 — [REVIEW-008](docs/reviews/REVIEW-008.md)) |
+| [TASK-017](docs/tasks/TASK-017.md) | REVIEW-008 STATUS 상단 직접 잔여 제한 재검토 | **TASK-013·TASK-014·TASK-015·TASK-016 / REVIEW-005·REVIEW-006·REVIEW-007·REVIEW-008을 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 STATUS header rereview | **In review** (M-01 해소 · M-02 해소 유지 · 판정: **승인** — [REVIEW-009](docs/reviews/REVIEW-009.md)) |
 
 > Owner와 Reviewer는 절대 같을 수 없으며, **반드시 서로 다른 Claude Code 세션**입니다 (`AGENTS.md` §3.1, R8).
 > **작성자 세션은 자기 변경을 스스로 승인하지 않습니다.**
