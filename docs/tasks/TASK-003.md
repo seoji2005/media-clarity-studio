@@ -6,11 +6,12 @@
 | **Owner (수행 소유)** | **GPT Work Root Orchestrator** (사람 제품 오너의 이 대화상 명시적 수행 지시 예외) |
 | **Reviewer** | **독립 Claude Code 리뷰 세션 필요** — `AGENTS.md` §3.2 A열(데이터 출처·라이선스와 다음 vertical slice의 중요 판단 근거) |
 | **Phase** | Phase 1a / seed corpus research |
-| **Status** | `In progress` |
+| **Status** | `In review` |
 | **기준 브랜치** | `main` |
 | **기준 SHA** | `10d34b4a4545f9ae8894c8038e7f1cc9a7706d61` |
 | **기준 tree** | `4c01ffebeb92077ed7e61ca18a380d0a0e20f174` |
 | **작업 브랜치** | `claude/task-003-seed-corpus-research-gptw-0812` |
+| **Draft PR** | `#12` |
 | **차단 질문** | 없음 — U-31은 이 작업을 막지 않음 |
 
 ## 1. 목표
@@ -50,24 +51,38 @@
 
 ## 5. 완료 조건
 
-- [ ] 라이선스·이용약관을 현재 공식 원문에서 확인하고 접근일을 기록한다.
-- [ ] 후보별 필수 비교 필드와 허용 행위·의무를 표로 정리한다.
-- [ ] 콘텐츠 라이선스와 서비스 접근 조건을 분리해 설명한다.
-- [ ] 불명확하거나 첫 vertical slice에 부적합한 후보의 제외 사유를 기록한다.
-- [ ] 완전 합성 fixture의 최소 사양, 생성 절차, 재현성 한계를 기록한다.
-- [ ] 첫 vertical slice의 권고안과 향후 ASR seed 후보를 구분한다.
-- [ ] U-22·U-31·U-07 및 U-06 최종 선택을 미해결로 유지한다.
-- [ ] 저장소 상대 링크와 U-/ADR 참조 정합성을 검사한다.
-- [ ] 실제 diff, branch HEAD/tree/blob, PR 및 check/workflow 상태를 사후 확인한다.
-- [ ] 고정 SHA를 독립 리뷰 세션에 인계하고 이 세션은 자기 변경을 승인하지 않는다.
+- [x] 라이선스·이용약관을 현재 공식 원문에서 확인하고 접근일을 기록한다.
+- [x] 후보별 필수 비교 필드와 허용 행위·의무를 표로 정리한다.
+- [x] 콘텐츠 라이선스와 서비스 접근 조건을 분리해 설명한다.
+- [x] 불명확하거나 첫 vertical slice에 부적합한 후보의 제외 사유를 기록한다.
+- [x] 완전 합성 fixture의 최소 사양, 생성 절차, 재현성 한계를 기록한다.
+- [x] 첫 vertical slice의 권고안과 향후 ASR seed 후보를 구분한다.
+- [x] U-22는 `Deferred`, U-06·U-31·U-07은 미해결인 상태를 그대로 유지한다.
+- [x] 저장소 상대 링크와 U-/ADR 참조 정합성을 검사한다.
+- [x] 실제 diff, branch HEAD/tree/blob, PR 및 check/workflow 상태를 사후 확인한다.
+- [x] 고정 SHA를 독립 리뷰 세션에 인계하고 이 세션은 자기 변경을 승인하지 않는다.
 
-## 6. 파일 소유와 열린 PR 경계
+## 6. 검증 기록
+
+- 공식 원문 접근일: `2026-08-12`; 후보·허용 행위·의무·서비스 약관은
+  `docs/SEED_CORPUS_RESEARCH.md`에 원문별로 기록했다.
+- 상대 Markdown 대상 5개(링크 6회)와 `U-06`, `U-07`, `U-22`, `U-31`, `ADR-0018`을
+  기준 문서에 대조했고 누락은 0개였다.
+- 합성 fixture를 같은 FFmpeg `6.1.1-3ubuntu5` 빌드와 같은 명령으로 2회 생성하여 source,
+  SRT, soft-sub 산출물이 각각 byte-identical임을 확인했다. 결과 SHA-256은 조사 문서에 기록했다.
+- soft-sub의 video/audio stream-copy, SubRip 추출 동일성, staging copy SHA 동일성을 확인했다.
+- Draft PR #12를 독립 Reviewer 인계 경계로 사용한다. Source Owner 작업은 완료됐지만 독립
+  판정 전이므로 상태는 `In review`이며, 이 세션은 승인하지 않는다.
+- `STATUS.md`는 의도적으로 변경하지 않았다. TASK-018/PR #11 처리 후 최신 `main`에서
+  coordination board에 직렬 통합한다.
+
+## 7. 파일 소유와 열린 PR 경계
 
 PR #10과 PR #11은 모두 `STATUS.md`를 수정한다. 이 TASK는 두 PR을 변경하지 않고,
 새 파일 두 개만 소유한다. 현재 상태는 이 TASK 파일의 머리말과 Draft PR에 기록하며,
 `STATUS.md` 보드 통합은 TASK-018 처리 후 Source Owner가 최신 `main`에서 수행한다.
 
-## 7. 인계 메모
+## 8. 인계 메모
 
 리뷰어는 고정 HEAD에서 라이선스 원문의 정확성, 허용 행위 표의 과장 여부, 서비스 약관과
 콘텐츠 라이선스의 혼동 여부, 합성 fixture 명령의 재현 가능성, U-XX 미해결 보존을 중점 확인한다.
