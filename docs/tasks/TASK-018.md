@@ -4,7 +4,7 @@
 - **Owner:** GPT Work Root Orchestrator (사람 제품 오너의 이 대화상 명시적 착수 지시 예외)
 - **Reviewer:** 없음 (§3.2 B열 — 병합 사실과 상태 라벨만 반영하며 계약·핵심 알고리즘·구조를 바꾸지 않음)
 - **Phase:** Phase 1a entry / post-merge reconciliation
-- **Status:** In progress
+- **Status:** In review
 - **기준 main:** `10d34b4a4545f9ae8894c8038e7f1cc9a7706d61`
 - **기준 tree:** `4c01ffebeb92077ed7e61ca18a380d0a0e20f174`
 - **대상 병합:** PR #5 / merge commit `10d34b4a4545f9ae8894c8038e7f1cc9a7706d61`
@@ -41,14 +41,14 @@ TASK-012를 완료 상태로 전이하고, PR #5 병합과 별개로 **제안됨
 
 ## 5. 완료 조건
 
-- [ ] `main` HEAD와 PR #5 병합 상태를 GitHub 객체로 재확인한다.
-- [ ] PR #6~#10과 해당 리뷰 브랜치를 변경하지 않는다.
-- [ ] TASK-012가 사람 병합에 따라 `Done`으로 전이된다.
-- [ ] PLAN이 PR #5 병합과 제안됨 실행 순서를 모순 없이 구분한다.
-- [ ] 다음 미완료 실행 작업을 TASK-003으로 유지한다.
-- [ ] U-22·U-31·U-07은 미해결이고 실제 기술 선택은 없음을 확인한다.
-- [ ] 상대 Markdown 링크와 U-/ADR 참조 정합성을 검사한다.
-- [ ] 실제 diff·commit/tree/blob SHA와 GitHub PR 상태를 사후 확인한다.
+- [x] `main` HEAD와 PR #5 병합 상태를 GitHub 객체로 재확인한다.
+- [x] PR #6~#10과 해당 리뷰 브랜치를 변경하지 않는다.
+- [x] TASK-012가 사람 병합에 따라 `Done`으로 전이된다.
+- [x] PLAN이 PR #5 병합과 제안됨 실행 순서를 모순 없이 구분한다.
+- [x] 다음 미완료 실행 작업을 TASK-003으로 유지한다.
+- [x] U-22·U-31·U-07은 미해결이고 실제 기술 선택은 없음을 확인한다.
+- [x] 상대 Markdown 링크와 U-/ADR 참조 정합성을 검사한다.
+- [x] 실제 diff·commit/tree/blob SHA와 GitHub PR 상태를 사후 확인한다.
 
 ## 6. 리뷰 게이트
 
@@ -60,3 +60,24 @@ TASK-012를 완료 상태로 전이하고, PR #5 병합과 별개로 **제안됨
 
 이 작업이 병합되면 다음 Source Owner는 최신 `main`에서 TASK-003 파일을 먼저 만들고
 seed 코퍼스·라이선스·합성 데이터 대안 조사를 시작한다. U-31은 TASK-003을 막지 않는다.
+
+
+## 8. 검증 결과
+
+| 항목 | 결과 |
+|---|---|
+| 기준 `main` | `10d34b4a4545f9ae8894c8038e7f1cc9a7706d61` / tree `4c01ffebeb92077ed7e61ca18a380d0a0e20f174` |
+| TASK 부트스트랩 커밋 | `b7b5ed4533e2ce1e56100ad7fc257c85e4b38134` |
+| 실질 변경 커밋 | `6944593a25f8b1eb44f85f5e794498a596ffb613` / tree `559a87e9ff574379c62327c22b28776ac70cf41c` |
+| 실질 변경 blob | STATUS `17e5fa62956dedd6155b879c496b26a6563888ef`; PLAN `67056e6f6757eee1b466ac1084a2952b75bc2d81`; TASK-012 `523b7108bfb7aeffcbb233f91f2424a8f0ff9b20`; TASK-018 `9acf21e7a8519a70f57971f678fd5c8390dd7526` |
+| `main…6944593` | 2커밋 · 4파일 · +129/−28 · behind 0 |
+| Markdown 상대 링크 | 34파일, 253개 검사, 누락 0 |
+| U-XX 참조 ↔ 정의 | 31개 정의, 유령 참조 0 |
+| ADR 참조 ↔ 정의 | 27개 정의, 유령 참조 0 |
+| PR #5 | Closed / Merged / head `1f4c099b03d41ecc496b857b4868a0d8ef8feed1` |
+| PR #10 | Open / Draft / 미병합 / head `a574f093faa6fdcfc98833ef39b020929ec8ed3f` — 변경 없음 |
+| PR #11 | Open / Draft / 미병합 |
+| CI | 기준 merge commit의 check run 0건, workflow run 0건. 실패가 아니라 CI 미구성 |
+| 결정 경계 | U-22·U-31·U-07 미해결 유지. 실제 모델·공급자·서비스·API·실행 방식 선택 0건 |
+
+최종 상태 전용 커밋과 Draft PR 메타데이터는 게시 후 GitHub 객체로 사후 확인한다.
