@@ -3,7 +3,7 @@
 | 항목 | 값 |
 |---|---|
 | **ID** | TASK-003 |
-| **Owner (수행 소유)** | **GPT Work Root Orchestrator** (사람 제품 오너의 이 대화상 명시적 수행 지시 예외) |
+| **Owner (수행 소유)** | **Claude Code 주 세션** — `AGENTS.md` §3 역할 2. 저장소 근거는 아래 "Owner 판정 근거" |
 | **Reviewer** | **독립 Claude Code 리뷰 세션 필요** — `AGENTS.md` §3.2 A열(데이터 출처·라이선스와 다음 vertical slice의 중요 판단 근거) |
 | **Phase** | Phase 1a / seed corpus research |
 | **Status** | `In review` |
@@ -13,6 +13,33 @@
 | **작업 브랜치** | `claude/task-003-seed-corpus-research-gptw-0812` |
 | **Draft PR** | `#12` |
 | **차단 질문** | 없음 — U-31은 이 작업을 막지 않음 |
+
+### Owner 판정 근거 (REVIEW-010 M-04 반영)
+
+이전 판은 Owner를 `GPT Work Root Orchestrator (사람 제품 오너의 이 대화상 명시적 수행 지시 예외)`로
+적었다. **이 표기는 두 가지 이유로 잘못이었고 정정한다.**
+
+| 문제 | 근거 |
+|---|---|
+| GPT Work는 Owner가 될 수 없다 | [`AGENTS.md`](../../AGENTS.md) §3: "**Owner / Reviewer가 될 수 있는 것은 2번과 3번뿐입니다.** GPT Work(1)와 Claude 일반 대화(4)는 … TASK의 Owner도 Reviewer도 아닙니다." §6 주체 주의도 "GPT Work는 … 저장소 파일을 만들지 않습니다"로 적는다 |
+| "이 대화상 예외"는 근거가 될 수 없다 | R7·§7은 인계를 **저장소 파일과 PR 설명으로만** 하도록 하고 대화 참조 표현을 금지한다. §3.1은 파일만 보고 이해되지 않는 것을 **결함**으로 규정한다. 따라서 저장소에서 검증 불가능한 예외는 표기 근거가 되지 못한다 |
+
+**정정 후 Owner = `AGENTS.md` §3 역할 2 (Claude Code 주 세션).** 저장소에서 확인 가능한 근거는
+다음 두 가지이며, 새 명칭이나 새 예외를 만들지 않았다.
+
+1. **브랜치 접두사.** `AGENTS.md` §4는 `claude/…`를 "Claude Code **주 세션**이 소유한 작업",
+   `claude-review/…`를 독립 리뷰 세션의 브랜치로 정의한다. 이 TASK의 작업 브랜치는
+   `claude/task-003-seed-corpus-research-gptw-0812`로 **주 세션 소유 브랜치**다.
+2. **§3의 폐쇄 목록.** Owner가 될 수 있는 역할은 2와 3뿐이고, 이 TASK의 산출물은 리뷰 보고서가
+   아니라 조사 문서이므로 역할 3이 아니다. 남는 것은 **역할 2**뿐이다.
+
+**Source Owner와 독립 Reviewer는 계속 분리된다** (R8 / §3.1). 이 TASK의 Reviewer는 별도 세션이
+수행한 [TASK-019](TASK-019.md) / [REVIEW-010](../reviews/REVIEW-010.md)이며, **REVIEW-010의
+Reviewer 표기는 변경하지 않았다.**
+
+> **`STATUS.md` 보드 행 통합은 이 커밋에 포함하지 않는다.** `STATUS.md`는 PR #11(TASK-018)이
+> 소유 중인 coordination point이므로 `AGENTS.md` §3.4의 직렬화 순서를 따라 **PR #11 처리 후**
+> 최신 `main`에서 통합한다.
 
 ## 1. 목표
 
