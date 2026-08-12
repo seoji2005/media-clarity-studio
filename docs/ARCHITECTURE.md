@@ -188,14 +188,20 @@ ReferenceBundle/v1:
   completeness       : { 아래 각 절의 제공 여부 플래그 }
 
   # ── 음성/자막 도메인 ─────────────────────────────
-  speaker_streams[]  :                        # 화자별 독립 스트림 (겹침 표현의 핵심)
+  # 정답 축이 둘입니다 (§3.0.1). 두 축을 같은 것으로 취급하지 않습니다.
+  speaker_streams[]  :                        # [원문 축] 화자별 독립 스트림 (겹침 표현의 핵심)
     speaker_id       : 문자열
     utterances[]     : { start_seconds, end_seconds, text, language,
                          tokens[]? : { text, start_seconds, end_seconds } }
     is_complete      : 불리언                 # 이 화자 전사가 완전한가
 
   reference_cues[]   :                        # 자막 형태의 정답 (스타일 규칙 포함)
-    cue_id, start_seconds, end_seconds, lines[], language, speaker_id?
+    cue_id, start_seconds, end_seconds, lines[], language, speaker_id?,
+    reference_axis   : "source" | "target"    # ★ 어느 정답 축인가 (§3.0.1). 생략 불가
+
+  target_language?   : BCP-47                 # 번역 축(`reference_axis: "target"`)의 대상 언어.
+                                              # **U-31 미해결.** 값이 확정되기 전에는 비워 둡니다.
+                                              # 추측한 언어 코드를 넣지 않습니다 (R5)
 
   speech_mask        :                        # 발화/무음 구간 (환각 지표의 전제)
     segments[]       : { start_seconds, end_seconds,
@@ -243,6 +249,30 @@ ReferenceBundle/v1:
 > code-switching 발화에서 단수 필드에 무엇을 넣을지 애매하면 **비워 둡니다.**
 > 추측한 대표 언어를 넣고 그것을 정답처럼 쓰는 것이 더 나쁩니다.
 
+### 3.0.1 정답 축이 둘입니다 — 원문(ASR)과 번역(자막)
+
+채점 정답은 **번역 자막**입니다 ([`PRODUCT_SPEC.md`](PRODUCT_SPEC.md) §2.0, U-08).
+그러나 원문 인식 오류와 번역 오류를 구분하려면 **정답도 두 축**이 필요합니다 (T-2·T-3).
+
+| 축 | 무엇의 정답인가 | 번들 안의 위치 |
+|---|---|---|
+| **원문 축 (`source`)** | `asr`이 낸 **원문 transcript**의 정답 | `speaker_streams[].utterances[].text` (항상 원문 축) · `reference_cues[]` 중 `reference_axis: "source"` |
+| **번역 축 (`target`)** | `translate`가 낸 **번역 subtitle**(채점 대상)의 정답 | `reference_cues[]` 중 `reference_axis: "target"` |
+
+**규칙**
+
+| # | 규칙 |
+|---|---|
+| **X-1** | `reference_cues[]`의 **`reference_axis`는 생략할 수 없습니다.** 축이 없는 cue는 계약 검증 실패이며 그 번들은 평가에 투입하지 않습니다 |
+| **X-2** | `speaker_streams[]`는 **언제나 원문 축**입니다. 번역 정답을 이 필드에 넣지 않습니다 |
+| **X-3** | **한 축의 정답을 다른 축의 가설과 비교하지 않습니다.** 원문 가설 ↔ 원문 축, 번역 가설 ↔ 번역 축입니다 |
+| **X-4** | 두 축의 지표를 **하나의 숫자로 합치지 않습니다** (ADR-0015, T-3) |
+| **X-5** | `target_language`가 비어 있으면(U-31 미해결) 번역 축 지표는 **"미지원(unsupported)"으로 보고**합니다 (§3.1). 대상 언어를 추측해 채우지 않습니다 |
+
+> **번역 모델·API·공급자·프레임워크는 이 계약이 고르지 않습니다** (U-22).
+> 이 절은 **정답을 어디에 담고 무엇과 비교하는가**만 규정합니다.
+> 두 축의 지표 정의는 [`EVALS.md`](EVALS.md) §4.1(원문 축)·§4.7(번역 축)에 있습니다.
+
 ### 3.1 부분 번들 (Partial Bundle)
 
 **모든 필드가 항상 채워지지는 않습니다.** 실제 입력에는 `clean_video`가 없습니다.
@@ -251,6 +281,17 @@ ReferenceBundle/v1:
 - 필요한 정답이 없으면 해당 지표는 **"미지원(unsupported)"으로 보고**합니다.
   0점이나 결측 평균으로 처리하지 않습니다.
 - 지표별 필요 조건은 [`EVALS.md`](EVALS.md) §4–§5의 각 지표 정의에 명시합니다.
+
+**두 정답 축의 계산 가능 조건 (§3.0.1)**
+
+| 상태 | 원문 축 지표 | 번역 축 지표 |
+|---|---|---|
+| `reference_axis: "source"` cue 또는 `speaker_streams[]`만 있음 | 계산 가능 | **미지원** |
+| `reference_axis: "target"` cue가 있고 `target_language`도 채워짐 | 원문 축 정답이 있으면 계산 가능 | 계산 가능 |
+| `reference_axis: "target"` cue는 있으나 `target_language`가 비어 있음 (U-31 미해결) | 영향 없음 | **미지원** — 이유를 `unsupported_metrics[]`에 기록 |
+
+> **한 축이 미지원이라고 다른 축을 대신 보고하지 않습니다.** 원문 축 CER을 번역 품질처럼
+> 쓰는 것이 REVIEW-005 M-01이 지적한 실패 시나리오입니다.
 
 ### 3.2 버전 규칙
 
@@ -294,7 +335,10 @@ ReferenceBundle/v1:
    │    audio    │ VAD·잡음·분리·분절          │  reconstruct  │ 탐지·재구성·일관성
    └──────┬──────┘                            └──────┬───────┘
    ┌──────▼──────┐                                   │
-   │     asr     │ 전사·언어식별                      │
+   │     asr     │ 전사·언어식별 → 원문 transcript     │
+   └──────┬──────┘                                   │
+   ┌──────▼──────┐                                   │
+   │  translate  │ 원문 → 번역 (공급자 중립)           │
    └──────┬──────┘                                   │
    ┌──────▼──────┐                                   │
    │  subtitle   │ 정렬·분할·형식화·출력              │
@@ -314,10 +358,14 @@ ReferenceBundle/v1:
 ```
 
 **모듈 ID 목록 (전 문서 공통):**
-`ingest` · `audio` · `asr` · `subtitle` · `reconstruct` · `eval` · `orchestrator` · `storage` · `ui` · `export`
+`ingest` · `audio` · `asr` · `translate` · `subtitle` · `reconstruct` · `eval` · `orchestrator` · `storage` · `ui` · `export`
 
 > **명칭 주의:** 시각 도메인 모듈 이름은 `reconstruct`입니다. `restore`는 사용하지 않습니다
 > (`AGENTS.md` §1 용어 정책). 어댑터 이름도 `ReconstructionAdapter`입니다.
+>
+> **`translate`는 별도 모듈입니다** (U-08 답변 반영 — [`PRODUCT_SPEC.md`](PRODUCT_SPEC.md) §2.0 T-1).
+> `asr`이 번역하지 않고, `subtitle`이 번역하지 않습니다. 책임 경계는 §7.11에 있습니다.
+> **모듈 경계만 정의하며 번역 모델·API·공급자·대상 언어는 고르지 않습니다** (U-22, U-31).
 
 ---
 
@@ -403,6 +451,12 @@ ReproducibilityClaim:
 
 ## 7. 모듈별 책임과 경계
 
+> **절 번호는 문서 순서이며 파이프라인 순서가 아닙니다.**
+> 자막 도메인의 실행 순서는 `ingest → audio → asr → translate → subtitle`이며
+> **§4 모듈 지도와 §8 데이터 흐름**이 정답입니다.
+> `translate`는 나중에 추가되었으므로 기존 절 번호(§7.5·§7.8 등 다른 문서가 참조 중)를
+> 흔들지 않기 위해 **§7.11**에 두었습니다. 번호가 뒤라는 것이 단계가 뒤라는 뜻이 아닙니다.
+
 ### 7.1 `ingest` — 미디어 입력 *(횡단 기반, 공유)*
 
 | 항목 | 내용 |
@@ -481,7 +535,8 @@ SpeechSegment/v1:
 | 항목 | 내용 |
 |---|---|
 | 책임 | 구간별 전사, 언어 식별, 토큰 타이밍, 신뢰도 산출 |
-| 하지 않는 것 | 자막 줄 나누기, 형식 규칙, 파일 출력 |
+| 하지 않는 것 | **번역** (→ `translate`, §7.11), 자막 줄 나누기, 형식 규칙, 파일 출력 |
+| 산출물의 지위 | `Transcript/v1`은 **원문 transcript**이며 **채점 대상이 아닙니다.** 그러나 원문 축 평가와 오류 출처 구분을 위해 **반드시 산출·보존**합니다 ([`PRODUCT_SPEC.md`](PRODUCT_SPEC.md) §2.0 T-2) |
 
 **문장 내 언어 전환(intra-sentential code-switching)을 표현할 수 있어야 합니다.**
 구간에 언어 하나를 붙이는 구조로는 불가능합니다.
@@ -559,13 +614,23 @@ AdapterCapabilityReport:
 
 | 항목 | 내용 |
 |---|---|
-| 책임 | 시간 정렬 다듬기, 자막 단위 분할, 줄바꿈, 형식 규칙 적용, 파일 출력 |
-| 하지 않는 것 | 전사 내용 변경, 오디오 접근 |
+| 책임 | **시간 정렬 다듬기 · 자막 단위 분할 · 줄바꿈 · 형식 규칙 적용 · 파일 출력, 이것뿐입니다** |
+| 하지 않는 것 | **번역** (→ `translate`, §7.11), 전사 내용 변경, **번역문 내용 변경**, 오디오 접근 |
+| 입력 | **`TranslatedTranscript/v1`** (번역 경로 — 채점 대상 산출) 또는 `Transcript/v1` (원문 자막을 따로 뽑을 때) |
+
+> **`subtitle`은 언어를 바꾸지 않습니다.** 입력이 원문이면 출력도 원문이고,
+> 입력이 번역문이면 출력도 번역문입니다. 채점 대상인 **번역 자막**을 만들려면
+> **반드시 `translate`를 거친 입력**이 들어와야 합니다 (T-1).
+> `SubtitleDocument`가 어느 축인지는 아래 `text_axis`가 밝힙니다.
 
 ```
 SubtitleDocument/v1:
   schema_version     : "1.0.0"
   timebase_ref       : timebase_id
+  text_axis          : "source" | "target"   # ★ 이 문서의 텍스트가 원문인가 번역인가.
+                                             # 생략 불가. ReferenceBundle.reference_axis(§3.0.1)와
+                                             # 같은 축끼리만 비교한다 (규칙 X-3)
+  source_document_ref? : ArtifactRef         # text_axis="target"일 때 대응하는 원문 산출물
   cues[]             :
     cue_id           : 문자열
     start_seconds    : 실수
@@ -672,7 +737,15 @@ EvalReport/v1:
   dataset_id         : 문자열
   bundle_schema_version : 문자열
   sample_counts      : { total, per_condition{}, per_language{}, per_source{} }
+
+  # ── 자막 도메인 지표는 정답 축별로 분리해서 담습니다 (§3.0.1 X-4) ──
+  metrics_by_axis    :
+    source           : { 지표명 -> { value, ci_low?, ci_high?, n, status } }
+                       # 원문 ASR 축 (EVALS §4.1~§4.6)
+    target           : { 지표명 -> { value, ci_low?, ci_high?, n, status } }
+                       # 번역 자막 축 (EVALS §4.7). U-31 미해결이면 전부 status="unsupported"
   metrics            : { 지표명 -> { value, ci_low?, ci_high?, n, status } }
+                       # 축이 없는 지표(시각 도메인 등)
                        # status: "computed" | "unsupported" | "insufficient_n"
   per_condition[]    : { condition_id, severity, metrics }
   per_stratum[]      : { stratum_key, metrics }
@@ -681,6 +754,10 @@ EvalReport/v1:
   unsupported_metrics[] : { metric, reason }
   notes[]            : 문자열
 ```
+
+**두 축을 하나로 합치지 않습니다.** `metrics_by_axis.source`와 `metrics_by_axis.target`을
+가중 평균·합계·단일 종합 점수로 만드는 필드는 **의도적으로 없습니다** (ADR-0015, T-3).
+리포트를 읽는 사람이 **두 숫자를 같이** 봐야 오류의 출처를 알 수 있습니다.
 
 **`eval`은 파이프라인을 수정할 권한이 없습니다.** 측정만 합니다.
 측정자와 피측정자를 분리해야 자기충족적 결과를 피할 수 있습니다.
@@ -765,15 +842,110 @@ Job/v1:
 
 ---
 
+### 7.11 `translate` — 번역 *(자막 도메인, `asr`과 `subtitle` 사이)*
+
+**파이프라인 위치는 `asr → translate → subtitle`입니다** (§4, §8). 절 번호는 §7 머리말 참조.
+
+| 항목 | 내용 |
+|---|---|
+| 책임 | 원문 `Transcript/v1`의 텍스트를 **대상 언어로 번역**, 원문 세그먼트와의 **대응 관계 유지**, 번역 신뢰도·검토 필요 표시 |
+| 하지 않는 것 | 전사(오디오 접근), 자막 줄 나누기·형식 규칙·파일 출력(→ `subtitle`), **원문 삭제·덮어쓰기** |
+| 입력 | `Transcript/v1` (§7.3) |
+| 출력 | `TranslatedTranscript/v1` (아래) — **원문을 대체하지 않고 함께 보존**합니다 (T-2) |
+
+**공급자 중립 (provider-neutral)**
+
+이 절은 **경계와 계약만** 정의합니다. 아래를 **고르지 않습니다.**
+
+| 고르지 않는 것 | 어디서 결정되나 |
+|---|---|
+| 번역 모델·엔진 | **U-22** — 측정 후 결정 (ADR-0012·ADR-0019) |
+| 로컬 실행 / 원격 API / 규칙 기반 중 무엇인가 | **U-22** — 어댑터 뒤에 있으므로 계약은 동일 |
+| 공급자·서비스 이름 | **U-22** — 측정 후 결정. 어댑터 계약은 실제 선택 이후에도 공급자 중립 유지 |
+| **대상 언어** | **U-31** — 사람 제품 오너 |
+| 절대 목표 수치 (품질 임계값) | **U-07** — 기준선 측정 후 |
+
+```
+TranslatedTranscript/v1:
+  schema_version     : "1.0.0"
+  timebase_ref       : timebase_id            # 원문 Transcript와 동일한 시간축을 씁니다
+  source_transcript  : ArtifactRef            # 입력이 된 원문 Transcript (참조 — 대체 아님)
+  source_language_authority : "Transcript.segments[].language_spans[]"
+                                              # 원문 언어의 정답은 원문 쪽에 있습니다 (§7.3)
+  target_language    : BCP-47 | "undetermined"
+                       # **U-31 미해결 동안 "undetermined"** — 임의의 언어 코드를 넣지 않습니다 (R5)
+  streams[]          :
+    stream_id        : 문자열                 # 원문 Transcript.streams[].stream_id와 동일 값
+    segments[]       :
+      source_segment_ids[] : 문자열           # 원문 segment_id 목록 (병합 시 2개 이상)
+      segment_id     : 문자열                 # 번역 쪽 식별자
+      source_text    : 문자열                 # 원문 (보존 — 나중에 대조할 수 있어야 함)
+      target_text    : 문자열                 # 번역 결과
+      alignment_kind : "one_to_one" | "merged" | "split" | "dropped" | "unknown"
+      confidence?    : 0..1                   # 없으면 **생략** (1.0으로 채우지 않음)
+      is_low_confidence  : 불리언
+      needs_review   : 불리언
+      review_reason[]: "low_confidence" | "alignment_uncertain" | "source_low_confidence"
+                       | "language_switch" | "untranslated_span"
+  capability_report  : TranslationCapabilityReport
+  provenance         : { adapter_id, adapter_version, params_hash, seed? }
+```
+
+```
+TranslationAdapter (인터페이스):
+  capabilities() -> TranslationCapabilityReport
+  translate(transcript, options) -> TranslatedTranscript
+
+TranslationCapabilityReport:
+  adapter_id, adapter_version
+  source_languages[]           : BCP-47 목록 또는 "unknown"
+  target_languages[]           : BCP-47 목록 또는 "unknown"
+  supports_segment_alignment   : 불리언       # 원문 세그먼트 대응을 보고할 수 있는가
+  supports_confidence          : 불리언
+  supports_document_context    : 불리언       # 앞뒤 문맥을 함께 볼 수 있는가
+  supports_code_switching_input: 불리언       # 문장 내 언어 전환 입력을 다룰 수 있는가
+  determinism_tier             : "T1" | "T2" | "T3"
+```
+
+| 없는 능력 | 대체 동작 | 평가에 미치는 영향 |
+|---|---|---|
+| 세그먼트 대응 없음 | `source_segment_ids` 생략, `alignment_kind: "unknown"` | 세그먼트 단위 번역 지표는 **미지원**. 문서 단위만 보고 |
+| 신뢰도 없음 | `confidence` **생략** | 신뢰도 기반 지표는 **미지원**. `needs_review`는 다른 신호로 |
+| 대상 언어가 어댑터 지원 목록에 없음 | **번역을 시도하지 않고 실패로 보고** | 그 조건의 번역 축 지표는 **미지원** |
+| 대상 언어 미확정 (U-31) | `target_language: "undetermined"`로 두고 **번역 단계를 실행하지 않음** | 번역 축 지표 전부 **미지원** (§3.1) |
+
+> **금지:** 대상 언어를 추측해서 채우는 것, 번역 실패를 원문 그대로 복사해 성공처럼 보고하는 것.
+> 원문을 그대로 넘긴 구간은 `review_reason: "untranslated_span"`으로 표시합니다.
+>
+> **`translate`의 상세 설계는 TASK-005·TASK-006의 범위입니다.**
+> 이 절은 **모듈 경계·계약·미지원 처리**만 고정하며, 지표의 구체 정의는
+> [`EVALS.md`](EVALS.md) §4.7에 있습니다.
+
+---
+
 ## 8. 데이터 흐름 요약
 
 **자막 도메인**
 
 ```
-파일 → MediaProfile → SpeechSegment[] (다중 스트림) → Transcript → SubtitleDocument → 자막 파일
-                                                                          ↓
-                                            ReferenceBundle + eval → EvalReport
+파일 → MediaProfile → SpeechSegment[] (다중 스트림)
+                          ↓
+                      Transcript            [원문 축] ── 보존. 채점 대상 아님
+                          ↓
+                 TranslatedTranscript       [번역 축] ── translate (§7.11)
+                          ↓
+                      SubtitleDocument (text_axis="target") → 자막 파일  ★ 채점 대상
+                          ↓
+        ReferenceBundle(reference_axis별) + eval → EvalReport(metrics_by_axis)
 ```
+
+- **두 산출물을 모두 남깁니다.** `Transcript`(원문)와 `TranslatedTranscript`(번역)는
+  서로를 대체하지 않습니다 ([`PRODUCT_SPEC.md`](PRODUCT_SPEC.md) §2.0 T-2).
+- 원문 자막 파일이 따로 필요하면 `SubtitleDocument(text_axis="source")`를 추가로 만듭니다.
+  **번역 자막을 원문 자막으로 대신하지 않습니다.**
+- 평가는 **축별로** 계산해 축별로 보고합니다 (§3.0.1, §7.6). 하나의 숫자로 합치지 않습니다.
+- **대상 언어가 미확정(U-31)인 동안** `translate`는 실행되지 않으며, 번역 축 지표는
+  전부 **미지원**으로 보고됩니다. 원문 축 지표는 그동안에도 계산할 수 있습니다.
 
 **시각 도메인**
 
@@ -817,5 +989,7 @@ Job/v1:
 | U-16 | 중간 산출물 보관 정책 | `storage` |
 | U-28 | `ReconstructionPolicy` 기본 정책 수준과 분류 임계값 | §5 안전 게이트 |
 | U-29 | 재현성 T2 허용오차 수치 | §6 |
+| **U-31** | **번역 대상 언어는 무엇인가** | **§3(`target_language`)·§7.11(`translate`). 미확정 동안 번역 축 지표는 전부 미지원** |
+| **U-22** | **번역·ASR 모델과 실행 방식(로컬/원격) 선택** | **§7.11은 어댑터 경계만 정의. 선택은 측정 후** |
 
 전체 목록: [`DECISIONS.md`](DECISIONS.md)
