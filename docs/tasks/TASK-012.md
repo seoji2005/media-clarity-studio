@@ -6,7 +6,7 @@
 | **Owner (수행 소유)** | **Claude Code 주 세션** |
 | **Reviewer** | **독립 리뷰 세션 — 배정 완료.** [TASK-013](TASK-013.md) → [TASK-014](TASK-014.md) → [TASK-015](TASK-015.md) (REVIEW-005를 작성한 동일 GPT Work 세션, 사람 오너의 명시적 예외 승인 계속 유효). 결과: [REVIEW-005](../reviews/REVIEW-005.md) · [REVIEW-006](../reviews/REVIEW-006.md) · [REVIEW-007](../reviews/REVIEW-007.md) |
 | **Phase** | **Phase 1 planning / Phase 1a 진입** |
-| **Status** | `In review` (REVIEW-007 M-01 `부분 해소` · M-02 `해소` · 최종 `변경 요청` — **잔여 1항목 대응 완료, 단일 항목 제한 재검토 대기**) |
+| **Status** | `Done` — REVIEW-009 승인 후 사람 제품 오너가 PR #5 병합 (merge commit `10d34b4a4545f9ae8894c8038e7f1cc9a7706d61`) |
 | **현재 그래프 상태** | `Remediating` → `Verifying` → `Review gate` (제한 재검토, 3회차) — `AGENTS.md` §6 |
 | **기준 브랜치** | `main` |
 | **기준 SHA** | `d11b2450d324ac7f509741acc1ac591313876d30` |
@@ -557,3 +557,24 @@ REVIEW-007이 이미 올바른 U-22 귀속으로 판정했으므로 **수정하�
 | 재검토 수행 | **REVIEW-007을 작성한 동일 GPT Work 리뷰 세션** (§3.1 원칙에 따라 이 세션이 아님) |
 | 재검토 범위 | `docs/ARCHITECTURE.md` §7.11의 공급자 결정 귀속 **한 항목만** |
 | 병합 판단 | **사람 제품 오너** (R1, ADR-0009) — 이 문서가 대신 결정하지 않음 |
+
+
+---
+
+## 14. 사람 제품 오너 병합 결과 (2026-08-12)
+
+| 항목 | 값 |
+|---|---|
+| 최종 제한 재검토 | [REVIEW-009](../reviews/REVIEW-009.md) — 단일 항목·M-01 **해소**, M-02 **해소 유지**, 최종 **승인** |
+| 리뷰 기록 통합 커밋 | `1f4c099b03d41ecc496b857b4868a0d8ef8feed1` |
+| 통합 tree / 리뷰 tree | `4c01ffebeb92077ed7e61ca18a380d0a0e20f174` — 동일 |
+| 사람 제품 오너 결정 | PR #5 일반 merge |
+| merge commit | `10d34b4a4545f9ae8894c8038e7f1cc9a7706d61` |
+| TASK 상태 | `Done` — `AGENTS.md` §6의 사람 병합 전이 충족 |
+
+PR #5 병합은 이 TASK가 만든 계획 기준선을 `main`에 반영하고 이 TASK를 완료한다.
+다만 `docs/DECISIONS.md`에서 **제안됨**으로 남은 ADR, U-22·U-31·U-07을 포함한
+미해결 항목, 실제 모델·공급자·서비스·API·실행 방식은 자동 승인·해결·선택되지 않는다.
+
+리뷰 PR #6~#10은 Open / Draft / 미병합 상태이며, 이 TASK의 병합으로 자동 처리되지 않았다.
+처리는 사람 제품 오너의 별도 결정이다.

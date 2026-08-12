@@ -3,8 +3,8 @@
 **"지금 무엇이 되어 있고, 누가 무엇을 들고 있는가."**
 새 세션을 시작하는 에이전트는 [`AGENTS.md`](AGENTS.md) 다음으로 이 파일을 봅니다 (`AGENTS.md` §0.2).
 
-마지막 갱신: 2026-08-12 (TASK-017 STATUS 상단 직접 잔여 제한 재검토 완료 — REVIEW-009, M-01 **해소** · M-02 **해소 유지** · 판정 **승인**)
-현재 단계: **Phase 1 계획 / Phase 1a 진입**
+마지막 갱신: 2026-08-12 (TASK-018 PR #5 병합 후 상태 정합성 정리)
+현재 단계: **Phase 1a 진입** — 계획 기준선은 병합됨, 실행 순서의 결정 상태는 **제안됨 유지**
 
 ---
 
@@ -12,15 +12,15 @@
 
 | 항목 | 상태 |
 |---|---|
-| 현재 Phase | **Phase 1 계획 / Phase 1a 진입** (Phase 0 완료) |
+| 현재 Phase | **Phase 1a 진입** (Phase 0 완료, Phase 1 계획 기준선 병합됨) |
 | Phase 0 | **완료 — `main`에 병합됨** (PR #1, 병합 SHA `d11b2450d324ac7f509741acc1ac591313876d30`) |
-| 기능 코드 | **없음** (의도됨 — ADR-0001). 코드 착수는 Phase 1a 계획 확정 후 (§4) |
-| 의존성 / 모델 / CI / 비밀정보 | **없음** (`AGENTS.md` §8) |
-| 문서 기반 | 초안 → 독립 리뷰 4회(REVIEW-001~004) → 반영 → **병합 완료** |
-| 열린 PR | **TASK-012 Draft PR** (이 작업) — Phase 1 계획 기준선 |
-| 종료된 PR | **#1 병합됨** / **#2·#3·#4 미병합 종료** (리뷰 기록은 `main`에 보존됨) |
+| 기능 코드 | **없음** (의도됨 — ADR-0001). 코드 착수 게이트는 §4의 실행 순서를 따름 |
+| 의존성 / 모델 / CI / 비밀정보 | **없음** (`AGENTS.md` §8). merge commit의 check run·workflow run도 0건 |
+| 문서 기반 | Phase 0(PR #1)·Phase 1 계획 기준선(PR #5) **병합 완료** |
+| 열린 PR | **#6~#10** Draft 리뷰 PR / **#11** TASK-018 Draft PR — 모두 미병합 |
+| 종료된 PR | **#1·#5 병합됨** / **#2·#3·#4 미병합 종료** |
 | 운영 구조 | **전환됨** — GPT Work / Claude 주 세션 / 독립 Claude 리뷰 세션 / Claude 일반 대화 (`AGENTS.md` §3, ADR-0027) |
-| 현재 작업 | **TASK-012** — Phase 1 계획 기준선 확립 |
+| 현재 작업 | **TASK-018** — PR #5 병합 후 상태 정합성 정리 (Draft PR #11) |
 | 다음 실행 후보 | **TASK-003** — seed 코퍼스·라이선스·합성 데이터 대안 조사 (지금 착수 가능) |
 | U-08 | **답변됨 (2026-08-09)** — **채점 정답은 번역 자막** |
 | U-11 | **부분 답변됨 (2026-08-09)** — **약 2개월·품질 우선.** 정확한 제출 날짜는 **미확정** |
@@ -59,16 +59,17 @@
 > 리뷰 PR **#2·#3·#4는 리뷰 기록이 `main`에 보존된 뒤 미병합으로 종료**되었습니다
 > (`AGENTS.md` §4.1 7단계 — 리뷰 PR의 처리는 사람 제품 오너의 결정).
 
-### 2.3 진행 중 — Phase 1 계획
+### 2.3 Phase 1 계획 기준선 병합 완료 / 리뷰 PR 수명주기 진행 중
 
 | TASK | 제목 | Owner | Reviewer | Phase | Status |
 |---|---|---|---|---|---|
-| [TASK-012](docs/tasks/TASK-012.md) | Phase 1 계획 기준선 확립 | Claude Code 주 세션 | **[TASK-013](docs/tasks/TASK-013.md) → [TASK-014](docs/tasks/TASK-014.md) → [TASK-015](docs/tasks/TASK-015.md) 동일 GPT Work 세션** (사람 오너의 예외 승인) — [REVIEW-005](docs/reviews/REVIEW-005.md) · [REVIEW-006](docs/reviews/REVIEW-006.md) · [REVIEW-007](docs/reviews/REVIEW-007.md) | Phase 1 planning / 1a 진입 | **In review** (REVIEW-007 M-01 **부분 해소** · M-02 **해소** · 최종 **변경 요청** → **U-22 공급자 결정 귀속 대응 완료**, 단일 항목 제한 재검토 대기) |
+| [TASK-012](docs/tasks/TASK-012.md) | Phase 1 계획 기준선 확립 | Claude Code 주 세션 | TASK-013~017 / REVIEW-005~009 (사람 오너의 예외 승인) | Phase 1 planning / 1a 진입 | **Done** — REVIEW-009 승인 후 PR #5 병합 (`10d34b4a4545f9ae8894c8038e7f1cc9a7706d61`) |
 | [TASK-013](docs/tasks/TASK-013.md) | TASK-012 고정 HEAD 독립 검토 | **이 독립 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 review | **In review** (판정: 변경 요청 — [REVIEW-005](docs/reviews/REVIEW-005.md)) |
 | [TASK-014](docs/tasks/TASK-014.md) | TASK-012 M-01·M-02 제한 재검토 | **REVIEW-005를 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 limited rereview | **In review** (M-01·M-02 부분 해소 · 판정: 변경 요청 — [REVIEW-006](docs/reviews/REVIEW-006.md)) |
 | [TASK-015](docs/tasks/TASK-015.md) | REVIEW-006 잔여 6항목 한정 재검토 | **TASK-013·TASK-014 / REVIEW-005·REVIEW-006을 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 residual rereview | **In review** (M-01 부분 해소 · M-02 해소 · 판정: 변경 요청 — [REVIEW-007](docs/reviews/REVIEW-007.md)) |
 | [TASK-016](docs/tasks/TASK-016.md) | REVIEW-007 U-22 공급자 결정 귀속 단일 항목 재검토 | **TASK-013·TASK-014·TASK-015 / REVIEW-005·REVIEW-006·REVIEW-007을 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 U-22 attribution rereview | **In review** (M-01 부분 해소 · M-02 해소 유지 · 판정: 변경 요청 — [REVIEW-008](docs/reviews/REVIEW-008.md)) |
 | [TASK-017](docs/tasks/TASK-017.md) | REVIEW-008 STATUS 상단 직접 잔여 제한 재검토 | **TASK-013·TASK-014·TASK-015·TASK-016 / REVIEW-005·REVIEW-006·REVIEW-007·REVIEW-008을 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 STATUS header rereview | **In review** (M-01 해소 · M-02 해소 유지 · 판정: **승인** — [REVIEW-009](docs/reviews/REVIEW-009.md)) |
+| [TASK-018](docs/tasks/TASK-018.md) | PR #5 병합 후 상태 정합성 정리 | GPT Work Root Orchestrator (사람 오너 지시 예외) | 없음 (§3.2 B열 — 상태 기록) | Phase 1a entry | **In progress** (Draft PR #11) |
 
 > Owner와 Reviewer는 절대 같을 수 없으며, **반드시 서로 다른 Claude Code 세션**입니다 (`AGENTS.md` §3.1, R8).
 > **작성자 세션은 자기 변경을 스스로 승인하지 않습니다.**
@@ -162,6 +163,18 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 
 상세: [`docs/DECISIONS.md`](docs/DECISIONS.md) §4.1.1 · §4.1.2 · §4.1.3
 
+### 3.9 Phase 1 계획 기준선 병합 (TASK-012 / PR #5)
+
+- 최종 제한 재검토 REVIEW-009 판정은 **승인**이다.
+- Source Owner 기록 통합 커밋은 `1f4c099b03d41ecc496b857b4868a0d8ef8feed1`이고,
+  리뷰 커밋 `a574f093faa6fdcfc98833ef39b020929ec8ed3f`과 tree
+  `4c01ffebeb92077ed7e61ca18a380d0a0e20f174`가 동일하다.
+- 사람 제품 오너가 PR #5를 일반 merge했고, `main` merge commit은
+  `10d34b4a4545f9ae8894c8038e7f1cc9a7706d61`이다.
+- TASK-012는 `Done`으로 전이한다. 다만 병합은 `docs/DECISIONS.md`에서
+  **제안됨**인 ADR이나 미해결 U-XX를 자동 승인·해결하지 않는다.
+- 리뷰 PR #6~#10은 Open / Draft / 미병합 상태로 남아 있으며 처리는 사람 제품 오너의 결정이다.
+
 ---
 
 ## 4. 다음 작업
@@ -170,7 +183,7 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 
 | TASK | 내용 | Owner |
 |---|---|---|
-| **TASK-012** | **Phase 1 계획 기준선 확립** — REVIEW-005(변경 요청) → 수정 → REVIEW-006(M-01·M-02 **부분 해소**, 최종 **변경 요청**) → 수정 → REVIEW-007(M-01 **부분 해소** · M-02 **해소**, 최종 **변경 요청**) → **U-22 공급자 결정 귀속 대응 완료.** **PR #5의 현재 HEAD**에서 REVIEW-007이 지정한 **단일 항목**만 제한 재검토 대기 | Claude Code 주 세션 |
+| **TASK-018** | **PR #5 병합 후 상태 정합성 정리** — GitHub 병합 사실과 TASK-012·STATUS·PLAN의 현재 상태를 정렬. Draft PR #11 | GPT Work Root Orchestrator (사람 오너 지시 예외) |
 
 > **판정과 반영 상태는 서로 다른 사실입니다. 섞지 마십시오.**
 >
@@ -181,19 +194,22 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 > | REVIEW-006의 **판정** (고정 HEAD `e0d99cf…`) | M-01 **부분 해소** · M-02 **부분 해소** · 최종 **변경 요청** | **아니오 — 역사 기록** |
 > | REVIEW-006 이후 **잔여 6항목 수정 커밋** | `b57df672e67c1ff8ae1d001c874672e391c474c4` (`docs: address task 012 rereview findings`) — **식별자일 뿐, 검토 대상 HEAD가 아닙니다** |
 > | REVIEW-007의 **판정** (고정 HEAD `b57df67…`) | M-01 **부분 해소**(잔여 1~3 해소, U-22 귀속만 남음) · M-02 **해소** · 최종 **변경 요청** | **아니오 — 역사 기록** |
-> | REVIEW-007 이후 **잔여 1항목 반영 상태** | **대응 완료** (Source Owner 주장) | 예 — 현재 상태 |
-> | **다음 제한 재검토 대상** | **PR #5의 현재 HEAD** (대상 브랜치 `claude/task-012-phase1-plan-k3n7qw`의 최신 HEAD). **특정 SHA를 이 문서에 고정 표기하지 않습니다** | 커밋마다 갱신됨 |
-> | **재검토 결과** | **아직 없음** | 리뷰 세션이 다음에 판정 |
+> | REVIEW-007 이후 **잔여 1항목 반영 상태** | **대응 완료** (Source Owner 주장) | REVIEW-008이 직접 상태 잔여를 판정 |
+> | REVIEW-008의 **판정** (고정 HEAD `116e033…`) | 단일 항목·M-01 **부분 해소** · M-02 **해소 유지** · 최종 **변경 요청** | **아니오 — 역사 기록** |
+> | REVIEW-008 이후 **STATUS 상단 직접 잔여 반영** | `5dbc1b1ca88bdc15b0c14e003ef66fd9c13953a8` | REVIEW-009 고정 대상 |
+> | REVIEW-009의 **판정** (고정 HEAD `5dbc1b1…`) | 단일 항목·M-01 **해소** · M-02 **해소 유지** · 최종 **승인** | **최종 제한 재검토** |
+> | 리뷰 기록 통합 | `1f4c099b03d41ecc496b857b4868a0d8ef8feed1` | 리뷰 tree와 동일 |
+> | 사람 제품 오너 결정 | PR #5 **병합** | merge commit `10d34b4a4545f9ae8894c8038e7f1cc9a7706d61` |
 >
-> **"대응 완료"는 Owner의 주장이며 검증이 아닙니다** (R10 / `AGENTS.md` §3.5).
-> 작성자 세션은 자기 수정을 승인하지 않습니다 (R8 / §3.1).
-> **어떤 실질 수정 커밋도 "새 HEAD"·"현재 HEAD"로 부르지 않습니다** — 식별자로만 표기합니다 (REVIEW-006 §3.2, REVIEW-007 §3.2 잔여 결함).
+> 과거 변경 요청과 최종 승인은 각 고정 HEAD의 역사 기록으로 모두 유지됩니다.
+> TASK-012의 `Done`은 사람 병합 전이를 뜻하며, 제안됨 ADR·U-22·U-31·U-07의
+> 자동 승인 또는 해결을 뜻하지 않습니다.
 
-### Phase 1a 실행 순서 **(제안 — 검토 중.** [`PLAN.md`](PLAN.md) §3-1d**)**
+### Phase 1a 실행 순서 **(제안됨 유지.** [`PLAN.md`](PLAN.md) §3-1d**)**
 
-> **상태: 제안됨.** TASK-012가 **제안**한 순서이며 **아직 확정되지 않았습니다.**
-> PR #5는 Draft이고 판정은 **변경 요청**(REVIEW-005)입니다.
-> **사람 제품 오너의 승인·병합 전에는 "확정된 실행 순서"가 아닙니다** (`AGENTS.md` §9-5, R1).
+> TASK-012와 PR #5는 완료·병합됐지만, `docs/DECISIONS.md`에서 **제안됨**인 ADR과
+> 아래 실행 순서를 자동 승인한 것으로 해석하지 않습니다. 사람 제품 오너의 별도 승인 전까지
+> 결정 상태는 **제안됨**입니다. 다만 TASK-003은 선행 조건이 없어 지금 착수할 수 있습니다.
 
 | 노드 | 내용 | **선행 (PLAN.md §3-1d와 동일)** | U-31에 막히나 |
 |---|---|---|---|
