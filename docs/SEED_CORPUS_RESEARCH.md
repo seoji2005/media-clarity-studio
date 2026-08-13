@@ -2,7 +2,9 @@
 
 - **TASK:** [TASK-003](tasks/TASK-003.md)
 - **조사일:** 2026-08-12
-- **상태:** Source Owner 조사 완료, 독립 검토 전
+- **상태:** `In review` — REVIEW-010·REVIEW-011 반영 후 **후속 독립 재검토 대기**
+- **1차 출처 확인:** **M-03 해소** (CHiME 계열·CC BY-SA 4.0 — §3.6.2) / **M-05 잔여** (Durian
+  credit scroll 페이지 — §3.2.1)
 - **결정 경계:** U-06·U-31·U-07은 미해결, U-22는 보류됨(Deferred) 유지
 
 이 문서는 [EVALS §2.5~2.6](EVALS.md)가 요구한 seed 코퍼스 조사와 첫 로컬 vertical slice용
@@ -37,7 +39,7 @@ fixture 조사를 함께 기록한다. 두 용도를 섞지 않는다. 6초 합�
 | 영어 ASR 기준선 | LibriSpeech | **U-06 선택 후보** — 명확한 CC BY 4.0, 영상 없음 |
 | 다국어 ASR 기준선 | Multilingual LibriSpeech (MLS) | **U-06 선택 후보** — CC BY 4.0, 8개 언어, 매우 큼 |
 | 한국어·광범위 언어 ASR | Common Voice 26.0 | **조건부 후보** — CC0와 별개로 MDC 재호스팅·재공유 금지 및 계정 약관 적용 |
-| 겹치는 발화·회의 음성 | CHiME-6 | **첫 fixture 제외** (공학적 근거 §3.6.4) / **seed 후보로는 유지** — 라이선스 1차 확인이 blocker (§3.6.2) |
+| 겹치는 발화·회의 음성 | CHiME-6 | **첫 fixture 제외** (공학적 근거 §3.6.4) / **seed 후보로는 유지** — SLR150 배포본의 표시 라이선스는 **CC BY-SA 4.0으로 1차 확인 완료** (§3.6.2) |
 
 ## 2. 비교 기준
 
@@ -105,18 +107,33 @@ fixture 조사를 함께 기록한다. 두 용도를 섞지 않는다. 6초 합�
 
 | 구분 | 내용 | 성격 |
 |---|---|---|
-| **CC BY 3.0** | attribution, 라이선스 링크, 변경 표시, 추가 제한 금지 | **법적 의무.** 라이선스 원문에서 나온다 |
-| **credit scroll 포함** | 공식 배포자 Blender Durian의 [sharing 안내](https://durian.blender.org/sharing/)가 영화를 자유롭게 공유·상영하는 조건으로 영화의 credit scroll을 함께 포함할 것을 밝힌다 | **배포자가 게시한 공유 조건.** CC BY 3.0 본문에는 이 문구가 없다 |
+| **CC BY 3.0** | attribution, 라이선스 링크, 파생 시 변경 표시, 추가 제한 금지 | **법적 의무.** 라이선스 원문에서 나온다. **1차 확인 완료** — 아래 참조 |
+| **credit scroll 포함** | 공식 배포자 Blender Durian의 [sharing 안내](https://durian.blender.org/sharing/)가 영화를 자유롭게 공유·상영하는 조건으로 영화의 credit scroll을 함께 포함할 것을 밝힌다 | **배포자가 게시한 공유 조건.** CC BY 3.0 본문에는 이 문구가 없다. **문구의 현재 게시 여부는 미확인** — 아래 참조 |
 
 > **이 문서는 credit scroll 요구를 "CC BY 3.0이 부과하는 법적 의무"로 격상하지 않는다.**
 > 공식 배포자가 게시한 조건이며, 실무적으로는 attribution을 충족하는 가장 안전한 형태다.
 > 짧은 clip은 credit scroll을 제거하므로, **clip 사용 시 별도 attribution sidecar로 credit을
 > 보존**하고 공개 재배포 전에 이 조건을 다시 확인한다.
+
+**CC BY 3.0 층 — 1차 확인 완료 (외부 검증, 2026-08-12).**
+[deed](https://creativecommons.org/licenses/by/3.0/)와
+[legal code](https://creativecommons.org/licenses/by/3.0/legalcode.en)를 직접 열어 대조했다.
+attribution · 라이선스 링크 또는 고지 · **파생 시 변경 표시** · **추가 제한 금지**라는 위 표의
+요약이 원문과 일치한다. **legal code 본문에 `entire credit scroll`이라는 문구는 없다.**
+따라서 credit scroll을 CC BY 3.0 자체의 일반 의무가 아니라 **licensor가 별도로 지정한 attribution
+방식**으로 분리한 이 문서의 층 구분은 원문과 맞는다.
+
+> **여전히 확인하지 못한 것 (M-05 잔여 blocker).** `durian.blender.org`는 2026-08-12 Source
+> Owner·Reviewer 환경에서 `403 CONNECT tunnel failed`로 차단됐고, **같은 날 외부 검증에서도
+> 1차 페이지 본문을 열지 못했다.** 따라서 다음 두 가지는 **미확인**이다.
 >
-> **확인 한계 (2026-08-12):** `durian.blender.org`는 이 작업 환경의 egress proxy가 차단해
-> (`403 CONNECT tunnel failed`) **1차 페이지를 직접 열지 못했다.** 위 URL은 REVIEW-010 M-05가
-> 지목한 페이지이며, 문구의 정확한 표현과 현재 게시 여부는 **1차 확인이 가능한 환경에서
-> 재확인해야 한다** (§11 주석).
+> - [sharing 안내](https://durian.blender.org/sharing/)의 credit scroll 문구가 **현재도 게시되어
+>   있는지**, 그리고 그 **정확한 표현**
+> - 그 문구가 영화 자체에만 적용되는지, 그 밖의 asset·사용 형태까지 포함하는지
+>
+> 검색 결과에는 공식 페이지 문구가 노출되지만 **검색 스니펫을 1차 확인으로 승격하지 않는다.**
+> 위 표의 credit scroll 행은 이 한계 안에서 읽어야 하며, `durian.blender.org`에 접근 가능한
+> 환경에서 재확인해야 한다 (§11).
 
 **판정:** 첫 배선 검증에는 불필요하다. 합성 fixture가 통과한 뒤, 공식 origin에서 받은 파일을
 로컬에만 두고 실제 컨테이너·기존 SRT acceptance를 확인하는 2차 후보로 둔다. YouTube 사본은 쓰지 않는다.
@@ -195,33 +212,47 @@ supplemental terms가 **추가적으로 함께** 적용된다고 명시한다. [
 
 | # | 출처 | 게시 주체 | 적용 대상 | 날짜 | 현재 효력 |
 |---|---|---|---|---|---|
-| S1 | [OpenSLR SLR150](https://openslr.org/150/) | OpenSLR (재배포처) | OpenSLR이 배포하는 CHiME-6 archive | 상시 게시 | **CC BY-SA 4.0** 표기 |
-| S2 | [CHiME-6 challenge download 안내](https://chimechallenge.github.io/chime6/download.html) | 당시 CHiME-6 challenge 조직 | **당시 challenge 참가자의 CHiME-5 원자료 접근 절차** | CHiME-6 challenge 기간 (2020년경) | **역사적 안내.** 갱신 여부 미확인 |
-| S3 | [현행 CHiME steward — CHiME-5 dataset](https://www.chimechallenge.org/datasets/chime5) | 현행 CHiME steward | CHiME-5 dataset 라이선스 | **2024-01-01 재발행 고지** | **1차 확인 실패 (§11 주석 참조)** |
+| S1 | [OpenSLR SLR150](https://openslr.org/150/) | OpenSLR (재배포처) | OpenSLR이 배포하는 CHiME-6 archive | 상시 게시 | **CC BY-SA 4.0** 표기 — **1차 확인 완료** |
+| S1-L | [SLR150이 연결하는 LICENSE.txt](https://openslr.trmal.net/resources/150/LICENSE.txt) | OpenSLR (재배포처) | 같은 CHiME-6 archive | 상시 게시 | 표제 `Attribution-ShareAlike 4.0 International`, Barker et al. (2018) citation을 attribution 방식으로 지정, CC BY-SA 4.0 legal text 포함 — **1차 확인 완료** |
+| S2 | [CHiME-6 challenge download 안내](https://chimechallenge.github.io/chime6/download.html) | 당시 CHiME-6 challenge 조직 | **당시 challenge 참가자의 CHiME-5 원자료 접근 절차** | CHiME-6 challenge 기간 (2020년경) | **역사적 안내** — 1차 확인 완료. 현행 SLR150 배포 라이선스와 **같은 층의 문서가 아니다** |
+| S3 | [현행 CHiME steward — CHiME-5 dataset](https://www.chimechallenge.org/datasets/chime5) | 현행 CHiME steward | **CHiME-5** dataset 라이선스 | **2024-01-01 재발행 고지** | **1차 확인 완료** — CHiME-5가 CHiME-6로 superseded됐고, 2024-01-01부터 CHiME-5를 CC BY-SA 4.0으로 재발행해 학술·상업 모두 무료. **적용 대상은 CHiME-5** |
 
 **S2의 2,000 GBP는 저작권 라이선스가 아니라 당시 challenge의 원자료 접근·배포 조건이다.**
 두 층을 같은 규칙처럼 나란히 두면 "현행 라이선스 충돌"처럼 읽히지만, 실제로는 **시점이 다른 두
 문서**다. 이전 판이 그렇게 읽히도록 쓴 것은 정확하지 않았다.
 
-#### 3.6.2 확인하지 못한 것 — blocker
+#### 3.6.2 1차 출처 확인 경과 — 이전 환경의 egress 실패와 이후 직접 확인
 
-**S1·S2·S3의 1차 페이지를 이 작업 환경에서 직접 열지 못했다.** `openslr.org`, `www.openslr.org`,
-`chimechallenge.github.io`, `www.chimechallenge.org`는 egress proxy가 차단해 `403 CONNECT tunnel
-failed`로 응답했다 (확인일 2026-08-12). 웹 검색은 S3에 "As of 1st Jan 2024, the CHiME-5 dataset has
-been re-issued under a standard CC BY-SA 4.0 license, and is free for both academic and commercial
-purposes"라는 문장이 있다고 노출했으나, **검색 스니펫은 1차 확인이 아니므로 이 문서는 그것을
-확정된 사실로 기록하지 않는다.**
+**역사 기록 (2026-08-12, Source Owner·Reviewer 환경).** `openslr.org`, `www.openslr.org`,
+`chimechallenge.github.io`, `www.chimechallenge.org`는 해당 환경의 egress proxy가 차단해
+`403 CONNECT tunnel failed`로 응답했고, S1·S2·S3의 1차 페이지를 직접 열지 못했다. 당시 웹 검색은
+S3에 재발행 고지 문장이 있다고 노출했으나, **검색 스니펫은 1차 확인이 아니므로 이 문서는 그것을
+확정된 사실로 기록하지 않았다.** 이 관측은 당시 환경에서 실제로 일어난 일이며 삭제하지 않는다.
 
-> **이 항목은 blocker다.** 재발행 고지의 존재·일자·적용 범위는 **1차 페이지를 직접 열 수 있는
-> 환경에서 재확인해야 한다.** 그때까지 이 문서는 CHiME-6의 **법적 결론을 내리지 않는다** (R5).
-> 아래 3.6.3~3.6.4의 판단은 라이선스 결론에 의존하지 않는 부분만 담는다.
+**현재 상태 (2026-08-12, 외부 검증에서 해소).** egress가 허용된 별도 환경의 외부 검증에서
+**S1·S1-L·S2·S3와 CC BY-SA 4.0 deed·legal code의 1차 페이지 본문을 직접 확인했다**
+(근거: PR #12 comment [`5267477354`](https://github.com/seoji2005/media-clarity-studio/pull/12#issuecomment-5267477354)).
+확인된 내용은 §3.6.1 표와 아래 §3.6.3에 반영했다.
+
+> **이 항목은 더 이상 blocker가 아니다.** 다만 그 근거는 **외부 검증 기록**이며, **독립
+> Reviewer의 `REVIEW-012` 판정이 아니다.** 외부 검증 기록은 TASK/REVIEW 번호를 만들지 않았고
+> 승인·변경 요청 review event도 아니다. 이 문서의 정정 역시 Source Owner의 후속 기록이며
+> 자기 승인이 아니다 — 다음 독립 재검토에서 확인 대상이다.
+
+**출처별 적용 범위를 섞지 않는다.**
+
+| 확인된 사실 | 적용 대상 | 일반화하지 않는 것 |
+|---|---|---|
+| CC BY-SA 4.0 표기 (S1·S1-L) | **OpenSLR SLR150이 배포하는 CHiME-6 archive** | 다른 배포본, 원 녹음의 권리 범위 전체 |
+| 2024-01-01 CC BY-SA 4.0 재발행, 학술·상업 무료 (S3) | **CHiME-5** | CHiME-6. CHiME-6의 직접 근거는 S1·S1-L이다 |
+| commercial fee 2,000 GBP (S2) | **당시 challenge 참가자의 CHiME-5 원자료 접근 절차** | 현행 배포 라이선스. 시점이 다른 문서이므로 "현행 라이선스 충돌"로 읽지 않는다 |
 
 #### 3.6.3 네 가지를 분리한 현재 판단
 
 | 층 | 현재 상태 |
 |---|---|
-| **현재 라이선스상 사용 가능성** | **미확정 — 확인 필요.** S1은 CC BY-SA 4.0을 표기하고, S3에 2024-01-01 재발행 고지가 있다는 정황이 있다. 사실이면 학술·상업 모두 자유로우며 S2의 2,000 GBP는 과거 조건이 된다. **1차 확인 전에는 어느 쪽도 단정하지 않는다** |
-| **저장소 재배포 시 의무** | CC BY-SA 4.0이 확정되면 **attribution·라이선스 링크·변경 표시에 더해 adaptation의 동일조건변경허락(ShareAlike)** 이 따른다. 이는 현재 채택 후보 중 **유일한 ShareAlike**이므로 파생 자막·가공물의 배포 조건을 별도 검토해야 한다 |
+| **현재 라이선스상 사용 가능성** | **확인 완료 — SLR150 배포본 한정.** OpenSLR SLR150이 배포하는 CHiME-6 archive의 현재 표시 라이선스는 **CC BY-SA 4.0**이며, 연결된 `LICENSE.txt`가 표제·legal text·attribution 방식(Barker et al. 2018 citation)까지 명시한다. S2의 2,000 GBP는 **당시 challenge 접근 절차**이지 현행 배포 라이선스가 아니다. **다른 배포본이나 원 녹음의 권리 범위 전체로 일반화하지 않는다** |
+| **저장소 재배포 시 의무** | CC BY-SA 4.0이므로 **attribution · 라이선스 링크 또는 고지 · 변경 표시 · 추가 제한 금지**에 더해 **adaptation의 동일조건변경허락(ShareAlike)** 이 따른다. attribution은 `LICENSE.txt`가 지정한 **Barker et al. (2018) citation** 형식을 따른다. 이는 현재 후보 중 **유일한 ShareAlike**이므로 파생 자막·가공물의 배포 조건을 별도 검토해야 한다 |
 | **seed 코퍼스 후보로서의 가치** | **높음. 제외하지 않는다.** 겹치는 발화·원거리 마이크 정답을 화자별로 제공하는 후보가 현재 목록에 이것뿐이다 ([`EVALS.md`](EVALS.md) §2.6의 화자별 분리 요구, cpWER 전제). U-06 선택지에서 빼지 않는다 |
 | **첫 vertical-slice fixture로서의 적합성** | **부적합 — 라이선스와 무관하게 확정.** 근거는 3.6.4 |
 
@@ -237,10 +268,14 @@ purposes"라는 문장이 있다고 노출했으나, **검색 스니펫은 1차 
 | E4 | **다중 화자·원거리 음성 중심 구성** | 첫 slice는 ASR 품질을 재지 않는다. 가장 어려운 음향 조건을 배선 검증에 넣으면 실패 원인이 배선인지 음향인지 분리되지 않는다 |
 | E5 | **결정적(deterministic) fixture가 아니다** | §7의 합성 fixture는 동일 build에서 byte-identical 재생성이 가능하다(T1 관측). 실제 녹음은 그 성질이 없어 acceptance 기준을 해시로 고정할 수 없다 |
 
-**판정:** **첫 vertical slice fixture에서는 제외한다** — 근거는 E1~E5이며 라이선스가 어떻게
-확정되든 바뀌지 않는다. **동시에 seed 코퍼스 후보로는 유지한다** — 겹치는 발화 seed로서의 가치가
-크고, 라이선스는 3.6.2의 1차 확인으로 해소될 수 있는 성격이다. 다운로드·가공·재배포·저장소 포함은
-3.6.2가 해소되기 전까지 승인하지 않는다.
+**판정:** **첫 vertical slice fixture에서는 제외한다** — 근거는 E1~E5이며 라이선스와 무관하다.
+1차 확인이 끝난 지금도 이 제외는 **그대로 유지된다.** **동시에 seed 코퍼스 후보로는 유지한다** —
+겹치는 발화 seed로서의 가치가 크고, §3.6.2의 라이선스 blocker는 해소됐다.
+
+**실제 채택·다운로드는 U-06의 사람 제품 오너 결정으로 남긴다.** 라이선스 확인이 끝났다는 것은
+"승인됐다"가 아니라 "선택을 막던 근거가 사라졌다"는 뜻이다. 저장소 포함은 라이선스와 별개로
+[AGENTS §8](../AGENTS.md)의 바이너리 위생 규칙에 따라 계속 금지이며, 채택 시 ShareAlike 의무의
+파생물 범위를 먼저 검토해야 한다.
 
 ## 4. 행위별 요약표
 
@@ -253,11 +288,12 @@ purposes"라는 문장이 있다고 노출했으나, **검색 스니펫은 1차 
 | LibriSpeech | 예 | 예 | 예 | 예* / 프로젝트상 아니오 | 예 | CC BY 4.0 attribution·license link·변경 표시 | **U-06 후보** |
 | MLS | 예 | 예 | 예 | 예* / 프로젝트상 아니오 | 예 | CC BY 4.0 attribution·license link·변경 표시 | **U-06 후보** |
 | Common Voice 26 Korean | 약관 동의 후 예 | 조건부 예 | 아니오 | 아니오 | 공개 배포 미승인 | 재호스팅·재공유·재식별 금지, 계정 약관 | **local-only 조건부** |
-| CHiME-6 | 보류 | 보류 | 보류 | 아니오 | 보류 | S1은 CC BY-SA 4.0 표기. 확정 시 attribution·변경 표시 + **ShareAlike**. 1차 확인 blocker (§3.6.2) | **첫 fixture 제외 (§3.6.4) / seed 후보 유지** |
+| CHiME-6 (SLR150 배포본) | U-06 결정 후 | U-06 결정 후 | 예 | 예* / 프로젝트상 아니오 | 예 | **CC BY-SA 4.0** — attribution(Barker et al. 2018 citation)·라이선스 링크·변경 표시·추가 제한 금지 + **ShareAlike** (§3.6.2 확인 완료) | **첫 fixture 제외 (§3.6.4) / seed 후보 유지 — 채택은 U-06** |
 
-**"보류"는 "금지"가 아니라 "1차 확인 전 미승인"이다** (§3.6.2). 어느 **현재 채택 후보**에도
-CC BY-SA가 없으므로 지금 시점에 동일조건변경허락 의무는 없다. CHiME-6를 채택하면 그때
-CC BY-SA 4.0의 ShareAlike와 원자료 조건을 함께 확인해야 한다.
+**CHiME-6 행의 "U-06 결정 후"는 "라이선스가 불명확하다"가 아니다.** 라이선스는 §3.6.2에서
+1차 확인됐고, 남은 것은 **사람 제품 오너의 채택 결정**뿐이다 (R5 — 에이전트가 U-06을 대신
+정하지 않는다). **현재 채택된 후보 중에는 CC BY-SA가 없으므로 지금 시점에 동일조건변경허락
+의무는 없다.** CHiME-6를 채택하면 그때 ShareAlike의 파생물 범위를 함께 검토한다.
 
 ## 5. 콘텐츠 라이선스와 서비스 이용약관
 
@@ -276,7 +312,10 @@ CC BY-SA 4.0의 ShareAlike와 원자료 조건을 함께 확인해야 한다.
   제한한다. 같은 Sintel이라도 YouTube 사본을 downloader로 받지 않고 Blender 공식 origin을 쓴다.
 - **OpenSLR:** resource page의 license를 출발점으로 하되, 실제 acquisition 시 archive 내부 LICENSE와
   README, source attribution을 보존한다. 재배포처 표기와 상위 source 조건이 다르게 보이면
-  **어느 쪽이 현행인지 1차 확인 전까지** 사용을 중단한다 (CHiME-6의 현재 상태 — §3.6.1).
+  **어느 쪽이 현행인지 1차 확인 전까지** 사용을 중단한다. **CHiME-6는 이 절차를 실제로 거쳐
+  해소된 사례다** — resource page(S1)와 연결된 `LICENSE.txt`(S1-L)를 직접 대조해 CC BY-SA 4.0을
+  확인했고, 달라 보이던 2,000 GBP 문구는 **현행 라이선스가 아니라 당시 challenge 접근 절차**
+  (S2)임을 확인했다 (§3.6.1, §3.6.2).
 
 ## 6. 제외 규칙
 
@@ -286,7 +325,8 @@ CC BY-SA 4.0의 ShareAlike와 원자료 조건을 함께 확인해야 한다.
 2. YouTube·SNS에서만 얻을 수 있고 서비스가 허용한 download 경로가 없는 파일
 3. "free", "royalty-free", "for testing"만 있고 표준 license 원문·재배포 조건이 없는 파일
 4. 재배포처 표기와 원자료 조건 중 **어느 것이 현행인지 1차 출처로 확인되지 않은** corpus
-   (CHiME-6의 현재 상태 — 확인 전 미승인이며, 확인되면 이 항목에서 벗어난다)
+   — **CHiME-6는 §3.6.2의 1차 확인으로 이 항목에서 벗어났다.** 규칙 자체는 다른 후보에 계속
+   적용한다
 5. 계정 약관이 재호스팅을 금지하는 dataset의 repository sample(Common Voice 현재 상태)
 6. 개인정보·실제 사용자 미디어 또는 speaker 재식별 위험을 통제할 수 없는 자료
 7. audio-only corpus를 영상·SRT 배선 fixture 하나로 가장하는 구성
@@ -589,8 +629,9 @@ GNU coreutils `sha256sum`·`printf`·`od`·`wc`, GNU `sed`·`awk`·`diff`.
 | staging 가드 — 유효 경로 | **exit 0**, output과 staging copy SHA-256 `2f2eb1ba…` **동일** |
 
 **환경 제약:** 이 실행 환경에는 `ffmpeg`이 사전 설치되어 있지 않아 `apt-get`으로 설치했고,
-설치된 build가 문서 고정값과 **동일**했다. 라이선스 1차 출처 확인은 egress 차단으로 수행하지
-못했다 (§3.2.1, §3.6.2, §11).
+설치된 build가 문서 고정값과 **동일**했다. **이 환경에서는** 라이선스 1차 출처 확인을 egress
+차단으로 수행하지 못했다 (§3.2.1, §3.6.2, §11). M-03에 해당하는 부분은 이후 egress가 허용된
+별도 환경의 외부 검증에서 해소됐다 (§3.6.2).
 
 ### 7.5.1 staging 가드 acceptance 기준 — 종료 코드 숫자를 고정하지 않는다
 
@@ -628,6 +669,38 @@ paste 직후 `$-`로 확인한 부모의 **`errexit`·`nounset`이 둘 다 OFF�
 대화형 셸을 종료시키지 못해 **다음 줄의 `cp`가 실행되어 `/fixture-softsub.mkv`가 실제로
 생성**됐다고 기록했다. 서브셸 교체는 이 경로를 닫는다.
 
+### 7.5.2 외부 검증의 독립 재현 (2026-08-12)
+
+§7.5·§7.5.1의 값은 **Source Owner 자신의 실행 기록**이다. 같은 고정 HEAD
+`a2227028ff711f366c82506f21d5cf30bdc44d3f`에 대해 **별도 환경의 외부 검증이 독립적으로 재현**했고,
+아래 값이 일치했다 (근거: PR #12 comment
+[`5267477354`](https://github.com/seoji2005/media-clarity-studio/pull/12#issuecomment-5267477354)).
+
+도구: FFmpeg/FFprobe **`6.1.1-3ubuntu5`**, bash, dash, GNU coreutils·`sed`·`awk`.
+
+| 항목 | 외부 검증 재현값 | §7.5 기록과 |
+|---|---|---|
+| `fixture.srt` | `c2ed5960…` · **98 bytes** · EOF `0a 0a` | **일치** |
+| `fixture-source.mkv` | `3bd1180d…` · 3,635,787 bytes | **일치** |
+| `fixture-softsub.mkv` | `2f2eb1ba…` · 3,636,043 bytes | **일치** |
+| 2회 생성 | 전부 **byte-identical**, 추출 SRT도 입력과 동일 | **일치** |
+| raw / canonical 비교 | 둘 다 통과 | **일치** |
+| stream · duration · probe score | `ffv1` / `pcm_s16le` 48 kHz mono / `subrip` · `6.000000` · `100` | **일치** |
+| staging — `bash -c` | unset 1 / empty 1 / valid 0 | **일치** |
+| staging — bash script | unset 1 / empty 1 / valid 0 | **일치** |
+| staging — `dash -c` | unset 2 / empty 2 / valid 0 | **일치** |
+| staging — interactive bash 전체 블록 paste | unset 1 / empty 1 / valid 0 | **일치** |
+| `/fixture-softsub.mkv` | 모든 unset·empty 케이스에서 **미생성**. valid copy는 원본과 byte-identical | **일치** |
+| 부모 interactive 셸 | **생존**, paste 전후 `errexit`·`nounset` 모두 **OFF로 불변** | **일치** |
+
+**외부 검증의 결론:** F-01의 98-byte 주석, F-02의 서브셸 실행 단위, F-03의 non-zero 규범이
+실제 동작과 일치하며 **F-01·F-02·F-03 모두 해소 확인**이다.
+
+> **이 기록은 새 독립 Reviewer의 승인이 아니다.** 외부 검증 기록은 `TASK-021`·`REVIEW-012`를
+> 만들지 않았고 승인·변경 요청 review event도 아니며, 사람 제품 오너의 병합 판단을 대신하지
+> 않는다. F-01~F-03의 **공식 판정은 다음 독립 재검토에서 이루어진다.** 이 절은 그 판정을
+> 앞당겨 주장하지 않는다.
+
 ## 8. 첫 vertical slice 완료 조건
 
 다음 조건을 모두 통과해야 한다.
@@ -657,7 +730,7 @@ paste 직후 `$-`로 확인한 부모의 **`errexit`·`nounset`이 둘 다 OFF�
 | 실제 미디어 2차 acceptance | Sintel local-only 사용 여부. 사용 시 attribution manifest 필요 |
 | 영어 ASR seed | LibriSpeech 채택 여부. 단순한 CC BY 4.0, 영어 read speech 한계 |
 | 다국어 ASR seed | MLS 또는 Common Voice. MLS는 크고 언어 제한, Common Voice는 MDC 약관상 local-only |
-| 겹치는 발화 seed | **CHiME-6가 현재 유일한 실질 후보다** — 화자별 분리 정답을 제공한다 ([`EVALS.md`](EVALS.md) §2.6, cpWER 전제). 채택 전 필요한 것은 **§3.6.2의 1차 출처 확인 한 가지**이며, 확인 결과 CC BY-SA 4.0이면 ShareAlike 의무만 추가로 검토하면 된다. 대안 후보 조사도 병행 가능 |
+| 겹치는 발화 seed | **CHiME-6가 현재 유일한 실질 후보다** — 화자별 분리 정답을 제공한다 ([`EVALS.md`](EVALS.md) §2.6, cpWER 전제). **§3.6.2의 1차 출처 확인은 완료됐고 라이선스 blocker는 없다** — SLR150 배포본은 CC BY-SA 4.0이다. **남은 것은 오너의 채택 결정과 ShareAlike 파생물 범위 검토뿐이다.** 대안 후보 조사도 병행 가능 |
 
 TASK-003은 비교표와 권고를 제공할 뿐 U-06을 `해결됨`으로 바꾸지 않는다.
 
@@ -685,28 +758,52 @@ TASK-003은 비교표와 권고를 제공할 뿐 U-06을 `해결됨`으로 바�
 
 모든 링크의 접근일은 2026-08-12다.
 
-> **접근 한계 표기 규칙.** 아래 `[차단]` 표시는 **이 작업 환경의 egress proxy가 해당 도메인을
-> 차단해 1차 페이지를 직접 열지 못했다**는 뜻이다 (`403 CONNECT tunnel failed`, 확인일 2026-08-12).
-> 차단된 항목은 **확인된 사실로 인용하지 않으며**, 그 항목에 의존하는 판단은 blocker로 표시한다
-> (§3.2.1, §3.6.2). 검색 스니펫은 1차 확인으로 취급하지 않는다.
-> 차단 도메인: `durian.blender.org` · `openslr.org` / `www.openslr.org` ·
-> `chimechallenge.github.io` · `www.chimechallenge.org` · `creativecommons.org` · `ffmpeg.org`.
+> **표기 규칙 — 두 가지를 구분한다.**
+>
+> - `[직접확인]` = **1차 페이지 본문을 직접 열어 대조했다.** 확인 주체와 일자를 함께 적는다.
+> - `[차단]` = **아직 어느 기록에서도 1차 페이지를 직접 열지 못했다.** 확인된 사실로 인용하지
+>   않으며, 그 항목에 의존하는 판단은 blocker로 표시한다. 검색 스니펫은 1차 확인으로 취급하지
+>   않는다.
+>
+> **역사 기록 (삭제하지 않음).** 2026-08-12 Source Owner·Reviewer 환경에서는
+> `durian.blender.org` · `openslr.org` / `www.openslr.org` · `chimechallenge.github.io` ·
+> `www.chimechallenge.org` · `creativecommons.org` · `ffmpeg.org`가 egress proxy에 차단되어
+> `403 CONNECT tunnel failed`로 응답했다. 아래 `[직접확인]` 항목은 **그 이후 egress가 허용된
+> 별도 환경의 외부 검증**에서 열린 것이며, 당시 환경의 실패를 부정하지 않는다.
+> 근거: PR #12 comment [`5267477354`](https://github.com/seoji2005/media-clarity-studio/pull/12#issuecomment-5267477354).
+> **`[직접확인]`은 독립 Reviewer 판정(`REVIEW-012`)이 아니라 외부 검증 기록이다.**
 
-- [Sintel About / license](https://durian.blender.org/about/) `[차단]`
+**M-03 관련 — 외부 검증에서 직접 확인 (2026-08-12)**
+
+- [CHiME-6 OpenSLR SLR150](https://openslr.org/150/) `[직접확인]` — §3.6.1 S1. CC BY-SA 4.0 표기, train/dev/eval 97G/11G/12G, transcriptions 2.4M
+- [SLR150이 연결하는 LICENSE.txt](https://openslr.trmal.net/resources/150/LICENSE.txt) `[직접확인]` — §3.6.1 S1-L. 표제 `Attribution-ShareAlike 4.0 International`, Barker et al. (2018) citation을 attribution 방식으로 지정, CC BY-SA 4.0 legal text 포함
+- [CHiME-6 challenge download 안내 (역사적)](https://chimechallenge.github.io/chime6/download.html) `[직접확인]` — §3.6.1 S2. challenge-era 접근 절차와 2,000 GBP commercial fee. **현행 배포 라이선스 문서가 아니다**
+- [현행 CHiME steward — CHiME-5 dataset](https://www.chimechallenge.org/datasets/chime5) `[직접확인]` — §3.6.1 S3. CHiME-5의 CHiME-6 superseded 안내와 2024-01-01 CC BY-SA 4.0 재발행. **적용 대상은 CHiME-5**
+- [CC BY-SA 4.0 deed](https://creativecommons.org/licenses/by-sa/4.0/) `[직접확인]`
+- [CC BY-SA 4.0 legal code](https://creativecommons.org/licenses/by-sa/4.0/legalcode.en) `[직접확인]` — attribution·라이선스 링크·변경 표시·ShareAlike·추가 제한 금지
+
+**M-05 관련 — 일부만 직접 확인 (2026-08-12)**
+
+- [CC BY 3.0 deed](https://creativecommons.org/licenses/by/3.0/) `[직접확인]`
+- [CC BY 3.0 legal code](https://creativecommons.org/licenses/by/3.0/legalcode.en) `[직접확인]` — attribution·라이선스 링크·파생 시 변경 표시·추가 제한 금지. **본문에 `entire credit scroll` 문구 없음**
+- **[Sintel sharing 안내 — credit scroll 조건](https://durian.blender.org/sharing/)** `[차단]` — §3.2.1의 근거 페이지 (REVIEW-010 M-05). **외부 검증에서도 열지 못함 — M-05 잔여 blocker**
+- [Sintel About / license](https://durian.blender.org/about/) `[차단]` — **외부 검증에서도 열지 못함**
 - [Sintel Download & subtitles](https://durian.blender.org/download/) `[차단]`
-- **[Sintel sharing 안내 — credit scroll 조건](https://durian.blender.org/sharing/)** `[차단]` — §3.2.1의 근거 페이지 (REVIEW-010 M-05)
-- [CC BY 3.0 deed](https://creativecommons.org/licenses/by/3.0/) `[차단]`
+
+**그 밖 — 1차 확인 미완**
+
 - [LibriSpeech SLR12](https://www.openslr.org/12) `[차단]`
 - [Multilingual LibriSpeech SLR94](https://www.openslr.org/94/) `[차단]`
 - [CC BY 4.0 deed](https://creativecommons.org/licenses/by/4.0/) `[차단]`
-- [Common Voice 26.0 Korean datasheet](https://mozilladatacollective.com/datasets/cmqi922c5001pnq07dmj0oypw)
 - [CC0 1.0 legal tool](https://creativecommons.org/publicdomain/zero/1.0/) `[차단]`
+- [Common Voice 26.0 Korean datasheet](https://mozilladatacollective.com/datasets/cmqi922c5001pnq07dmj0oypw)
 - [Mozilla Data Collective Terms](https://mozilladatacollective.com/terms)
 - [Mozilla Data Collective terms FAQ](https://community.mozilladatacollective.com/faq-what-are-the-main-points-of-the-mdc-terms-of-use/)
 - [Mozilla Data Collective API docs](https://mozilladatacollective.com/api-reference/docs)
-- [CHiME-6 OpenSLR SLR150](https://openslr.org/150/) `[차단]` — §3.6.1 S1
-- [CHiME-6 challenge download 안내 (역사적)](https://chimechallenge.github.io/chime6/download.html) `[차단]` — §3.6.1 S2
-- **[현행 CHiME steward — CHiME-5 dataset](https://www.chimechallenge.org/datasets/chime5)** `[차단]` — §3.6.1 S3, 2024-01-01 재발행 고지 (REVIEW-010 M-03). **1차 확인 blocker**
-- [CC BY-SA 4.0 deed](https://creativecommons.org/licenses/by-sa/4.0/) `[차단]`
 - [YouTube Terms of Service](https://www.youtube.com/static?template=terms)
 - [FFprobe documentation](https://ffmpeg.org/ffprobe.html) `[차단]` — 다만 `-show_streams`·`-show_format`·`-of json`의 동작은 §7.4 실행으로 확인
+
+> **`openslr.org`와 `creativecommons.org`가 `[직접확인]`과 `[차단]`에 함께 나타나는 것은 모순이
+> 아니다.** 외부 검증이 확인한 것은 **SLR150·CC BY-SA 4.0·CC BY 3.0이라는 개별 URL**이며,
+> 같은 도메인의 SLR12·SLR94·CC BY 4.0·CC0는 확인 대상이 아니었다. 도메인 단위가 아니라
+> **URL 단위로 판정한다.**
