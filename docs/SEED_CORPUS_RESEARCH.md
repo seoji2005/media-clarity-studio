@@ -3,9 +3,22 @@
 - **TASK:** [TASK-003](tasks/TASK-003.md)
 - **조사일:** 2026-08-12
 - **상태:** `In review` — REVIEW-010·REVIEW-011 반영 후 **후속 독립 재검토 대기**
-- **1차 출처 확인:** **M-03 해소** (CHiME 계열·CC BY-SA 4.0 — §3.6.2) / **M-05 잔여** (Durian
-  credit scroll 페이지 — §3.2.1)
-- **결정 경계:** U-06·U-31·U-07은 미해결, U-22는 보류됨(Deferred) 유지
+- **두 게이트 (2026-08-22 사람 제품 오너 결정 — [TASK-003](tasks/TASK-003.md) 머리말):**
+  - **Gate S — 합성 vertical slice 기술 게이트.** 범위는 **§7과 §8**이다. 6초 로컬 합성
+    fixture, 98-byte SRT 규약, 고정 FFmpeg build에서의 해시·크기, soft-sub mux와 subtitle
+    추출, raw/canonical 검증, staging 서브셸 안전성, F-01~F-03 수정. **외부 저작물·계정·
+    네트워크·모델·API에 의존하지 않으며, Gate E와 독립적이다.**
+  - **Gate E — 외부 출처·코퍼스 검증 게이트.** M-03·M-05의 공식 1차 원문 **독립 검증**과
+    외부 코퍼스(CHiME-6·Sintel 등)의 실제 채택·다운로드·재배포가 여기에 속한다.
+    **별도 후속 작업으로 유예됐다.**
+- **1차 출처 확인 상태 (해소·승인·확정이 아니다):**
+  - **M-03** — **외부 검증에서 확인됐다고 보고됐고 Source Owner가 그 증거를 반영했다** (§3.6.2).
+    **독립 Reviewer가 원문을 직접 확인한 최종 판정이 아니다.** 공식 독립 검증은 **Gate E**다.
+  - **M-05** — **Durian sharing/about 1차 페이지 직접 확인 미완** (§3.2.1). 외부 검증에서도
+    본문을 열지 못했다. 공식 독립 검증은 **Gate E**다.
+- **결정 경계:** U-06·U-31·U-07은 미해결, U-22는 보류됨(Deferred) 유지.
+  **Gate E 완료 전에는 CHiME-6를 채택·다운로드하지 않고, Sintel을 첫 합성 vertical slice에도
+  2차 acceptance에도 사용하지 않는다.**
 
 이 문서는 [EVALS §2.5~2.6](EVALS.md)가 요구한 seed 코퍼스 조사와 첫 로컬 vertical slice용
 fixture 조사를 함께 기록한다. 두 용도를 섞지 않는다. 6초 합성 fixture는 컨테이너·자막·내보내기
@@ -31,15 +44,23 @@ fixture 조사를 함께 기록한다. 두 용도를 섞지 않는다. 6초 합�
 이 권고는 **U-06 seed 코퍼스 최종 선택이 아니다.** U-06은 아래 외부 코퍼스 비교를 보고 사람 제품
 오너가 별도로 결정한다.
 
+**이 권고의 완료 조건이 곧 Gate S다.** 기계적 확인 기준은 **§8**에 있고, 그 사양·명령·실측은
+**§7**에 있다. Gate S는 **외부 자료·저작권·서비스 약관·계정·네트워크·모델·API에 의존하지 않으므로
+M-03·M-05(Gate E)와 독립적으로 판정할 수 있다.** 아래 §1.2 이후의 외부 후보 비교는 **Gate E의
+대상**이며, Gate S의 통과 조건이 아니다.
+
 ### 1.2 외부 후보의 역할 분리
+
+**아래 후보는 전부 Gate E의 대상이다.** 이 표의 "후보"는 조사 결과이지 채택이 아니며,
+**Gate E 완료 전에는 어느 것도 다운로드·채택·사용하지 않는다.**
 
 | 역할 | 우선 검토 후보 | 이번 판정 |
 |---|---|---|
-| 실제 영상 + 기존 SRT의 2차 acceptance | Sintel 공식 배포본 | **조건부 채택 후보** — 로컬 전용, CC BY 3.0 attribution 고정 후 사용 |
-| 영어 ASR 기준선 | LibriSpeech | **U-06 선택 후보** — 명확한 CC BY 4.0, 영상 없음 |
-| 다국어 ASR 기준선 | Multilingual LibriSpeech (MLS) | **U-06 선택 후보** — CC BY 4.0, 8개 언어, 매우 큼 |
-| 한국어·광범위 언어 ASR | Common Voice 26.0 | **조건부 후보** — CC0와 별개로 MDC 재호스팅·재공유 금지 및 계정 약관 적용 |
-| 겹치는 발화·회의 음성 | CHiME-6 | **첫 fixture 제외** (공학적 근거 §3.6.4) / **seed 후보로는 유지** — SLR150 배포본의 표시 라이선스는 **CC BY-SA 4.0으로 1차 확인 완료** (§3.6.2) |
+| 실제 영상 + 기존 SRT의 2차 acceptance | Sintel 공식 배포본 | **조건부 채택 후보 — Gate E 대상.** 로컬 전용, CC BY 3.0 attribution 고정이 전제. **M-05(Durian 1차 페이지)가 미확인이므로 Gate E 완료 전에는 2차 acceptance에도 사용하지 않는다** (§3.2.1) |
+| 영어 ASR 기준선 | LibriSpeech | **U-06 선택 후보 — Gate E 대상** — 명확한 CC BY 4.0, 영상 없음 |
+| 다국어 ASR 기준선 | Multilingual LibriSpeech (MLS) | **U-06 선택 후보 — Gate E 대상** — CC BY 4.0, 8개 언어, 매우 큼 |
+| 한국어·광범위 언어 ASR | Common Voice 26.0 | **조건부 후보 — Gate E 대상** — CC0와 별개로 MDC 재호스팅·재공유 금지 및 계정 약관 적용 |
+| 겹치는 발화·회의 음성 | CHiME-6 | **첫 fixture 제외** (공학적 근거 §3.6.4) / **seed 후보로는 유지 — Gate E 대상.** SLR150 배포본의 표시 라이선스가 **CC BY-SA 4.0이라고 외부 검증에서 보고**됐으나 **독립 Reviewer 미확인**이다 (§3.6.2). **Gate E 완료 전 채택·다운로드 없음** |
 
 ## 2. 비교 기준
 
@@ -107,7 +128,7 @@ fixture 조사를 함께 기록한다. 두 용도를 섞지 않는다. 6초 합�
 
 | 구분 | 내용 | 성격 |
 |---|---|---|
-| **CC BY 3.0** | attribution, 라이선스 링크, 파생 시 변경 표시, 추가 제한 금지 | **법적 의무.** 라이선스 원문에서 나온다. **1차 확인 완료** — 아래 참조 |
+| **CC BY 3.0** | attribution, 라이선스 링크, 파생 시 변경 표시, 추가 제한 금지 | **법적 의무.** 라이선스 원문에서 나온다. **외부 검증에서 확인됐다고 보고됨 — 독립 Reviewer 미확인, Gate E** — 아래 참조 |
 | **credit scroll 포함** | 공식 배포자 Blender Durian의 [sharing 안내](https://durian.blender.org/sharing/)가 영화를 자유롭게 공유·상영하는 조건으로 영화의 credit scroll을 함께 포함할 것을 밝힌다 | **배포자가 게시한 공유 조건.** CC BY 3.0 본문에는 이 문구가 없다. **문구의 현재 게시 여부는 미확인** — 아래 참조 |
 
 > **이 문서는 credit scroll 요구를 "CC BY 3.0이 부과하는 법적 의무"로 격상하지 않는다.**
@@ -115,15 +136,23 @@ fixture 조사를 함께 기록한다. 두 용도를 섞지 않는다. 6초 합�
 > 짧은 clip은 credit scroll을 제거하므로, **clip 사용 시 별도 attribution sidecar로 credit을
 > 보존**하고 공개 재배포 전에 이 조건을 다시 확인한다.
 
-**CC BY 3.0 층 — 1차 확인 완료 (외부 검증, 2026-08-12).**
-[deed](https://creativecommons.org/licenses/by/3.0/)와
-[legal code](https://creativecommons.org/licenses/by/3.0/legalcode.en)를 직접 열어 대조했다.
+**CC BY 3.0 층 — 외부 검증에서 확인됐다고 보고됨 (2026-08-12). 독립 Reviewer 확인은 Gate E.**
+외부 검증은 [deed](https://creativecommons.org/licenses/by/3.0/)와
+[legal code](https://creativecommons.org/licenses/by/3.0/legalcode.en)를 직접 열어 대조했고,
 attribution · 라이선스 링크 또는 고지 · **파생 시 변경 표시** · **추가 제한 금지**라는 위 표의
-요약이 원문과 일치한다. **legal code 본문에 `entire credit scroll`이라는 문구는 없다.**
-따라서 credit scroll을 CC BY 3.0 자체의 일반 의무가 아니라 **licensor가 별도로 지정한 attribution
-방식**으로 분리한 이 문서의 층 구분은 원문과 맞는다.
+요약이 원문과 일치하며 **legal code 본문에 `entire credit scroll`이라는 문구는 없다**고
+보고했다. 그 보고에 따르면 credit scroll을 CC BY 3.0 자체의 일반 의무가 아니라 **licensor가
+별도로 지정한 attribution 방식**으로 분리한 이 문서의 층 구분은 원문과 맞는다.
 
-> **여전히 확인하지 못한 것 (M-05 잔여 blocker).** `durian.blender.org`는 2026-08-12 Source
+> **이 확인의 지위.** 근거는 PR #12 comment
+> [`5267477354`](https://github.com/seoji2005/media-clarity-studio/pull/12#issuecomment-5267477354)의
+> **외부 검증 기록**이며, **독립 Reviewer가 원문을 직접 확인한 최종 판정(`REVIEW-012`)이
+> 아니다.** 이 프로젝트의 반복된 Reviewer 환경에서는 `creativecommons.org`가 egress proxy의
+> **CONNECT allowlist 정책**으로 차단되어 직접 확인이 불가능했다 (§11 역사 기록).
+> **공식 독립 검증은 Gate E로 유예한다.**
+
+> **여전히 확인하지 못한 것 (M-05 — Gate E의 확인 대상. Gate S를 막지 않는다).**
+> `durian.blender.org`는 2026-08-12 Source
 > Owner·Reviewer 환경에서 `403 CONNECT tunnel failed`로 차단됐고, **같은 날 외부 검증에서도
 > 1차 페이지 본문을 열지 못했다.** 따라서 다음 두 가지는 **미확인**이다.
 >
@@ -135,8 +164,19 @@ attribution · 라이선스 링크 또는 고지 · **파생 시 변경 표시**
 > 위 표의 credit scroll 행은 이 한계 안에서 읽어야 하며, `durian.blender.org`에 접근 가능한
 > 환경에서 재확인해야 한다 (§11).
 
-**판정:** 첫 배선 검증에는 불필요하다. 합성 fixture가 통과한 뒤, 공식 origin에서 받은 파일을
-로컬에만 두고 실제 컨테이너·기존 SRT acceptance를 확인하는 2차 후보로 둔다. YouTube 사본은 쓰지 않는다.
+**M-05는 Gate E로 유예한다 (2026-08-22 사람 제품 오너 결정).** 남은 것은 문서 수정이 아니라
+`durian.blender.org` 1차 페이지를 직접 열 수 있는 확인 환경이며, 이는 **외부 출처 게이트의
+문제이지 합성 vertical slice의 문제가 아니다.**
+
+> **M-05 미확인이 Gate S를 막지 않는다.** §7·§8의 합성 fixture는 Sintel을 포함해 어떤 외부
+> 저작물도 입력으로 쓰지 않는다. 따라서 **credit scroll 문구가 미확인이라는 사실은 합성
+> vertical slice의 코드 착수 조건과 무관하다.** 반대로 M-05는 **Sintel 사용의 선행 조건**이므로,
+> Gate E가 끝나기 전에는 Sintel을 쓰지 않는다.
+
+**판정:** 첫 배선 검증에는 불필요하다. **Sintel은 첫 합성 vertical slice(Gate S)에 사용하지
+않으며, Gate E가 완료되기 전에는 2차 acceptance에도 사용하지 않는다.** Gate E에서 CC BY 3.0
+층과 Durian 배포자 조건이 모두 독립 확인된 뒤에, 공식 origin에서 받은 파일을 로컬에만 두고 실제
+컨테이너·기존 SRT acceptance를 확인하는 2차 후보로 둔다. YouTube 사본은 쓰지 않는다.
 
 ### 3.3 LibriSpeech — 영어 ASR seed 후보
 
@@ -210,18 +250,23 @@ supplemental terms가 **추가적으로 함께** 적용된다고 명시한다. [
 
 #### 3.6.1 출처별 게시 주체·적용 대상·날짜
 
-| # | 출처 | 게시 주체 | 적용 대상 | 날짜 | 현재 효력 |
+> **"확인 상태" 열의 뜻.** `외부검증 보고` = **egress가 허용된 별도 환경의 외부 검증이 1차
+> 페이지를 직접 열어 그렇게 보고했고, Source Owner가 그 증거를 반영했다**는 뜻이다.
+> **독립 Reviewer가 원문을 직접 확인한 최종 판정(`REVIEW-012`)이 아니며, 해소·승인·확정도
+> 아니다.** 공식 독립 검증은 **Gate E**로 유예됐다 (§3.6.2).
+
+| # | 출처 | 게시 주체 | 적용 대상 | 날짜 | 보고된 내용과 확인 상태 |
 |---|---|---|---|---|---|
-| S1 | [OpenSLR SLR150](https://openslr.org/150/) | OpenSLR (재배포처) | OpenSLR이 배포하는 CHiME-6 archive | 상시 게시 | **CC BY-SA 4.0** 표기 — **1차 확인 완료** |
-| S1-L | [SLR150이 연결하는 LICENSE.txt](https://openslr.trmal.net/resources/150/LICENSE.txt) | OpenSLR (재배포처) | 같은 CHiME-6 archive | 상시 게시 | 표제 `Attribution-ShareAlike 4.0 International`, Barker et al. (2018) citation을 attribution 방식으로 지정, CC BY-SA 4.0 legal text 포함 — **1차 확인 완료** |
-| S2 | [CHiME-6 challenge download 안내](https://chimechallenge.github.io/chime6/download.html) | 당시 CHiME-6 challenge 조직 | **당시 challenge 참가자의 CHiME-5 원자료 접근 절차** | CHiME-6 challenge 기간 (2020년경) | **역사적 안내** — 1차 확인 완료. 현행 SLR150 배포 라이선스와 **같은 층의 문서가 아니다** |
-| S3 | [현행 CHiME steward — CHiME-5 dataset](https://www.chimechallenge.org/datasets/chime5) | 현행 CHiME steward | **CHiME-5** dataset 라이선스 | **2024-01-01 재발행 고지** | **1차 확인 완료** — CHiME-5가 CHiME-6로 superseded됐고, 2024-01-01부터 CHiME-5를 CC BY-SA 4.0으로 재발행해 학술·상업 모두 무료. **적용 대상은 CHiME-5** |
+| S1 | [OpenSLR SLR150](https://openslr.org/150/) | OpenSLR (재배포처) | OpenSLR이 배포하는 CHiME-6 archive | 상시 게시 | **CC BY-SA 4.0** 표기 — **외부검증 보고 · 독립 Reviewer 미확인 (Gate E)** |
+| S1-L | [SLR150이 연결하는 LICENSE.txt](https://openslr.trmal.net/resources/150/LICENSE.txt) | OpenSLR (재배포처) | 같은 CHiME-6 archive | 상시 게시 | 표제 `Attribution-ShareAlike 4.0 International`, Barker et al. (2018) citation을 attribution 방식으로 지정, CC BY-SA 4.0 legal text 포함 — **외부검증 보고 · 독립 Reviewer 미확인 (Gate E)** |
+| S2 | [CHiME-6 challenge download 안내](https://chimechallenge.github.io/chime6/download.html) | 당시 CHiME-6 challenge 조직 | **당시 challenge 참가자의 CHiME-5 원자료 접근 절차** | CHiME-6 challenge 기간 (2020년경) | **역사적 안내** — **외부검증 보고 · 독립 Reviewer 미확인 (Gate E)**. 현행 SLR150 배포 라이선스와 **같은 층의 문서가 아니다** |
+| S3 | [현행 CHiME steward — CHiME-5 dataset](https://www.chimechallenge.org/datasets/chime5) | 현행 CHiME steward | **CHiME-5** dataset 라이선스 | **2024-01-01 재발행 고지** | CHiME-5가 CHiME-6로 superseded됐고, 2024-01-01부터 CHiME-5를 CC BY-SA 4.0으로 재발행해 학술·상업 모두 무료 — **외부검증 보고 · 독립 Reviewer 미확인 (Gate E)**. **적용 대상은 CHiME-5** |
 
 **S2의 2,000 GBP는 저작권 라이선스가 아니라 당시 challenge의 원자료 접근·배포 조건이다.**
 두 층을 같은 규칙처럼 나란히 두면 "현행 라이선스 충돌"처럼 읽히지만, 실제로는 **시점이 다른 두
 문서**다. 이전 판이 그렇게 읽히도록 쓴 것은 정확하지 않았다.
 
-#### 3.6.2 1차 출처 확인 경과 — 이전 환경의 egress 실패와 이후 직접 확인
+#### 3.6.2 1차 출처 확인 경과 — 환경의 egress 실패와 외부 검증 보고 (독립 검증은 Gate E)
 
 **역사 기록 (2026-08-12, Source Owner·Reviewer 환경).** `openslr.org`, `www.openslr.org`,
 `chimechallenge.github.io`, `www.chimechallenge.org`는 해당 환경의 egress proxy가 차단해
@@ -229,19 +274,35 @@ supplemental terms가 **추가적으로 함께** 적용된다고 명시한다. [
 S3에 재발행 고지 문장이 있다고 노출했으나, **검색 스니펫은 1차 확인이 아니므로 이 문서는 그것을
 확정된 사실로 기록하지 않았다.** 이 관측은 당시 환경에서 실제로 일어난 일이며 삭제하지 않는다.
 
-**현재 상태 (2026-08-12, 외부 검증에서 해소).** egress가 허용된 별도 환경의 외부 검증에서
-**S1·S1-L·S2·S3와 CC BY-SA 4.0 deed·legal code의 1차 페이지 본문을 직접 확인했다**
-(근거: PR #12 comment [`5267477354`](https://github.com/seoji2005/media-clarity-studio/pull/12#issuecomment-5267477354)).
-확인된 내용은 §3.6.1 표와 아래 §3.6.3에 반영했다.
+**외부 검증의 보고 (2026-08-12).** egress가 허용된 별도 환경의 외부 검증이
+**S1·S1-L·S2·S3와 CC BY-SA 4.0 deed·legal code의 1차 페이지 본문을 직접 열어 대조했다고
+보고**했고 (근거: PR #12 comment
+[`5267477354`](https://github.com/seoji2005/media-clarity-studio/pull/12#issuecomment-5267477354)),
+**Source Owner가 그 증거를 문서에 반영했다.** 보고된 내용은 §3.6.1 표와 아래 §3.6.3에 있다.
 
-> **이 항목은 더 이상 blocker가 아니다.** 다만 그 근거는 **외부 검증 기록**이며, **독립
-> Reviewer의 `REVIEW-012` 판정이 아니다.** 외부 검증 기록은 TASK/REVIEW 번호를 만들지 않았고
-> 승인·변경 요청 review event도 아니다. 이 문서의 정정 역시 Source Owner의 후속 기록이며
-> 자기 승인이 아니다 — 다음 독립 재검토에서 확인 대상이다.
+> **이 기록의 지위 — 확인 완료도, blocker 해소도, 라이선스 확정도 아니다.**
+>
+> - **외부 검증에서 확인됐다고 보고**됐고, **Source Owner가 그 증거를 반영**한 상태다.
+> - **독립 Reviewer가 원문을 직접 확인한 최종 판정(`REVIEW-012`)이 아니다.** 외부 검증 기록은
+>   TASK/REVIEW 번호를 만들지 않았고 승인·변경 요청 review event도 아니다.
+> - **이 프로젝트의 반복된 Reviewer 환경에서는 직접 확인이 불가능했다.** `openslr.org` ·
+>   `chimechallenge.github.io` · `www.chimechallenge.org` · `creativecommons.org` ·
+>   `durian.blender.org`는 egress proxy의 **CONNECT allowlist 정책**으로 거부되며, 관측된
+>   `403`은 원 서버 응답이 아니라 **CONNECT 단계의 정책 거부**다. 이는 문서 결함이 아니라
+>   **환경 제약**이고, 한 번이 아니라 **반복해서** 재현됐다 (§11 역사 기록).
+> - 따라서 **공식 독립 검증은 Gate E로 유예한다** (2026-08-22 사람 제품 오너 결정).
+> - **Gate E 완료 전에는 CHiME-6를 채택하지 않고, 다운로드·가공·재배포하지 않으며,
+>   외부 코퍼스 라이선스가 독립 검증됐다고 주장하지 않는다.**
+> - 이 문서의 정정 역시 **Source Owner의 후속 기록이며 자기 승인이 아니다.**
 
-**출처별 적용 범위를 섞지 않는다.**
+**M-03 미확인이 Gate S를 막지 않는다.** §7·§8의 합성 fixture는 CHiME-6를 포함해 어떤 외부
+코퍼스도 입력으로 쓰지 않는다. M-03은 **CHiME-6 채택의 선행 조건**이지 **합성 vertical slice
+코드 착수의 선행 조건이 아니다.**
 
-| 확인된 사실 | 적용 대상 | 일반화하지 않는 것 |
+**출처별 적용 범위를 섞지 않는다.** 아래 구분은 **Gate E 유예와 무관하게 그대로 유지된다** —
+외부 검증이 보고한 내용을 각 출처의 적용 대상 밖으로 확장하지 않기 위한 경계다.
+
+| 외부 검증이 보고한 내용 (독립 Reviewer 미확인) | 적용 대상 | 일반화하지 않는 것 |
 |---|---|---|
 | CC BY-SA 4.0 표기 (S1·S1-L) | **OpenSLR SLR150이 배포하는 CHiME-6 archive** | 다른 배포본, 원 녹음의 권리 범위 전체 |
 | 2024-01-01 CC BY-SA 4.0 재발행, 학술·상업 무료 (S3) | **CHiME-5** | CHiME-6. CHiME-6의 직접 근거는 S1·S1-L이다 |
@@ -251,7 +312,7 @@ S3에 재발행 고지 문장이 있다고 노출했으나, **검색 스니펫�
 
 | 층 | 현재 상태 |
 |---|---|
-| **현재 라이선스상 사용 가능성** | **확인 완료 — SLR150 배포본 한정.** OpenSLR SLR150이 배포하는 CHiME-6 archive의 현재 표시 라이선스는 **CC BY-SA 4.0**이며, 연결된 `LICENSE.txt`가 표제·legal text·attribution 방식(Barker et al. 2018 citation)까지 명시한다. S2의 2,000 GBP는 **당시 challenge 접근 절차**이지 현행 배포 라이선스가 아니다. **다른 배포본이나 원 녹음의 권리 범위 전체로 일반화하지 않는다** |
+| **현재 라이선스상 사용 가능성** | **외부 검증 보고 — SLR150 배포본 한정. 독립 Reviewer 미확인이며 확정이 아니다 (Gate E).** 보고에 따르면 OpenSLR SLR150이 배포하는 CHiME-6 archive의 현재 표시 라이선스는 **CC BY-SA 4.0**이고, 연결된 `LICENSE.txt`가 표제·legal text·attribution 방식(Barker et al. 2018 citation)까지 명시한다. S2의 2,000 GBP는 **당시 challenge 접근 절차**이지 현행 배포 라이선스가 아니다. **다른 배포본이나 원 녹음의 권리 범위 전체로 일반화하지 않는다.** 이 층의 공식 확정은 **Gate E**에서 이루어진다 |
 | **저장소 재배포 시 의무** | CC BY-SA 4.0이므로 **attribution · 라이선스 링크 또는 고지 · 변경 표시 · 추가 제한 금지**에 더해 **adaptation의 동일조건변경허락(ShareAlike)** 이 따른다. attribution은 `LICENSE.txt`가 지정한 **Barker et al. (2018) citation** 형식을 따른다. 이는 현재 후보 중 **유일한 ShareAlike**이므로 파생 자막·가공물의 배포 조건을 별도 검토해야 한다 |
 | **seed 코퍼스 후보로서의 가치** | **높음. 제외하지 않는다.** 겹치는 발화·원거리 마이크 정답을 화자별로 제공하는 후보가 현재 목록에 이것뿐이다 ([`EVALS.md`](EVALS.md) §2.6의 화자별 분리 요구, cpWER 전제). U-06 선택지에서 빼지 않는다 |
 | **첫 vertical-slice fixture로서의 적합성** | **부적합 — 라이선스와 무관하게 확정.** 근거는 3.6.4 |
@@ -268,12 +329,17 @@ S3에 재발행 고지 문장이 있다고 노출했으나, **검색 스니펫�
 | E4 | **다중 화자·원거리 음성 중심 구성** | 첫 slice는 ASR 품질을 재지 않는다. 가장 어려운 음향 조건을 배선 검증에 넣으면 실패 원인이 배선인지 음향인지 분리되지 않는다 |
 | E5 | **결정적(deterministic) fixture가 아니다** | §7의 합성 fixture는 동일 build에서 byte-identical 재생성이 가능하다(T1 관측). 실제 녹음은 그 성질이 없어 acceptance 기준을 해시로 고정할 수 없다 |
 
-**판정:** **첫 vertical slice fixture에서는 제외한다** — 근거는 E1~E5이며 라이선스와 무관하다.
-1차 확인이 끝난 지금도 이 제외는 **그대로 유지된다.** **동시에 seed 코퍼스 후보로는 유지한다** —
-겹치는 발화 seed로서의 가치가 크고, §3.6.2의 라이선스 blocker는 해소됐다.
+> **E1의 규모 수치도 1차 확인된 값이 아니다.** 97 GB / 11 GB / 12 GB / 2.4 MB의 출처는 S1이며,
+> S1은 외부 검증에서만 열렸다 (REVIEW-011 §4.4·§11이 같은 한계를 기록한다). **다만 E2~E5는
+> 규모 수치에 의존하지 않으므로, 이 한계가 제외 판정을 흔들지 않는다.**
 
-**실제 채택·다운로드는 U-06의 사람 제품 오너 결정으로 남긴다.** 라이선스 확인이 끝났다는 것은
-"승인됐다"가 아니라 "선택을 막던 근거가 사라졌다"는 뜻이다. 저장소 포함은 라이선스와 별개로
+**판정:** **첫 vertical slice fixture에서는 제외한다** — 근거는 E1~E5이며 라이선스와 무관하다.
+외부 검증 보고가 들어온 지금도 이 제외는 **그대로 유지된다.** **동시에 seed 코퍼스 후보로는
+유지한다** — 겹치는 발화 seed로서의 가치가 크기 때문이며, 이 유지는 라이선스 판정과 무관하다.
+
+**실제 채택·다운로드는 Gate E 완료와 U-06의 사람 제품 오너 결정, 둘 다를 선행 조건으로 한다.**
+외부 검증 보고가 있다는 것은 "승인됐다"도 "라이선스가 확정됐다"도 아니다. **Gate E 완료 전에는
+CHiME-6를 채택하지 않고 다운로드·가공·재배포하지 않는다.** 저장소 포함은 라이선스와 별개로
 [AGENTS §8](../AGENTS.md)의 바이너리 위생 규칙에 따라 계속 금지이며, 채택 시 ShareAlike 의무의
 파생물 범위를 먼저 검토해야 한다.
 
@@ -281,19 +347,31 @@ S3에 재발행 고지 문장이 있다고 노출했으나, **검색 스니펫�
 
 `예*`는 저작권 라이선스상 가능하지만 현재 프로젝트에는 binary를 커밋하지 않는다는 뜻이다.
 
+> **이 표의 "허용 행위"는 조사 결과이지 실행 허가가 아니다.** 완전 합성 행을 제외한 모든 행은
+> **Gate E 대상**이며, **Gate E 완료 전에는 다운로드·채택·재배포를 실행하지 않는다.**
+> 라이선스 열의 서술 중 1차 원문 대조가 필요한 항목은 **외부 검증 보고이거나 미확인**이고,
+> **독립 Reviewer 확인은 Gate E에서 이루어진다** (§3.2.1 · §3.6.2).
+
 | 후보 | 다운로드 | 로컬 처리 | 재배포 | 저장소 포함 | 파생물·자막 | 핵심 의무 | 판정 |
 |---|---|---|---|---|---|---|---|
 | 완전 합성 | 외부 다운로드 없음 | 예 | 향후 fixture license 결정 후 | 현재 아니오 | 예 | 생성 명령·도구 버전·해시 기록 | **첫 vertical slice 권고** |
-| Sintel | 공식 direct에서 예 | 예 | 예 | 예* / 프로젝트상 아니오 | 예 | CC BY 3.0 attribution·license link·변경 표시·credit | **2차 local acceptance** |
+| Sintel | 공식 direct에서 예 | 예 | 예 | 예* / 프로젝트상 아니오 | 예 | CC BY 3.0 attribution·license link·변경 표시·credit (**M-05 미확인** — §3.2.1) | **Gate E 후 2차 local acceptance — Gate E 완료 전 미사용** |
 | LibriSpeech | 예 | 예 | 예 | 예* / 프로젝트상 아니오 | 예 | CC BY 4.0 attribution·license link·변경 표시 | **U-06 후보** |
 | MLS | 예 | 예 | 예 | 예* / 프로젝트상 아니오 | 예 | CC BY 4.0 attribution·license link·변경 표시 | **U-06 후보** |
 | Common Voice 26 Korean | 약관 동의 후 예 | 조건부 예 | 아니오 | 아니오 | 공개 배포 미승인 | 재호스팅·재공유·재식별 금지, 계정 약관 | **local-only 조건부** |
-| CHiME-6 (SLR150 배포본) | U-06 결정 후 | U-06 결정 후 | 예 | 예* / 프로젝트상 아니오 | 예 | **CC BY-SA 4.0** — attribution(Barker et al. 2018 citation)·라이선스 링크·변경 표시·추가 제한 금지 + **ShareAlike** (§3.6.2 확인 완료) | **첫 fixture 제외 (§3.6.4) / seed 후보 유지 — 채택은 U-06** |
+| CHiME-6 (SLR150 배포본) | **Gate E + U-06 결정 후** | **Gate E + U-06 결정 후** | 예 | 예* / 프로젝트상 아니오 | 예 | **CC BY-SA 4.0** — attribution(Barker et al. 2018 citation)·라이선스 링크·변경 표시·추가 제한 금지 + **ShareAlike** (§3.6.2 **외부검증 보고 · 독립 Reviewer 미확인**) | **첫 fixture 제외 (§3.6.4) / seed 후보 유지 — 채택은 Gate E 완료 후 U-06** |
 
-**CHiME-6 행의 "U-06 결정 후"는 "라이선스가 불명확하다"가 아니다.** 라이선스는 §3.6.2에서
-1차 확인됐고, 남은 것은 **사람 제품 오너의 채택 결정**뿐이다 (R5 — 에이전트가 U-06을 대신
-정하지 않는다). **현재 채택된 후보 중에는 CC BY-SA가 없으므로 지금 시점에 동일조건변경허락
-의무는 없다.** CHiME-6를 채택하면 그때 ShareAlike의 파생물 범위를 함께 검토한다.
+**CHiME-6 행이 요구하는 것은 두 가지이며, 하나로 합치지 않는다.**
+
+| 남은 조건 | 성격 | 누가 |
+|---|---|---|
+| **Gate E — 공식 1차 원문의 독립 검증** | 사실 확인. 현재는 **외부 검증 보고만 있고 독립 Reviewer 미확인**이다 (§3.6.2) | 별도 후속 검토 |
+| **U-06 — 채택 결정** | 제품 판단 (R5 — 에이전트가 대신 정하지 않는다) | **사람 제품 오너** |
+
+**따라서 "U-06 결정만 남았다"고 적지 않는다.** 2026-08-22 사람 제품 오너 결정은 Gate E를
+**유예**한 것이지 **해소한 것이 아니다.** **현재 채택된 후보 중에는 CC BY-SA가 없으므로 지금
+시점에 동일조건변경허락 의무는 없다.** CHiME-6를 채택하면 그때 ShareAlike의 파생물 범위를
+함께 검토한다.
 
 ## 5. 콘텐츠 라이선스와 서비스 이용약관
 
@@ -304,7 +382,9 @@ S3에 재발행 고지 문장이 있다고 노출했으나, **검색 스니펫�
 | 콘텐츠 라이선스 | 저작물을 복제·수정·재배포할 저작권상 허락이 있는가 | CC BY 3.0, CC BY 4.0, CC0 |
 | 서비스 약관·datasheet | 그 서비스에서 어떻게 접근·다운로드·보관·공유할 수 있는가 | MDC 계정 동의·재호스팅 금지, YouTube download 제한 |
 
-- **Sintel:** 공식 Blender origin과 CC BY 표기가 일치한다. 공식 direct download를 사용한다.
+- **Sintel:** 공식 Blender origin과 CC BY 표기가 일치한다. 사용하게 되면 공식 direct download를
+  쓴다. **다만 M-05(Durian 1차 페이지)가 미확인이므로 Gate E 완료 전에는 사용하지 않는다**
+  (§3.2.1).
 - **Common Voice:** CC0 표기만 보고 repository redistribution을 허용하면 안 된다. MDC의 현재
   supplemental terms와 Korean datasheet가 재호스팅·재공유를 금지한다.
 - **YouTube:** [현재 Terms of Service](https://www.youtube.com/static?template=terms)는 서비스가
@@ -312,10 +392,12 @@ S3에 재발행 고지 문장이 있다고 노출했으나, **검색 스니펫�
   제한한다. 같은 Sintel이라도 YouTube 사본을 downloader로 받지 않고 Blender 공식 origin을 쓴다.
 - **OpenSLR:** resource page의 license를 출발점으로 하되, 실제 acquisition 시 archive 내부 LICENSE와
   README, source attribution을 보존한다. 재배포처 표기와 상위 source 조건이 다르게 보이면
-  **어느 쪽이 현행인지 1차 확인 전까지** 사용을 중단한다. **CHiME-6는 이 절차를 실제로 거쳐
-  해소된 사례다** — resource page(S1)와 연결된 `LICENSE.txt`(S1-L)를 직접 대조해 CC BY-SA 4.0을
-  확인했고, 달라 보이던 2,000 GBP 문구는 **현행 라이선스가 아니라 당시 challenge 접근 절차**
-  (S2)임을 확인했다 (§3.6.1, §3.6.2).
+  **어느 쪽이 현행인지 1차 확인 전까지** 사용을 중단한다. **CHiME-6는 이 절차가 진행 중인
+  사례다** — 외부 검증은 resource page(S1)와 연결된 `LICENSE.txt`(S1-L)를 직접 대조해
+  CC BY-SA 4.0을 확인했고 달라 보이던 2,000 GBP 문구는 **현행 라이선스가 아니라 당시 challenge
+  접근 절차**(S2)라고 **보고**했다 (§3.6.1, §3.6.2). **그 보고는 독립 Reviewer가 확인한 최종
+  판정이 아니므로 이 절차는 아직 닫히지 않았고, 확인은 Gate E에서 마친다.** 그때까지 사용
+  중단은 유지된다.
 
 ## 6. 제외 규칙
 
@@ -325,8 +407,9 @@ S3에 재발행 고지 문장이 있다고 노출했으나, **검색 스니펫�
 2. YouTube·SNS에서만 얻을 수 있고 서비스가 허용한 download 경로가 없는 파일
 3. "free", "royalty-free", "for testing"만 있고 표준 license 원문·재배포 조건이 없는 파일
 4. 재배포처 표기와 원자료 조건 중 **어느 것이 현행인지 1차 출처로 확인되지 않은** corpus
-   — **CHiME-6는 §3.6.2의 1차 확인으로 이 항목에서 벗어났다.** 규칙 자체는 다른 후보에 계속
-   적용한다
+   — **CHiME-6는 외부 검증 보고가 이 조건을 충족한다고 보고했으나 독립 Reviewer 미확인이므로,
+   Gate E가 완료되기 전에는 이 항목에서 벗어나지 않는다** (§3.6.2). 규칙 자체는 다른 후보에도
+   계속 적용한다
 5. 계정 약관이 재호스팅을 금지하는 dataset의 repository sample(Common Voice 현재 상태)
 6. 개인정보·실제 사용자 미디어 또는 speaker 재식별 위험을 통제할 수 없는 자료
 7. audio-only corpus를 영상·SRT 배선 fixture 하나로 가장하는 구성
@@ -631,7 +714,12 @@ GNU coreutils `sha256sum`·`printf`·`od`·`wc`, GNU `sed`·`awk`·`diff`.
 **환경 제약:** 이 실행 환경에는 `ffmpeg`이 사전 설치되어 있지 않아 `apt-get`으로 설치했고,
 설치된 build가 문서 고정값과 **동일**했다. **이 환경에서는** 라이선스 1차 출처 확인을 egress
 차단으로 수행하지 못했다 (§3.2.1, §3.6.2, §11). M-03에 해당하는 부분은 이후 egress가 허용된
-별도 환경의 외부 검증에서 해소됐다 (§3.6.2).
+별도 환경의 외부 검증에서 **확인됐다고 보고**됐으나, **독립 Reviewer 확인은 Gate E로 유예됐다**
+(§3.6.2).
+
+> **이 절과 §7.5.1·§7.5.2의 결과는 Gate S에 속하며, 위 egress 제약의 영향을 받지 않는다.**
+> 합성 fixture는 외부 저작물·계정·네트워크를 쓰지 않으므로, 해시·크기·셸 실측은 라이선스
+> 확인 상태와 무관하게 성립한다.
 
 ### 7.5.1 staging 가드 acceptance 기준 — 종료 코드 숫자를 고정하지 않는다
 
@@ -700,8 +788,28 @@ paste 직후 `$-`로 확인한 부모의 **`errexit`·`nounset`이 둘 다 OFF�
 > 만들지 않았고 승인·변경 요청 review event도 아니며, 사람 제품 오너의 병합 판단을 대신하지
 > 않는다. F-01~F-03의 **공식 판정은 다음 독립 재검토에서 이루어진다.** 이 절은 그 판정을
 > 앞당겨 주장하지 않는다.
+>
+> **다만 M-03·M-05와 달리 F-01~F-03은 이 저장소의 Reviewer 환경에서 실제로 판정할 수 있다.**
+> 필요한 것은 egress가 아니라 **동일 build의 FFmpeg `6.1.1-3ubuntu5`와 bash·dash뿐**이고,
+> REVIEW-011 §1.3이 그 환경을 실제로 확보해 M-01·M-02를 실측으로 확정한 선례가 있다.
+> **이것이 Gate S를 Gate E와 분리해 먼저 닫을 수 있는 이유다** (§8).
 
-## 8. 첫 vertical slice 완료 조건
+## 8. 첫 vertical slice 완료 조건 — **이것이 Gate S다**
+
+**이 절이 Gate S(합성 vertical slice 기술 게이트)의 완료 조건이다** (2026-08-22 사람 제품 오너
+결정 — [TASK-003](tasks/TASK-003.md) 머리말).
+
+| | Gate S (이 절) | Gate E (§3.2.1 · §3.6.2) |
+|---|---|---|
+| 무엇을 묻는가 | 합성 fixture로 배선이 성립하는가 | 외부 출처의 공식 원문이 문서 서술과 맞는가 |
+| 대상 | §7의 6초 로컬 합성 fixture와 아래 6단계 | M-03 · M-05의 1차 원문, 외부 코퍼스 채택 |
+| 외부 의존 | **없음** — 저작물·계정·네트워크·모델·API 전부 불필요 | 있음 — egress가 허용된 확인 환경 필요 |
+| 현재 상태 | **F-01~F-03 수정 반영됨. 로컬 제한 재검토 대기** | **유예됨** (§3.6.2) |
+| 통과하면 | 합성 vertical slice **코드 착수가 허용된다** | 외부 코퍼스 **채택이 가능해진다** |
+
+> **두 게이트는 독립적이다.** Gate E가 열리지 않았다는 사실은 Gate S의 통과를 막지 않으며,
+> **Gate S의 통과는 M-03·M-05의 사실관계나 라이선스를 승인하지 않는다.**
+> Gate S를 통과해도 **CHiME-6·Sintel을 포함한 어떤 외부 코퍼스도 채택·사용하지 않는다.**
 
 다음 조건을 모두 통과해야 한다.
 
@@ -720,19 +828,27 @@ paste 직후 `$-`로 확인한 부모의 **`errexit`·`nounset`이 둘 다 OFF�
 
 이 slice는 downloader, ASR, 번역, QC, hard-sub, packaging, 실제 iCloud sync를 포함하지 않는다.
 
+**Gate S 범위에서 명시적으로 제외되는 것 (닫힌 목록):** 외부 코퍼스, downloader, ASR, 번역,
+모델·API·공급자 선택, hard-sub, 실제 iCloud API·동기화, GUI, 시각 재구성.
+이 중 하나라도 필요해지면 그것은 Gate S가 아니라 별도 후속 단계다.
+
 ## 9. U-06 의사결정 카드
 
 사람 제품 오너가 별도로 선택해야 할 질문은 다음과 같다.
 
 | 질문 | 선택지와 현재 근거 |
 |---|---|
-| 첫 배선 fixture | **합성 6초 권고.** 외부 권리·네트워크 없이 지금 실행 가능 |
-| 실제 미디어 2차 acceptance | Sintel local-only 사용 여부. 사용 시 attribution manifest 필요 |
+| 첫 배선 fixture | **합성 6초 권고.** 외부 권리·네트워크 없이 지금 실행 가능. **Gate S 대상이며 U-06과 무관하게 진행할 수 있다** |
+| 실제 미디어 2차 acceptance | Sintel local-only 사용 여부. 사용 시 attribution manifest 필요. **M-05 미확인이므로 Gate E 완료 전에는 선택지가 열리지 않는다** (§3.2.1) |
 | 영어 ASR seed | LibriSpeech 채택 여부. 단순한 CC BY 4.0, 영어 read speech 한계 |
 | 다국어 ASR seed | MLS 또는 Common Voice. MLS는 크고 언어 제한, Common Voice는 MDC 약관상 local-only |
-| 겹치는 발화 seed | **CHiME-6가 현재 유일한 실질 후보다** — 화자별 분리 정답을 제공한다 ([`EVALS.md`](EVALS.md) §2.6, cpWER 전제). **§3.6.2의 1차 출처 확인은 완료됐고 라이선스 blocker는 없다** — SLR150 배포본은 CC BY-SA 4.0이다. **남은 것은 오너의 채택 결정과 ShareAlike 파생물 범위 검토뿐이다.** 대안 후보 조사도 병행 가능 |
+| 겹치는 발화 seed | **CHiME-6가 현재 유일한 실질 후보다** — 화자별 분리 정답을 제공한다 ([`EVALS.md`](EVALS.md) §2.6, cpWER 전제). SLR150 배포본이 CC BY-SA 4.0이라고 **외부 검증에서 보고**됐으나 **독립 Reviewer 미확인**이다 (§3.6.2). **남은 것은 ① Gate E의 독립 검증, ② 오너의 채택 결정, ③ ShareAlike 파생물 범위 검토 — 세 가지다.** 대안 후보 조사도 병행 가능 |
 
 TASK-003은 비교표와 권고를 제공할 뿐 U-06을 `해결됨`으로 바꾸지 않는다.
+
+> **이 카드의 어느 항목도 Gate S를 막지 않는다.** 첫 배선 fixture는 외부 코퍼스를 쓰지 않으므로
+> **U-06이 미해결인 채로 Gate S를 통과할 수 있다.** 반대로 **Gate S 통과는 이 카드의 어떤
+> 질문에도 답하지 않는다** — U-06 선택, Sintel 사용 여부, CHiME-6 채택은 전부 그대로 남는다.
 
 ## 10. 미해결 유지와 다음 구현 인계
 
@@ -743,16 +859,47 @@ TASK-003은 비교표와 권고를 제공할 뿐 U-06을 `해결됨`으로 바�
 | U-31 | **미해결** | 번역 대상 언어 추측 없음 |
 | U-07 | **미해결** | 절대 품질 목표 수치 설정 없음 |
 
-독립 리뷰와 사람 제품 오너의 U-06 판단 전까지 다음 허용 행동은 합성 fixture를 이용한 **코드 없는
-절차 재현**뿐이다. 저장소의 현재 제안 그래프([PLAN §3-1d](../PLAN.md))를 건너뛰지 않는다.
+**위 네 항목은 이 정정으로 하나도 바뀌지 않는다.** 2026-08-22 사람 제품 오너 결정은 U-06·U-07·
+U-22·U-31 중 어느 것도 해소하지 않았고, 모델·공급자·서비스·API·downloader·번역 대상 언어를
+선택하지 않았다.
 
-1. 독립 리뷰가 이 조사 문서를 고정 HEAD에서 검토한다.
-2. 사람 제품 오너가 비교표를 보고 U-06을 선택하고, 독립 게이트 U-31에 답한다.
-3. TASK-005 평가 하네스 설계 명세와 TASK-006 `ReferenceBundle/v1` 구체화를 순서대로 완료한다.
-4. 코드 착수 게이트가 열린 뒤 첫 구현 TASK는 이 합성 fixture와 위 6단계 acceptance를 사용한다.
-5. 그 구현은 input overwrite를 금지하고 iCloud-staging을 로컬 directory로만 다룬다.
-6. 공식 origin의 Sintel local-only acceptance는 선택적으로 추가하고, downloader, ASR, 번역, QC,
-   hard-sub, packaging은 각각 후속 단계에서 연결한다.
+### 10.1 실행 순서 — 좁은 예외 하나 (2026-08-22 사람 제품 오너 결정)
+
+저장소의 현재 제안 그래프([PLAN §3-1d](../PLAN.md))는 **폐기되지 않았고 이 문서가 수정하지도
+않는다.** 사람 제품 오너가 허용한 것은 다음 **한 가지 좁은 예외**다.
+
+> **외부 코퍼스·ASR·번역·모델·공급자 선택이 없는 합성 media plumbing vertical slice는,
+> Gate S 제한 리뷰 승인 후 TASK-005·TASK-006보다 먼저 구현할 수 있다.**
+
+| | 예외가 적용되는 것 | 예외가 적용되지 않는 것 |
+|---|---|---|
+| 대상 | §7·§8의 합성 media plumbing slice | 그 밖의 모든 Phase 1a 작업 |
+| 선행 조건 | **Gate S 제한 리뷰 승인** | TASK-005 · TASK-006 순서 그대로 |
+| U-06 · U-31 | **막지 않음** (외부 코퍼스·번역 언어를 쓰지 않으므로) | 평가 하네스·`ReferenceBundle/v1`은 여전히 막힘 |
+| Gate E | **선행 조건 아님** | **외부 코퍼스 채택의 선행 조건** |
+
+> **`PLAN.md`는 이 커밋에서 수정하지 않는다.** `STATUS.md`와 함께 PR #11(TASK-018)이 소유 중인
+> 상태 정합성 작업의 범위이므로, 계획 정합성 반영은 **PR #11 처리 후 최신 `main`에서 별도
+> TASK**로 수행한다 (`AGENTS.md` R9 / §3.4). 그때까지 이 절과 [TASK-003](tasks/TASK-003.md)
+> 머리말, PR #12 본문이 예외의 기록 위치다.
+
+### 10.2 다음 허용 행동
+
+1. **Gate S 제한 리뷰** — 새 독립 Reviewer가 새 고정 HEAD에서 **F-01·F-02·F-03과 Gate S/Gate E
+   분리의 정확성만** 검토한다. **M-03·M-05의 사실관계는 판정하지 않는다.**
+2. Gate S가 승인되면 **합성 vertical slice 코드 착수가 허용된다.** 실제 코드는 **별도 신규
+   TASK와 별도 브랜치**에서 수행하며, 그 TASK의 허용 범위는
+   `LOCAL INPUT → PROBE → EXISTING/GENERATED SRT → SOFT SUB → VERIFY → LOCAL STAGING EXPORT`
+   이고 제외 범위는 §8 말미의 닫힌 목록과 같다.
+3. 그 구현은 input overwrite를 금지하고 iCloud-staging을 로컬 directory로만 다룬다.
+4. 사람 제품 오너가 비교표를 보고 U-06을 선택하고, 독립 게이트 U-31에 답한다.
+   **이 두 결정은 위 1~3을 막지 않는다.**
+5. TASK-005 평가 하네스 설계 명세와 TASK-006 `ReferenceBundle/v1` 구체화를 순서대로 완료한다.
+   **이 순서는 그대로 유지된다.**
+6. **Gate E** — egress가 허용된 환경에서 M-03·M-05의 공식 1차 원문을 독립 검증한다.
+   그 전에는 CHiME-6·Sintel을 포함한 외부 코퍼스를 채택·다운로드·재배포하지 않는다.
+7. Sintel local-only acceptance는 **Gate E 완료 후** 선택적으로 추가하고, downloader, ASR,
+   번역, QC, hard-sub, packaging은 각각 후속 단계에서 연결한다.
 
 ## 11. 공식 출처 목록
 
@@ -760,33 +907,44 @@ TASK-003은 비교표와 권고를 제공할 뿐 U-06을 `해결됨`으로 바�
 
 > **표기 규칙 — 두 가지를 구분한다.**
 >
-> - `[직접확인]` = **1차 페이지 본문을 직접 열어 대조했다.** 확인 주체와 일자를 함께 적는다.
+> - `[외부검증]` = **egress가 허용된 별도 환경의 외부 검증이 1차 페이지 본문을 직접 열어
+>   대조했다고 보고했고, Source Owner가 그 증거를 반영했다.** 확인 주체와 일자를 함께 적는다.
+>   **독립 Reviewer가 원문을 직접 확인한 최종 판정(`REVIEW-012`)이 아니며, 이 항목들의 공식
+>   독립 검증은 Gate E로 유예됐다** (§3.6.2).
 > - `[차단]` = **아직 어느 기록에서도 1차 페이지를 직접 열지 못했다.** 확인된 사실로 인용하지
->   않으며, 그 항목에 의존하는 판단은 blocker로 표시한다. 검색 스니펫은 1차 확인으로 취급하지
+>   않으며, 그 항목에 의존하는 판단은 미확인으로 표시한다. 검색 스니펫은 1차 확인으로 취급하지
 >   않는다.
+>
+> **어느 표기도 Gate S의 통과 조건이 아니다.** 이 목록 전체가 Gate E의 대상이다.
 >
 > **역사 기록 (삭제하지 않음).** 2026-08-12 Source Owner·Reviewer 환경에서는
 > `durian.blender.org` · `openslr.org` / `www.openslr.org` · `chimechallenge.github.io` ·
 > `www.chimechallenge.org` · `creativecommons.org` · `ffmpeg.org`가 egress proxy에 차단되어
-> `403 CONNECT tunnel failed`로 응답했다. 아래 `[직접확인]` 항목은 **그 이후 egress가 허용된
+> `403 CONNECT tunnel failed`로 응답했다. 아래 `[외부검증]` 항목은 **그 이후 egress가 허용된
 > 별도 환경의 외부 검증**에서 열린 것이며, 당시 환경의 실패를 부정하지 않는다.
 > 근거: PR #12 comment [`5267477354`](https://github.com/seoji2005/media-clarity-studio/pull/12#issuecomment-5267477354).
-> **`[직접확인]`은 독립 Reviewer 판정(`REVIEW-012`)이 아니라 외부 검증 기록이다.**
+> **`[외부검증]`은 독립 Reviewer 판정(`REVIEW-012`)이 아니라 외부 검증 기록이다.**
+>
+> **이 차단은 1회성이 아니다.** 같은 호스트 집합이 이 프로젝트의 **여러 Reviewer 환경에서
+> 반복해서** CONNECT 단계에 거부됐다 (REVIEW-011 §4.2·§6.2가 같은 관측을 기록한다).
+> 관측된 `403`은 원 서버의 응답이 아니라 **egress 게이트웨이가 CONNECT에 답한 정책 거부**이며,
+> TLS handshake 이전 단계에서 끊긴다. 따라서 이것은 문서 결함이 아니라 **환경 제약**이고,
+> **M-03·M-05의 공식 독립 검증을 Gate E로 유예한 근거**다 (§3.6.2).
 
-**M-03 관련 — 외부 검증에서 직접 확인 (2026-08-12)**
+**M-03 관련 — 외부 검증이 직접 확인했다고 보고 (2026-08-12) · 독립 Reviewer 미확인 (Gate E)**
 
-- [CHiME-6 OpenSLR SLR150](https://openslr.org/150/) `[직접확인]` — §3.6.1 S1. CC BY-SA 4.0 표기, train/dev/eval 97G/11G/12G, transcriptions 2.4M
-- [SLR150이 연결하는 LICENSE.txt](https://openslr.trmal.net/resources/150/LICENSE.txt) `[직접확인]` — §3.6.1 S1-L. 표제 `Attribution-ShareAlike 4.0 International`, Barker et al. (2018) citation을 attribution 방식으로 지정, CC BY-SA 4.0 legal text 포함
-- [CHiME-6 challenge download 안내 (역사적)](https://chimechallenge.github.io/chime6/download.html) `[직접확인]` — §3.6.1 S2. challenge-era 접근 절차와 2,000 GBP commercial fee. **현행 배포 라이선스 문서가 아니다**
-- [현행 CHiME steward — CHiME-5 dataset](https://www.chimechallenge.org/datasets/chime5) `[직접확인]` — §3.6.1 S3. CHiME-5의 CHiME-6 superseded 안내와 2024-01-01 CC BY-SA 4.0 재발행. **적용 대상은 CHiME-5**
-- [CC BY-SA 4.0 deed](https://creativecommons.org/licenses/by-sa/4.0/) `[직접확인]`
-- [CC BY-SA 4.0 legal code](https://creativecommons.org/licenses/by-sa/4.0/legalcode.en) `[직접확인]` — attribution·라이선스 링크·변경 표시·ShareAlike·추가 제한 금지
+- [CHiME-6 OpenSLR SLR150](https://openslr.org/150/) `[외부검증]` — §3.6.1 S1. CC BY-SA 4.0 표기, train/dev/eval 97G/11G/12G, transcriptions 2.4M
+- [SLR150이 연결하는 LICENSE.txt](https://openslr.trmal.net/resources/150/LICENSE.txt) `[외부검증]` — §3.6.1 S1-L. 표제 `Attribution-ShareAlike 4.0 International`, Barker et al. (2018) citation을 attribution 방식으로 지정, CC BY-SA 4.0 legal text 포함
+- [CHiME-6 challenge download 안내 (역사적)](https://chimechallenge.github.io/chime6/download.html) `[외부검증]` — §3.6.1 S2. challenge-era 접근 절차와 2,000 GBP commercial fee. **현행 배포 라이선스 문서가 아니다**
+- [현행 CHiME steward — CHiME-5 dataset](https://www.chimechallenge.org/datasets/chime5) `[외부검증]` — §3.6.1 S3. CHiME-5의 CHiME-6 superseded 안내와 2024-01-01 CC BY-SA 4.0 재발행. **적용 대상은 CHiME-5**
+- [CC BY-SA 4.0 deed](https://creativecommons.org/licenses/by-sa/4.0/) `[외부검증]`
+- [CC BY-SA 4.0 legal code](https://creativecommons.org/licenses/by-sa/4.0/legalcode.en) `[외부검증]` — attribution·라이선스 링크·변경 표시·ShareAlike·추가 제한 금지
 
-**M-05 관련 — 일부만 직접 확인 (2026-08-12)**
+**M-05 관련 — 일부만 외부 검증 보고, Durian 3개는 어느 기록에서도 미확인 (2026-08-12)**
 
-- [CC BY 3.0 deed](https://creativecommons.org/licenses/by/3.0/) `[직접확인]`
-- [CC BY 3.0 legal code](https://creativecommons.org/licenses/by/3.0/legalcode.en) `[직접확인]` — attribution·라이선스 링크·파생 시 변경 표시·추가 제한 금지. **본문에 `entire credit scroll` 문구 없음**
-- **[Sintel sharing 안내 — credit scroll 조건](https://durian.blender.org/sharing/)** `[차단]` — §3.2.1의 근거 페이지 (REVIEW-010 M-05). **외부 검증에서도 열지 못함 — M-05 잔여 blocker**
+- [CC BY 3.0 deed](https://creativecommons.org/licenses/by/3.0/) `[외부검증]`
+- [CC BY 3.0 legal code](https://creativecommons.org/licenses/by/3.0/legalcode.en) `[외부검증]` — attribution·라이선스 링크·파생 시 변경 표시·추가 제한 금지. **본문에 `entire credit scroll` 문구 없음**
+- **[Sintel sharing 안내 — credit scroll 조건](https://durian.blender.org/sharing/)** `[차단]` — §3.2.1의 근거 페이지 (REVIEW-010 M-05). **외부 검증에서도 열지 못함 — M-05의 남은 확인 대상이며 Gate E로 유예됨**
 - [Sintel About / license](https://durian.blender.org/about/) `[차단]` — **외부 검증에서도 열지 못함**
 - [Sintel Download & subtitles](https://durian.blender.org/download/) `[차단]`
 
@@ -803,7 +961,13 @@ TASK-003은 비교표와 권고를 제공할 뿐 U-06을 `해결됨`으로 바�
 - [YouTube Terms of Service](https://www.youtube.com/static?template=terms)
 - [FFprobe documentation](https://ffmpeg.org/ffprobe.html) `[차단]` — 다만 `-show_streams`·`-show_format`·`-of json`의 동작은 §7.4 실행으로 확인
 
-> **`openslr.org`와 `creativecommons.org`가 `[직접확인]`과 `[차단]`에 함께 나타나는 것은 모순이
+> **`openslr.org`와 `creativecommons.org`가 `[외부검증]`과 `[차단]`에 함께 나타나는 것은 모순이
 > 아니다.** 외부 검증이 확인한 것은 **SLR150·CC BY-SA 4.0·CC BY 3.0이라는 개별 URL**이며,
 > 같은 도메인의 SLR12·SLR94·CC BY 4.0·CC0는 확인 대상이 아니었다. 도메인 단위가 아니라
 > **URL 단위로 판정한다.**
+>
+> **`[외부검증]`과 `[차단]`은 이 문서에서 같은 결론으로 수렴한다 — 둘 다 Gate E의 대상이다.**
+> 앞의 것은 "외부 검증이 그렇게 보고했다", 뒤의 것은 "아무도 열지 못했다"는 뜻이고,
+> **어느 쪽도 "독립 Reviewer가 확인했다"가 아니다.** 따라서 이 목록의 어떤 항목도
+> **외부 코퍼스 채택의 근거로 쓰지 않으며**, Gate E 완료 전에는 CHiME-6·Sintel을 포함해
+> 어떤 외부 코퍼스도 다운로드·가공·재배포하지 않는다.
