@@ -6,7 +6,7 @@
 | **Owner** | Lean Root Orchestrator (사람 제품 오너의 2026-08-22 직접 결정 반영) |
 | **Reviewer** | 없음 — Gate M 제품 결정 전사·계약 정합성 변경, 코드·알고리즘 변경 없음 |
 | **Phase** | Phase 1a / translation evaluation contract |
-| **Status** | `In review` |
+| **Status** | `Done` |
 | **기준 main** | `f1524d5519afbd06d4d2a752dd3d0d4e1572a488` |
 | **위험 등급** | **Gate M** — 사용자 산출물 언어 계약과 평가 입력 조건 변경 |
 
@@ -54,3 +54,9 @@ Phase 1의 제품·아키텍처·평가 문서가 같은 계약을 말하게 한
 - Markdown 상대 링크 검사
 - runtime/support blob 8개 `main`과 동일 확인
 - 병합 전에는 Draft PR을 닫으면 `main`에 영향이 없다.
+
+
+## 병합 결과 (2026-08-22)
+
+사람 제품 오너가 PR #19를 일반 merge했고 merge commit은
+`b193077035fc3b48312a8327f26c74d9e975d42f`이다. 이 병합으로 완료 조건을 충족했다.
