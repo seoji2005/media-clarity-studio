@@ -3,7 +3,7 @@
 **"지금 무엇이 되어 있고, 누가 무엇을 들고 있는가."**
 새 세션을 시작하는 에이전트는 [`AGENTS.md`](AGENTS.md) 다음으로 이 파일을 봅니다 (`AGENTS.md` §0.2).
 
-마지막 갱신: 2026-08-22 (TASK-025 — U-31 번역 대상 언어 한국어 확정)
+마지막 갱신: 2026-08-22 (PR #19 병합 — U-31 한국어 계약 반영 완료)
 현재 단계: **Phase 1a** — 합성 media plumbing vertical slice 병합 완료; 일반 실행 순서는 **제안됨 유지**
 
 ---
@@ -16,11 +16,11 @@
 | Phase 0 | **완료 — `main`에 병합됨** (PR #1, 병합 SHA `d11b2450d324ac7f509741acc1ac591313876d30`) |
 | 기능 코드 | **있음** — TASK-022 CLI: local input → probe → SRT → soft-sub → verify → local staging export |
 | 런타임 / 의존성 | Python 3.12+ 표준 라이브러리와 FFmpeg/ffprobe. Python package 의존성·모델·CI·비밀정보 없음 |
-| 병합된 PR | **#1·#5·#16·#18** (`main` HEAD `f1524d5519afbd06d4d2a752dd3d0d4e1572a488`) |
+| 병합된 PR | **#1·#5·#16·#18·#19** — 각 merge commit은 §3에 기록; 현재 HEAD는 GitHub에서 조회 |
 | 열린 PR | **#6~#10·#12·#14·#15·#17** — Draft, 미병합 |
 | 미병합 종료 | **#2·#3·#4·#11** — #11은 TASK-024로 대체, branch·원문 보존 |
 | 운영 구조 | **전환됨** — GPT Work / Claude 주 세션 / 독립 Claude 리뷰 세션 / Claude 일반 대화 (`AGENTS.md` §3, ADR-0027) |
-| 현재 작업 | **TASK-025** — U-31 번역 대상 언어 한국어 확정 |
+| 현재 작업 | **TASK-003 / PR #12** — Gate E 잔여 완료 및 seed 코퍼스 비교 근거 확정 |
 | U-31 | **답변됨 (2026-08-22)** — 번역 대상 언어 **한국어(`ko`)** |
 | 다음 실행 의존성 | **TASK-003 / PR #12 완료 → 사람 U-06 선택.** 그 뒤 TASK-005 착수 가능 |
 | U-08 | **답변됨 (2026-08-09)** — **채점 정답은 번역 자막** |
@@ -74,7 +74,7 @@
 | [TASK-022](docs/tasks/TASK-022.md) | 합성 media plumbing vertical slice | Lean Root Orchestrator | 독립 Lean Root 세션 ([REVIEW-013](docs/reviews/REVIEW-013.md)) | Phase 1a synthetic slice | **Done** — PR #16 병합 |
 | [TASK-023](docs/tasks/TASK-023.md) | TASK-022 Gate H 고정 HEAD 독립 검토 | Lean Root Independent Reviewer | 없음 | Phase 1a review | **Done** — 승인 기록이 PR #16에 포함됨 |
 | [TASK-024](docs/tasks/TASK-024.md) | PR #16 병합 후 상태 정합성 정리 | Lean Root Orchestrator | 없음 — Gate L/M 상태 기록 | Phase 1a reconciliation | **Done** — PR #18 병합 |
-| [TASK-025](docs/tasks/TASK-025.md) | U-31 번역 대상 언어 한국어 확정 | Lean Root Orchestrator | 없음 — Gate M 제품 결정 전사 | Phase 1a translation contract | **In review** |
+| [TASK-025](docs/tasks/TASK-025.md) | U-31 번역 대상 언어 한국어 확정 | Lean Root Orchestrator | 없음 — Gate M 제품 결정 전사 | Phase 1a translation contract | **Done** (PR #19) |
 
 > Owner와 Reviewer는 절대 같을 수 없으며, **반드시 서로 다른 Claude Code 세션**입니다 (`AGENTS.md` §3.1, R8).
 > **작성자 세션은 자기 변경을 스스로 승인하지 않습니다.**
@@ -202,6 +202,14 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 - 2026-08-22 사람 제품 오너가 U-31에 **한국어(BCP-47 `ko`)** 로 답했다.
 - 이 답변은 모델·공급자·API(U-22), 한국어 정규화·CPS(U-18·U-19), 목표 수치(U-07)를 정하지 않는다.
 
+### 3.13 U-31 한국어 계약 병합 (TASK-025 / PR #19)
+
+- 사람 제품 오너가 PR #19를 일반 merge했고 merge commit은
+  `b193077035fc3b48312a8327f26c74d9e975d42f`이다.
+- TASK-025는 병합 조건을 충족해 `Done`이다.
+- 번역 대상 언어는 한국어(BCP-47 `ko`)이며 모델·공급자·API와 한국어 정규화 규칙은 여전히 미정이다.
+- 상단 보드는 self-referential HEAD 갱신 반복을 막기 위해 현재 HEAD SHA를 기록하지 않고 GitHub 조회를 기준으로 한다.
+
 ---
 
 ## 4. 다음 작업
@@ -210,7 +218,7 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 
 | TASK | 내용 | Owner |
 |---|---|---|
-| **TASK-025** | **U-31 번역 대상 언어 한국어 확정** — 제품·아키텍처·평가 계약을 `ko`로 정렬 | Lean Root Orchestrator |
+| **TASK-003 / PR #12** | **Gate E 잔여 완료** — seed 코퍼스·라이선스·합성 대안 비교 근거 재검증 | Lean Root Orchestrator |
 
 > **판정과 반영 상태는 서로 다른 사실입니다. 섞지 마십시오.**
 >
