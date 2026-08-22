@@ -6,7 +6,7 @@
 | **Owner** | Lean Root Orchestrator (사람 제품 오너의 2026-08-22 직접 수행 지시) |
 | **Reviewer** | 독립 리뷰 필요 — Gate H, 고정 HEAD에서 별도 세션이 검토 |
 | **Phase** | Phase 1a / synthetic media plumbing 예외 slice |
-| **Status** | `In review` |
+| **Status** | `Done` |
 | **기준 branch / SHA** | `main` / `10d34b4a4545f9ae8894c8038e7f1cc9a7706d61` |
 | **위험 등급** | **Gate H** — FFmpeg·Matroska/SubRip·로컬 staging export |
 
@@ -88,3 +88,11 @@ make smoke
 브랜치 커밋을 병합하지 않으면 `main`에는 영향이 없다. 실행 산출물은 지정한 work/staging
 디렉터리에만 생성되며 기존 파일은 덮어쓰지 않는다. `.partial-*`와 `*.failure-*.json`은 실패
 진단용으로 남으므로 원인 확인 후 사용자가 해당 실행 디렉터리에서만 제거한다.
+
+
+## 병합 결과 (2026-08-22)
+
+[REVIEW-013](../reviews/REVIEW-013.md)이 고정 HEAD `9dc1fee1e7ac9e1446d262963b2105ad234c1c36`를
+승인했고, 사람 제품 오너가 PR #16을 일반 merge했다. `main` merge commit은
+`e3a99c762ecd7030843e535db7dc3f7147bf811e`이다. Windows/NTFS·실제 iCloud sync/player 경계는
+여전히 미검증이다.

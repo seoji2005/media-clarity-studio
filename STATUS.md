@@ -3,8 +3,8 @@
 **"지금 무엇이 되어 있고, 누가 무엇을 들고 있는가."**
 새 세션을 시작하는 에이전트는 [`AGENTS.md`](AGENTS.md) 다음으로 이 파일을 봅니다 (`AGENTS.md` §0.2).
 
-마지막 갱신: 2026-08-12 (TASK-017 STATUS 상단 직접 잔여 제한 재검토 완료 — REVIEW-009, M-01 **해소** · M-02 **해소 유지** · 판정 **승인**)
-현재 단계: **Phase 1 계획 / Phase 1a 진입**
+마지막 갱신: 2026-08-22 (TASK-024 — PR #16 병합 후 상태 정합성 정리)
+현재 단계: **Phase 1a** — 합성 media plumbing vertical slice 병합 완료; 일반 실행 순서는 **제안됨 유지**
 
 ---
 
@@ -12,16 +12,17 @@
 
 | 항목 | 상태 |
 |---|---|
-| 현재 Phase | **Phase 1 계획 / Phase 1a 진입** (Phase 0 완료) |
+| 현재 Phase | **Phase 1a** (Phase 0·계획 기준선 완료, 합성 plumbing slice 병합됨) |
 | Phase 0 | **완료 — `main`에 병합됨** (PR #1, 병합 SHA `d11b2450d324ac7f509741acc1ac591313876d30`) |
-| 기능 코드 | **없음** (의도됨 — ADR-0001). 코드 착수는 Phase 1a 계획 확정 후 (§4) |
-| 의존성 / 모델 / CI / 비밀정보 | **없음** (`AGENTS.md` §8) |
-| 문서 기반 | 초안 → 독립 리뷰 4회(REVIEW-001~004) → 반영 → **병합 완료** |
-| 열린 PR | **TASK-012 Draft PR** (이 작업) — Phase 1 계획 기준선 |
-| 종료된 PR | **#1 병합됨** / **#2·#3·#4 미병합 종료** (리뷰 기록은 `main`에 보존됨) |
+| 기능 코드 | **있음** — TASK-022 CLI: local input → probe → SRT → soft-sub → verify → local staging export |
+| 런타임 / 의존성 | Python 3.12+ 표준 라이브러리와 FFmpeg/ffprobe. Python package 의존성·모델·CI·비밀정보 없음 |
+| 병합된 PR | **#1·#5·#16** (`main` HEAD `e3a99c762ecd7030843e535db7dc3f7147bf811e`) |
+| 열린 PR | **#6~#10·#12·#14·#15·#17** — Draft, 미병합 |
+| 미병합 종료 | **#2·#3·#4·#11** — #11은 TASK-024로 대체, branch·원문 보존 |
 | 운영 구조 | **전환됨** — GPT Work / Claude 주 세션 / 독립 Claude 리뷰 세션 / Claude 일반 대화 (`AGENTS.md` §3, ADR-0027) |
-| 현재 작업 | **TASK-012** — Phase 1 계획 기준선 확립 |
-| 다음 실행 후보 | **TASK-003** — seed 코퍼스·라이선스·합성 데이터 대안 조사 (지금 착수 가능) |
+| 현재 작업 | **TASK-024** — PR #16 병합 후 상태 정합성 정리 |
+| 다음 제품 결정 | **U-31** — 번역 대상 언어. TASK-005 착수 전에 필요 |
+| 병행 가능한 조사 | **TASK-003 / PR #12** — Gate E와 외부 코퍼스 채택은 여전히 미완료 |
 | U-08 | **답변됨 (2026-08-09)** — **채점 정답은 번역 자막** |
 | U-11 | **부분 답변됨 (2026-08-09)** — **약 2개월·품질 우선.** 정확한 제출 날짜는 **미확정** |
 | 차단 요인 | **Phase 1 계획 착수 차단은 해제됨.** 남은 것은 **정밀 일정(정확한 날짜)** 과 **U-31(번역 대상 언어)** (§5) |
@@ -59,16 +60,20 @@
 > 리뷰 PR **#2·#3·#4는 리뷰 기록이 `main`에 보존된 뒤 미병합으로 종료**되었습니다
 > (`AGENTS.md` §4.1 7단계 — 리뷰 PR의 처리는 사람 제품 오너의 결정).
 
-### 2.3 진행 중 — Phase 1 계획
+### 2.3 Phase 1 계획 기준선·합성 plumbing slice
 
 | TASK | 제목 | Owner | Reviewer | Phase | Status |
 |---|---|---|---|---|---|
-| [TASK-012](docs/tasks/TASK-012.md) | Phase 1 계획 기준선 확립 | Claude Code 주 세션 | **[TASK-013](docs/tasks/TASK-013.md) → [TASK-014](docs/tasks/TASK-014.md) → [TASK-015](docs/tasks/TASK-015.md) 동일 GPT Work 세션** (사람 오너의 예외 승인) — [REVIEW-005](docs/reviews/REVIEW-005.md) · [REVIEW-006](docs/reviews/REVIEW-006.md) · [REVIEW-007](docs/reviews/REVIEW-007.md) | Phase 1 planning / 1a 진입 | **In review** (REVIEW-007 M-01 **부분 해소** · M-02 **해소** · 최종 **변경 요청** → **U-22 공급자 결정 귀속 대응 완료**, 단일 항목 제한 재검토 대기) |
+| [TASK-012](docs/tasks/TASK-012.md) | Phase 1 계획 기준선 확립 | Claude Code 주 세션 | TASK-013~017 / REVIEW-005~009 (사람 오너의 예외 승인) | Phase 1 planning / 1a 진입 | **Done** — REVIEW-009 승인 후 PR #5 병합 (`10d34b4a4545f9ae8894c8038e7f1cc9a7706d61`) |
 | [TASK-013](docs/tasks/TASK-013.md) | TASK-012 고정 HEAD 독립 검토 | **이 독립 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 review | **In review** (판정: 변경 요청 — [REVIEW-005](docs/reviews/REVIEW-005.md)) |
 | [TASK-014](docs/tasks/TASK-014.md) | TASK-012 M-01·M-02 제한 재검토 | **REVIEW-005를 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 limited rereview | **In review** (M-01·M-02 부분 해소 · 판정: 변경 요청 — [REVIEW-006](docs/reviews/REVIEW-006.md)) |
 | [TASK-015](docs/tasks/TASK-015.md) | REVIEW-006 잔여 6항목 한정 재검토 | **TASK-013·TASK-014 / REVIEW-005·REVIEW-006을 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 residual rereview | **In review** (M-01 부분 해소 · M-02 해소 · 판정: 변경 요청 — [REVIEW-007](docs/reviews/REVIEW-007.md)) |
 | [TASK-016](docs/tasks/TASK-016.md) | REVIEW-007 U-22 공급자 결정 귀속 단일 항목 재검토 | **TASK-013·TASK-014·TASK-015 / REVIEW-005·REVIEW-006·REVIEW-007을 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 U-22 attribution rereview | **In review** (M-01 부분 해소 · M-02 해소 유지 · 판정: 변경 요청 — [REVIEW-008](docs/reviews/REVIEW-008.md)) |
 | [TASK-017](docs/tasks/TASK-017.md) | REVIEW-008 STATUS 상단 직접 잔여 제한 재검토 | **TASK-013·TASK-014·TASK-015·TASK-016 / REVIEW-005·REVIEW-006·REVIEW-007·REVIEW-008을 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 STATUS header rereview | **In review** (M-01 해소 · M-02 해소 유지 · 판정: **승인** — [REVIEW-009](docs/reviews/REVIEW-009.md)) |
+| [TASK-018](docs/tasks/TASK-018.md) | PR #5 병합 후 상태 정합성 정리 | GPT Work Root Orchestrator (사람 오너 지시 예외) | 없음 (§3.2 B열 — 상태 기록) | Phase 1a entry | **Done** — PR #11 미병합 종료, TASK-024로 대체 |
+| [TASK-022](docs/tasks/TASK-022.md) | 합성 media plumbing vertical slice | Lean Root Orchestrator | 독립 Lean Root 세션 ([REVIEW-013](docs/reviews/REVIEW-013.md)) | Phase 1a synthetic slice | **Done** — PR #16 병합 |
+| [TASK-023](docs/tasks/TASK-023.md) | TASK-022 Gate H 고정 HEAD 독립 검토 | Lean Root Independent Reviewer | 없음 | Phase 1a review | **Done** — 승인 기록이 PR #16에 포함됨 |
+| [TASK-024](docs/tasks/TASK-024.md) | PR #16 병합 후 상태 정합성 정리 | Lean Root Orchestrator | 없음 — Gate L/M 상태 기록 | Phase 1a reconciliation | **In review** |
 
 > Owner와 Reviewer는 절대 같을 수 없으며, **반드시 서로 다른 Claude Code 세션**입니다 (`AGENTS.md` §3.1, R8).
 > **작성자 세션은 자기 변경을 스스로 승인하지 않습니다.**
@@ -151,7 +156,8 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 - 최종 독립 검토 **REVIEW-004** 판정 **승인** (TASK-011) 후 사람 제품 오너가 병합
 - 리뷰 PR **#2·#3·#4**는 리뷰 기록(`TASK-004·009·011`, `REVIEW-002·003·004`)이 `main`에
   보존된 뒤 **미병합으로 종료**되었습니다
-- 저장소는 여전히 **문서 전용**입니다 — 코드·의존성·모델·CI·비밀정보 0건 (ADR-0001)
+- 이 문장은 PR #1 병합 시점의 역사 기록입니다. 현재 기능 코드는 TASK-022/PR #16으로 추가됐고,
+  Python package 의존성·모델·CI·비밀정보는 여전히 없습니다.
 
 ### 3.8 U-08·U-11 답변 (2026-08-09, 사람 제품 오너)
 
@@ -162,6 +168,32 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 
 상세: [`docs/DECISIONS.md`](docs/DECISIONS.md) §4.1.1 · §4.1.2 · §4.1.3
 
+### 3.9 Phase 1 계획 기준선 병합 (TASK-012 / PR #5)
+
+- 최종 제한 재검토 REVIEW-009 판정은 **승인**이다.
+- Source Owner 기록 통합 커밋은 `1f4c099b03d41ecc496b857b4868a0d8ef8feed1`이고,
+  리뷰 커밋 `a574f093faa6fdcfc98833ef39b020929ec8ed3f`과 tree
+  `4c01ffebeb92077ed7e61ca18a380d0a0e20f174`가 동일하다.
+- 사람 제품 오너가 PR #5를 일반 merge했고, `main` merge commit은
+  `10d34b4a4545f9ae8894c8038e7f1cc9a7706d61`이다.
+- TASK-012는 `Done`으로 전이한다. 다만 병합은 `docs/DECISIONS.md`에서
+  **제안됨**인 ADR이나 미해결 U-XX를 자동 승인·해결하지 않는다.
+- 리뷰 PR #6~#10은 Open / Draft / 미병합 상태로 남아 있으며 처리는 사람 제품 오너의 결정이다.
+
+### 3.10 PR #11 종료와 상태 기록 대체 (TASK-018 / TASK-024)
+
+- PR #11은 최신 `main`과 양쪽으로 갈라져 현재 코드 상태와 충돌하므로 2026-08-22 미병합 종료했다.
+- branch와 원문은 보존했고, 유효한 TASK-012 완료·제안 경계 기록만 TASK-024가 최신 `main`에 이식한다.
+- PR #11 종료는 코드·기존 리뷰 PR·결정 상태를 바꾸지 않는다.
+
+### 3.11 합성 media plumbing slice 병합 (TASK-022·023 / PR #16)
+
+- REVIEW-013은 고정 HEAD `9dc1fee1e7ac9e1446d262963b2105ad234c1c36`에서 **승인**,
+  차단·중대·경미 결함 0건으로 판정했다.
+- `make verify`는 unit 8건과 실제 FFmpeg smoke를 통과했고, 사람 제품 오너가 PR #16을 일반 merge했다.
+- `main` merge commit은 `e3a99c762ecd7030843e535db7dc3f7147bf811e`이다.
+- Windows 11/NTFS, 실제 iCloud sync/player, 다른 FFmpeg/OS는 확인하지 않았으며 승인 증거가 아니다.
+
 ---
 
 ## 4. 다음 작업
@@ -170,7 +202,7 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 
 | TASK | 내용 | Owner |
 |---|---|---|
-| **TASK-012** | **Phase 1 계획 기준선 확립** — REVIEW-005(변경 요청) → 수정 → REVIEW-006(M-01·M-02 **부분 해소**, 최종 **변경 요청**) → 수정 → REVIEW-007(M-01 **부분 해소** · M-02 **해소**, 최종 **변경 요청**) → **U-22 공급자 결정 귀속 대응 완료.** **PR #5의 현재 HEAD**에서 REVIEW-007이 지정한 **단일 항목**만 제한 재검토 대기 | Claude Code 주 세션 |
+| **TASK-024** | **PR #16 병합 후 상태 정합성 정리** — PR #11의 유효 기록을 최신 `main`에 이식하고 TASK-012·018·022·023 상태를 정렬 | Lean Root Orchestrator |
 
 > **판정과 반영 상태는 서로 다른 사실입니다. 섞지 마십시오.**
 >
@@ -181,19 +213,23 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 > | REVIEW-006의 **판정** (고정 HEAD `e0d99cf…`) | M-01 **부분 해소** · M-02 **부분 해소** · 최종 **변경 요청** | **아니오 — 역사 기록** |
 > | REVIEW-006 이후 **잔여 6항목 수정 커밋** | `b57df672e67c1ff8ae1d001c874672e391c474c4` (`docs: address task 012 rereview findings`) — **식별자일 뿐, 검토 대상 HEAD가 아닙니다** |
 > | REVIEW-007의 **판정** (고정 HEAD `b57df67…`) | M-01 **부분 해소**(잔여 1~3 해소, U-22 귀속만 남음) · M-02 **해소** · 최종 **변경 요청** | **아니오 — 역사 기록** |
-> | REVIEW-007 이후 **잔여 1항목 반영 상태** | **대응 완료** (Source Owner 주장) | 예 — 현재 상태 |
-> | **다음 제한 재검토 대상** | **PR #5의 현재 HEAD** (대상 브랜치 `claude/task-012-phase1-plan-k3n7qw`의 최신 HEAD). **특정 SHA를 이 문서에 고정 표기하지 않습니다** | 커밋마다 갱신됨 |
-> | **재검토 결과** | **아직 없음** | 리뷰 세션이 다음에 판정 |
+> | REVIEW-007 이후 **잔여 1항목 반영 상태** | **대응 완료** (Source Owner 주장) | REVIEW-008이 직접 상태 잔여를 판정 |
+> | REVIEW-008의 **판정** (고정 HEAD `116e033…`) | 단일 항목·M-01 **부분 해소** · M-02 **해소 유지** · 최종 **변경 요청** | **아니오 — 역사 기록** |
+> | REVIEW-008 이후 **STATUS 상단 직접 잔여 반영** | `5dbc1b1ca88bdc15b0c14e003ef66fd9c13953a8` | REVIEW-009 고정 대상 |
+> | REVIEW-009의 **판정** (고정 HEAD `5dbc1b1…`) | 단일 항목·M-01 **해소** · M-02 **해소 유지** · 최종 **승인** | **최종 제한 재검토** |
+> | 리뷰 기록 통합 | `1f4c099b03d41ecc496b857b4868a0d8ef8feed1` | 리뷰 tree와 동일 |
+> | 사람 제품 오너 결정 | PR #5 **병합** | merge commit `10d34b4a4545f9ae8894c8038e7f1cc9a7706d61` |
 >
-> **"대응 완료"는 Owner의 주장이며 검증이 아닙니다** (R10 / `AGENTS.md` §3.5).
-> 작성자 세션은 자기 수정을 승인하지 않습니다 (R8 / §3.1).
-> **어떤 실질 수정 커밋도 "새 HEAD"·"현재 HEAD"로 부르지 않습니다** — 식별자로만 표기합니다 (REVIEW-006 §3.2, REVIEW-007 §3.2 잔여 결함).
+> 과거 변경 요청과 최종 승인은 각 고정 HEAD의 역사 기록으로 모두 유지됩니다.
+> TASK-012의 `Done`은 사람 병합 전이를 뜻하며, 제안됨 ADR·U-22·U-31·U-07의
+> 자동 승인 또는 해결을 뜻하지 않습니다.
 
-### Phase 1a 실행 순서 **(제안 — 검토 중.** [`PLAN.md`](PLAN.md) §3-1d**)**
+### Phase 1a 실행 순서 **(제안됨 유지.** [`PLAN.md`](PLAN.md) §3-1d**)**
 
-> **상태: 제안됨.** TASK-012가 **제안**한 순서이며 **아직 확정되지 않았습니다.**
-> PR #5는 Draft이고 판정은 **변경 요청**(REVIEW-005)입니다.
-> **사람 제품 오너의 승인·병합 전에는 "확정된 실행 순서"가 아닙니다** (`AGENTS.md` §9-5, R1).
+> TASK-012와 PR #5는 완료·병합됐지만, `docs/DECISIONS.md`에서 **제안됨**인 ADR과
+> 아래 실행 순서를 자동 승인한 것으로 해석하지 않습니다. 사람 제품 오너의 별도 승인 전까지
+> 결정 상태는 **제안됨**입니다. TASK-022/PR #16은 별도로 승인된 합성 plumbing 예외이며,
+> 일반 ASR·번역·외부 코퍼스 구현 승인이 아닙니다. TASK-003은 선행 조건 없이 계속 진행할 수 있습니다.
 
 | 노드 | 내용 | **선행 (PLAN.md §3-1d와 동일)** | U-31에 막히나 |
 |---|---|---|---|
@@ -209,9 +245,9 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 > **U-31은 TASK-003을 막지 않습니다.** 막는 것은 TASK-005부터입니다.
 > **TASK-006은 TASK-005 뒤입니다.** 병행 가능 여부는 검증되지 않아 직렬로 둡니다 (PLAN §3-1d).
 > **TASK-003·005·006은 예약된 번호이며 의미를 바꾸지 않았습니다.**
-> **코드 구현은 위 순서가 끝나기 전에 시작하지 않습니다.**
+> **일반 Phase 1 구현은 위 순서가 끝나기 전에 시작하지 않습니다.** PR #16은 승인된 좁은 합성 예외입니다.
 
-**아직 TASK 파일이 없습니다. 파일을 먼저 만들고 시작하십시오** (`AGENTS.md` §6.2).
+**TASK-003 파일과 Draft PR #12가 이미 있습니다.** Gate E와 외부 코퍼스 채택은 완료되지 않았습니다.
 
 ---
 
@@ -271,6 +307,8 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 | F7 | `ReferenceBundle` 예시 파일(스키마 샘플)이 있으면 이해가 쉬움 | Phase 1a |
 | F8 | ADR 번호가 20개를 넘으면 `docs/decisions/` 디렉터리로 분할 검토 | 필요 시 |
 | F9 | `README.md`의 "사람(제품 오너)이 할 일" 예시가 U-08("원어인가 번역인가")을 **아직 미해결처럼** 들고 있음 — U-08은 2026-08-09에 답변됨. `README.md`는 TASK-012의 범위 밖이라 손대지 않음 | 다음 문서 정비 시 |
+
+> F1은 TASK-022에서 `.gitignore`를 추가해 해소됐다. 위 표는 발견 당시 기록을 보존한다.
 
 **이 항목들을 임의로 처리하지 마십시오.** TASK로 승격된 뒤에 합니다.
 

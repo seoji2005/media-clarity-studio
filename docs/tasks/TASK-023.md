@@ -6,7 +6,7 @@
 | **Owner** | **Lean Root Independent Reviewer** (사람 제품 오너의 2026-08-22 직접 수행 예외 승인; TASK-022 작성 세션과 별도) |
 | **Reviewer** | 없음 (§3.2 — 리뷰 결과에 재귀적 독립 리뷰를 만들지 않음) |
 | **Phase** | Phase 1a / TASK-022 Gate H review |
-| **Status** | `In review` |
+| **Status** | `Done` |
 | **대상 PR** | [#16](https://github.com/seoji2005/media-clarity-studio/pull/16) |
 | **대상 브랜치** | `codex/task-022-synthetic-media-slice` |
 | **고정 대상 HEAD** | `9dc1fee1e7ac9e1446d262963b2105ad234c1c36` |
@@ -58,7 +58,7 @@ PR #16의 고정 HEAD에서 합성 media plumbing vertical slice의 Gate H 경�
 ## 5. 완료 조건
 
 - [x] PR #16이 Open / Draft / 미병합이며 base/head가 고정값과 일치
-- [x] base 대비 2 commits ahead / 0 behind, 9개 허용 파일, +1059/−0 확인
+- [x] base 대비 2 commits ahead / 0 behind, 9개 허용 파일, +1149/−0 확인
 - [x] 고정 HEAD의 9개 GitHub blob을 격리 디렉터리에 재구성하고 SHA 전부 일치 확인
 - [x] `make verify` 통과
 - [x] `make smoke` 별도 통과
@@ -69,7 +69,7 @@ PR #16의 고정 HEAD에서 합성 media plumbing vertical slice의 Gate H 경�
 - [x] 네트워크·의존성·scope·증거 확대 주장 정적 검토
 - [x] 환경 제한과 제품 결함 분리 기록
 - [x] REVIEW-013 판정 기록
-- [ ] 사람 제품 오너의 처리 판단
+- [x] 사람 제품 오너의 처리 판단 — PR #16 일반 merge
 
 ## 6. 결과
 
@@ -81,5 +81,12 @@ PR #16의 고정 HEAD에서 합성 media plumbing vertical slice의 Gate H 경�
   디렉터리 교체와 전원 상실 내구성
 - **최종 판정: 승인**
 
-이 승인은 PR 병합·Ready 전환·TASK-022 `Done`을 뜻하지 않는다. 병합 판단은 사람 제품
-오너에게 남긴다.
+승인 시점에는 PR 병합·Ready 전환·TASK-022 `Done`을 뜻하지 않았으며, 병합 판단은 사람 제품
+오너에게 남겼다.
+
+
+## 7. 병합 결과 (2026-08-22)
+
+리뷰 기록은 대상 기능 branch에 byte-for-byte 통합된 뒤 사람 제품 오너가 PR #16을 일반 merge했다.
+`main` merge commit은 `e3a99c762ecd7030843e535db7dc3f7147bf811e`이다. 독립 리뷰 PR #17은
+Open / Draft / 미병합으로 남아 있으며 이 완료 전이에 필요하지 않다.
