@@ -63,7 +63,7 @@ PR #6~#10·#12·#14·#15·#17 merge/close/Ready, branch 삭제, history rewrite.
 - Markdown 상대 링크 검사
 - TASK/REVIEW 참조 존재 검사
 - 금지된 코드·의존성·CI 변경 0건 확인
-- PR #16에서 검증된 9개 code/support blob 불변 확인
+- PR #16의 runtime/support blob 8개 불변 확인 (TASK-022·023 상태 문서는 허용 범위로 별도 변경)
 
 ## 완료와 복구
 
