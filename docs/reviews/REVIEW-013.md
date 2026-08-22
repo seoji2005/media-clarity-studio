@@ -17,7 +17,7 @@
 | head | `codex/task-022-synthetic-media-slice` @ `9dc1fee1e7ac9e1446d262963b2105ad234c1c36` |
 | head tree | `b49a164cc73e679af36500213093c3a4b6833a2c` |
 | 계보 | base와 merge-base 동일, 2 commits ahead / 0 behind |
-| diff | 9개 파일 · +1059 / −0, TASK-022 허용 목록 안 |
+| diff | 9개 파일 · +1149 / −0, TASK-022 허용 목록 안 |
 | 리뷰 TASK | [TASK-023](../tasks/TASK-023.md) |
 | 리뷰 브랜치 | `lean-root-review/task-023-task-022-gate-h` |
 
