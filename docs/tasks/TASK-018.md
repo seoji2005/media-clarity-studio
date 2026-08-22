@@ -76,7 +76,7 @@ seed 코퍼스·라이선스·합성 데이터 대안 조사를 시작한다. U-
 | ADR 참조 ↔ 정의 | 27개 정의, 유령 참조 0 |
 | PR #5 | Closed / Merged / head `1f4c099b03d41ecc496b857b4868a0d8ef8feed1` |
 | PR #10 | Open / Draft / 미병합 / head `a574f093faa6fdcfc98833ef39b020929ec8ed3f` — 변경 없음 |
-| PR #11 | Open / Draft / 미병합 |
+| PR #11 (2026-08-12 검증 시점) | Open / Draft / 미병합 — 2026-08-22 종료 결과는 §9 |
 | CI | 기준 merge commit의 check run 0건, workflow run 0건. 실패가 아니라 CI 미구성 |
 | 결정 경계 | U-22·U-31·U-07 미해결 유지. 실제 모델·공급자·서비스·API·실행 방식 선택 0건 |
 

@@ -58,7 +58,7 @@ PR #16의 고정 HEAD에서 합성 media plumbing vertical slice의 Gate H 경�
 ## 5. 완료 조건
 
 - [x] PR #16이 Open / Draft / 미병합이며 base/head가 고정값과 일치
-- [x] base 대비 2 commits ahead / 0 behind, 9개 허용 파일, +1059/−0 확인
+- [x] base 대비 2 commits ahead / 0 behind, 9개 허용 파일, +1149/−0 확인
 - [x] 고정 HEAD의 9개 GitHub blob을 격리 디렉터리에 재구성하고 SHA 전부 일치 확인
 - [x] `make verify` 통과
 - [x] `make smoke` 별도 통과
@@ -81,8 +81,8 @@ PR #16의 고정 HEAD에서 합성 media plumbing vertical slice의 Gate H 경�
   디렉터리 교체와 전원 상실 내구성
 - **최종 판정: 승인**
 
-이 승인은 PR 병합·Ready 전환·TASK-022 `Done`을 뜻하지 않는다. 병합 판단은 사람 제품
-오너에게 남긴다.
+승인 시점에는 PR 병합·Ready 전환·TASK-022 `Done`을 뜻하지 않았으며, 병합 판단은 사람 제품
+오너에게 남겼다.
 
 
 ## 7. 병합 결과 (2026-08-22)
