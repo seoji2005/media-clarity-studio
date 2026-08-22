@@ -6,7 +6,7 @@
 | **Owner** | Lean Root Orchestrator (사람 제품 오너의 2026-08-22 진행 지시) |
 | **Reviewer** | 없음 — Gate L/M 상태 기록. 기존 결정·승인·코드 계약을 바꾸지 않음 |
 | **Phase** | Phase 1a / post-merge reconciliation |
-| **Status** | `In progress` |
+| **Status** | `In review` |
 | **기준 main** | `e3a99c762ecd7030843e535db7dc3f7147bf811e` |
 | **대상 병합** | PR #16 / merge commit `e3a99c762ecd7030843e535db7dc3f7147bf811e` |
 | **대체 대상** | PR #11 — 최신 main과 diverged하여 미병합 종료, 원문·branch 보존 |
