@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.mcs-work/
+*.partial-*
+*.failure-*.json
+*.verify.json
+*.generated.srt
+*.extracted.srt
+*-softsub.mkv
+fixture-source.mkv
