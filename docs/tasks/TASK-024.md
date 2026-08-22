@@ -6,7 +6,7 @@
 | **Owner** | Lean Root Orchestrator (사람 제품 오너의 2026-08-22 진행 지시) |
 | **Reviewer** | 없음 — Gate L/M 상태 기록. 기존 결정·승인·코드 계약을 바꾸지 않음 |
 | **Phase** | Phase 1a / post-merge reconciliation |
-| **Status** | `In review` |
+| **Status** | `Done` |
 | **기준 main** | `e3a99c762ecd7030843e535db7dc3f7147bf811e` |
 | **대상 병합** | PR #16 / merge commit `e3a99c762ecd7030843e535db7dc3f7147bf811e` |
 | **대체 대상** | PR #11 — 최신 main과 diverged하여 미병합 종료, 원문·branch 보존 |
@@ -69,3 +69,9 @@ PR #6~#10·#12·#14·#15·#17 merge/close/Ready, branch 삭제, history rewrite.
 
 이 TASK는 제품 오너의 병합 또는 명시적 종료 후에만 `Done`이다. 병합 전에는 Draft PR을 닫으면
 `main`에 영향이 없고, PR #11은 branch와 원문이 남아 있어 필요하면 다시 열 수 있다.
+
+
+## 병합 결과 (2026-08-22)
+
+사람 제품 오너가 PR #18을 일반 merge했고 `main` merge commit은
+`f1524d5519afbd06d4d2a752dd3d0d4e1572a488`이다. 이 병합으로 완료 조건을 충족했다.
