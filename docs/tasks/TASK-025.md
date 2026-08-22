@@ -6,7 +6,7 @@
 | **Owner** | Lean Root Orchestrator (사람 제품 오너의 2026-08-22 직접 결정 반영) |
 | **Reviewer** | 없음 — Gate M 제품 결정 전사·계약 정합성 변경, 코드·알고리즘 변경 없음 |
 | **Phase** | Phase 1a / translation evaluation contract |
-| **Status** | `In progress` |
+| **Status** | `In review` |
 | **기준 main** | `f1524d5519afbd06d4d2a752dd3d0d4e1572a488` |
 | **위험 등급** | **Gate M** — 사용자 산출물 언어 계약과 평가 입력 조건 변경 |
 

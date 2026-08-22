@@ -2,7 +2,7 @@
 
 모듈 경계와 인터페이스 계약. **구현이 아니라 계약의 정의입니다.**
 
-마지막 갱신: 2026-08-09 (Phase 0, REVIEW-002 반영 — TASK-008)
+마지막 갱신: 2026-08-22 (TASK-025 — U-31 한국어 대상 언어 계약 반영)
 상태: **제안됨 (Proposed)** — 경계 원칙과 구체 기술 모두 아직 승인 전
 
 > 이 문서의 코드 블록은 전부 **계약 스케치(pseudo-contract)** 입니다.
@@ -200,8 +200,8 @@ ReferenceBundle/v1:
     reference_axis   : "source" | "target"    # ★ 어느 정답 축인가 (§3.0.1). 생략 불가
 
   target_language?   : BCP-47                 # 번역 축(`reference_axis: "target"`)의 대상 언어.
-                                              # **U-31 미해결.** 값이 확정되기 전에는 비워 둡니다.
-                                              # 추측한 언어 코드를 넣지 않습니다 (R5)
+                                              # 현재 제품 프로필은 **한국어 `ko`** (U-31 해소).
+                                              # target-axis 정답이 있으면 `ko`가 필수입니다
 
   speech_mask        :                        # 발화/무음 구간 (환각 지표의 전제)
     segments[]       : { start_seconds, end_seconds,
@@ -267,7 +267,7 @@ ReferenceBundle/v1:
 | **X-2** | `speaker_streams[]`는 **언제나 원문 축**입니다. 번역 정답을 이 필드에 넣지 않습니다 |
 | **X-3** | **한 축의 정답을 다른 축의 가설과 비교하지 않습니다.** 원문 가설 ↔ 원문 축, 번역 가설 ↔ 번역 축입니다 |
 | **X-4** | 두 축의 지표를 **하나의 숫자로 합치지 않습니다** (ADR-0015, T-3) |
-| **X-5** | `target_language`가 비어 있으면(U-31 미해결) 번역 축 지표는 **"미지원(unsupported)"으로 보고**합니다 (§3.1). 대상 언어를 추측해 채우지 않습니다 |
+| **X-5** | 현재 제품 프로필의 `target_language`는 **`ko`** 입니다 (U-31 해소). target-axis cue가 있는데 값이 누락·`undetermined`·비-`ko`이면 계약 검증 실패이며 그 번들을 한국어 번역 축 평가에 투입하지 않습니다 |
 
 > **번역 모델·API·공급자·프레임워크는 이 계약이 고르지 않습니다** (U-22).
 > 이 절은 **정답을 어디에 담고 무엇과 비교하는가**만 규정합니다.
@@ -287,8 +287,8 @@ ReferenceBundle/v1:
 | 상태 | 원문 축 지표 | 번역 축 지표 |
 |---|---|---|
 | `reference_axis: "source"` cue 또는 `speaker_streams[]`만 있음 | 계산 가능 | **미지원** |
-| `reference_axis: "target"` cue가 있고 `target_language`도 채워짐 | 원문 축 정답이 있으면 계산 가능 | 계산 가능 |
-| `reference_axis: "target"` cue는 있으나 `target_language`가 비어 있음 (U-31 미해결) | 영향 없음 | **미지원** — 이유를 `unsupported_metrics[]`에 기록 |
+| `reference_axis: "target"` cue가 있고 `target_language: "ko"` | 원문 축 정답이 있으면 계산 가능 | 계산 가능 |
+| `reference_axis: "target"` cue는 있으나 `target_language`가 누락·`undetermined`·비-`ko` | 영향 없음 | **계약 검증 실패** — 한국어 번역 축 평가에 투입하지 않음 |
 
 > **한 축이 미지원이라고 다른 축을 대신 보고하지 않습니다.** 원문 축 CER을 번역 품질처럼
 > 쓰는 것이 REVIEW-005 M-01이 지적한 실패 시나리오입니다.
@@ -365,7 +365,7 @@ ReferenceBundle/v1:
 >
 > **`translate`는 별도 모듈입니다** (U-08 답변 반영 — [`PRODUCT_SPEC.md`](PRODUCT_SPEC.md) §2.0 T-1).
 > `asr`이 번역하지 않고, `subtitle`이 번역하지 않습니다. 책임 경계는 §7.11에 있습니다.
-> **모듈 경계만 정의하며 번역 모델·API·공급자·대상 언어는 고르지 않습니다** (U-22, U-31).
+> **모듈 경계만 정의하며 번역 모델·API·공급자는 고르지 않습니다** (U-22). 대상 언어는 사람 제품 오너가 한국어(`ko`)로 확정했습니다 (U-31).
 
 ---
 
@@ -743,7 +743,7 @@ EvalReport/v1:
     source           : { 지표명 -> { value, ci_low?, ci_high?, n, status } }
                        # 원문 ASR 축 (EVALS §4.1~§4.6)
     target           : { 지표명 -> { value, ci_low?, ci_high?, n, status } }
-                       # 번역 자막 축 (EVALS §4.7). U-31 미해결이면 전부 status="unsupported"
+                       # 번역 자막 축 (EVALS §4.7). 현재 제품 target_language="ko"
   metrics            : { 지표명 -> { value, ci_low?, ci_high?, n, status } }
                        # 축이 없는 지표(시각 도메인 등)
                        # status: "computed" | "unsupported" | "insufficient_n"
@@ -862,7 +862,7 @@ Job/v1:
 | 번역 모델·엔진 | **U-22** — 측정 후 결정 (ADR-0012·ADR-0019) |
 | 로컬 실행 / 원격 API / 규칙 기반 중 무엇인가 | **U-22** — 어댑터 뒤에 있으므로 계약은 동일 |
 | 공급자·서비스 이름 | **U-22** — 측정 후 결정. 어댑터 계약은 실제 선택 이후에도 공급자 중립 유지 |
-| **대상 언어** | **U-31** — 사람 제품 오너 |
+| **대상 언어** | **한국어, BCP-47 `ko`** — U-31 해소 (2026-08-22 사람 제품 오너) |
 | 절대 목표 수치 (품질 임계값) | **U-07** — 기준선 측정 후 |
 
 ```
@@ -872,8 +872,8 @@ TranslatedTranscript/v1:
   source_transcript  : ArtifactRef            # 입력이 된 원문 Transcript (참조 — 대체 아님)
   source_language_authority : "Transcript.segments[].language_spans[]"
                                               # 원문 언어의 정답은 원문 쪽에 있습니다 (§7.3)
-  target_language    : BCP-47 | "undetermined"
-                       # **U-31 미해결 동안 "undetermined"** — 임의의 언어 코드를 넣지 않습니다 (R5)
+  target_language    : BCP-47
+                       # 현재 제품의 성공 산출물은 **`ko`**. 누락·`undetermined`·비-`ko`는 계약 위반
   streams[]          :
     stream_id        : 문자열                 # 원문 Transcript.streams[].stream_id와 동일 값
     segments[]       :
@@ -912,7 +912,7 @@ TranslationCapabilityReport:
 | 세그먼트 대응 없음 | `source_segment_ids` 생략, `alignment_kind: "unknown"` | 세그먼트 단위 번역 지표는 **미지원**. 문서 단위만 보고 |
 | 신뢰도 없음 | `confidence` **생략** | 신뢰도 기반 지표는 **미지원**. `needs_review`는 다른 신호로 |
 | 대상 언어가 어댑터 지원 목록에 없음 | **번역을 시도하지 않고 실패로 보고** | 그 조건의 번역 축 지표는 **미지원** |
-| 대상 언어 미확정 (U-31) | `target_language: "undetermined"`로 두고 **번역 단계를 실행하지 않음** | 번역 축 지표 전부 **미지원** (§3.1) |
+| 산출물의 대상 언어가 누락·`undetermined`·비-`ko` | 성공 산출물로 승격하지 않고 계약 실패로 보고 | 한국어 번역 축 평가에 투입하지 않음 |
 
 > **금지:** 대상 언어를 추측해서 채우는 것, 번역 실패를 원문 그대로 복사해 성공처럼 보고하는 것.
 > 원문을 그대로 넘긴 구간은 `review_reason: "untranslated_span"`으로 표시합니다.
@@ -944,8 +944,8 @@ TranslationCapabilityReport:
 - 원문 자막 파일이 따로 필요하면 `SubtitleDocument(text_axis="source")`를 추가로 만듭니다.
   **번역 자막을 원문 자막으로 대신하지 않습니다.**
 - 평가는 **축별로** 계산해 축별로 보고합니다 (§3.0.1, §7.6). 하나의 숫자로 합치지 않습니다.
-- **대상 언어가 미확정(U-31)인 동안** `translate`는 실행되지 않으며, 번역 축 지표는
-  전부 **미지원**으로 보고됩니다. 원문 축 지표는 그동안에도 계산할 수 있습니다.
+- 대상 언어는 **한국어(`ko`)** 입니다 (U-31 해소). 어댑터가 `ko`를 지원하지 않으면 번역을
+  시도하지 않고 실패로 보고하며, 원문 축 지표는 독립적으로 계속 계산할 수 있습니다.
 
 **시각 도메인**
 
@@ -989,7 +989,7 @@ TranslationCapabilityReport:
 | U-16 | 중간 산출물 보관 정책 | `storage` |
 | U-28 | `ReconstructionPolicy` 기본 정책 수준과 분류 임계값 | §5 안전 게이트 |
 | U-29 | 재현성 T2 허용오차 수치 | §6 |
-| **U-31** | **번역 대상 언어는 무엇인가** | **§3(`target_language`)·§7.11(`translate`). 미확정 동안 번역 축 지표는 전부 미지원** |
+| ~~U-31~~ | ~~번역 대상 언어는 무엇인가~~ → **한국어(`ko`)** | **해소 (2026-08-22)** — §3·§7.11 반영 |
 | **U-22** | **번역·ASR 모델과 실행 방식(로컬/원격) 선택** | **§7.11은 어댑터 경계만 정의. 선택은 측정 후** |
 
 전체 목록: [`DECISIONS.md`](DECISIONS.md)
