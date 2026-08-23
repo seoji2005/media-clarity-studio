@@ -64,7 +64,7 @@
 
 | TASK | 제목 | Owner | Reviewer | Phase | Status |
 |---|---|---|---|---|---|
-| [TASK-003](docs/tasks/TASK-003.md) | seed 코퍼스·라이선스·합성 fixture 조사 및 Gate E 증거 통합 | Claude Code 주 세션 → Lean Root 통합 | Gate S: TASK-021/REVIEW-012 승인; Gate E: 독립 리뷰 대기 | Phase 1a seed corpus | **In review** |
+| [TASK-003](docs/tasks/TASK-003.md) | seed 코퍼스·라이선스·합성 fixture 조사 및 Gate E 증거 통합 | Claude Code 주 세션 → Lean Root 통합 | Gate S: TASK-021/REVIEW-012 승인; Gate E: PR #21 고정 HEAD 제한 재검토 통과 | Phase 1a seed corpus | **Done** — PR #21 병합 |
 | [TASK-012](docs/tasks/TASK-012.md) | Phase 1 계획 기준선 확립 | Claude Code 주 세션 | TASK-013~017 / REVIEW-005~009 (사람 오너의 예외 승인) | Phase 1 planning / 1a 진입 | **Done** — REVIEW-009 승인 후 PR #5 병합 (`10d34b4a4545f9ae8894c8038e7f1cc9a7706d61`) |
 | [TASK-013](docs/tasks/TASK-013.md) | TASK-012 고정 HEAD 독립 검토 | **이 독립 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 review | **In review** (판정: 변경 요청 — [REVIEW-005](docs/reviews/REVIEW-005.md)) |
 | [TASK-014](docs/tasks/TASK-014.md) | TASK-012 M-01·M-02 제한 재검토 | **REVIEW-005를 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 limited rereview | **In review** (M-01·M-02 부분 해소 · 판정: 변경 요청 — [REVIEW-006](docs/reviews/REVIEW-006.md)) |
@@ -211,13 +211,12 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 - 번역 대상 언어는 한국어(BCP-47 `ko`)이며 모델·공급자·API와 한국어 정규화 규칙은 여전히 미정이다.
 - 상단 보드는 self-referential HEAD 갱신 반복을 막기 위해 현재 HEAD SHA를 기록하지 않고 GitHub 조회를 기준으로 한다.
 
-### 3.14 TASK-003 Gate E 통합 준비
+### 3.14 TASK-003 Gate E 통합 완료
 
-- 기존 PR #12와 Gate S 리뷰 PR #15는 최신 main보다 15 commits 뒤처져 직접 병합 대상이 아니다.
-- REVIEW-012 Gate S 승인과 관련 TASK/REVIEW 원문을 최신 main 기반 통합 브랜치로 이식했다.
-- M-03 공식 원문 직접 증거를 추가했고, 직접 검증할 수 없는 M-05는 Sintel 후보 제외로 닫았다.
-- TASK-003은 `In review`이며 Gate E 독립 승인 전에는 `Done`이 아니다.
-- 외부 코퍼스 다운로드·채택·재배포는 없고 U-06 사람 결정도 아직 하지 않았다.
+- PR #21의 고정 HEAD `2d75a590a0bebaeca3827488fca4d69b4c1054e6` 제한 재검토에서 주요 문제 없음 판정을 받았다.
+- 사람 제품 오너 승인 후 PR #21을 일반 merge했고 merge commit은 `d69bf4ba356c5b4765e50c7dab0d173ceabef968`이다.
+- M-03 근거는 OpenSLR SLR150 배포본 범위로 제한하고, 직접 검증하지 못한 M-05는 Sintel 후보 제외로 닫았다.
+- TASK-003은 `Done`이다. 외부 코퍼스 다운로드·채택·재배포는 없고 U-06 사람 결정은 아직 하지 않았다.
 
 ---
 
@@ -227,7 +226,7 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 
 | TASK | 내용 | Owner |
 |---|---|---|
-| **TASK-003 Gate E 통합** | **직접 증거와 Sintel 제외의 독립 리뷰** — 승인 후 U-06 사람 선택으로 이동 | Lean Root Orchestrator |
+| **U-06 seed 코퍼스 선택** | **외부 코퍼스 채택 여부와 범위 결정** — 다운로드 전에 라이선스·비용·평가 목적을 제품 오너가 선택 | 사람 제품 오너 (Lean Root가 선택지·권고 제공) |
 
 > **판정과 반영 상태는 서로 다른 사실입니다. 섞지 마십시오.**
 >

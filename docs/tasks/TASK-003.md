@@ -4,17 +4,17 @@
 |---|---|
 | **ID** | TASK-003 |
 | **Owner (수행 소유)** | **Claude Code 주 세션** — `AGENTS.md` §3 역할 2. 저장소 근거는 아래 "Owner 판정 근거" |
-| **Reviewer** | **독립 Claude Code 리뷰 세션 필요** — `AGENTS.md` §3.2 A열(데이터 출처·라이선스와 다음 vertical slice의 중요 판단 근거) |
+| **Reviewer** | Gate S: TASK-021 / REVIEW-012 승인 · Gate E: PR #21 고정 HEAD 제한 재검토 통과 |
 | **Phase** | Phase 1a / seed corpus research |
-| **Status** | `In review` |
+| **Status** | `Done` — Gate S는 PR #16, Gate E 증거 통합은 PR #21로 병합 |
 | **기준 브랜치** | `main` |
 | **기준 SHA** | `10d34b4a4545f9ae8894c8038e7f1cc9a7706d61` |
 | **기준 tree** | `4c01ffebeb92077ed7e61ca18a380d0a0e20f174` |
 | **작업 브랜치** | `claude/task-003-seed-corpus-research-gptw-0812` |
-| **Draft PR** | `#12` |
+| **역사 Draft PR** | `#12` — 직접 병합하지 않고 최신 main 기반 PR #21로 유효 기록을 이식 |
 | **차단 질문** | 없음 — U-31은 이 작업을 막지 않음 |
 | **2026-08-22 사람 제품 오너 결정** | **Gate S / Gate E 분리** — 아래 "게이트 분리" 절 |
-| **다음 Reviewer** | **Gate E 통합 독립 리뷰 필요** — 직접 증거와 Sintel 보수적 제외만 검토 |
+| **최종 통합** | PR #21 head `2d75a590a0bebaeca3827488fca4d69b4c1054e6` → merge `d69bf4ba356c5b4765e50c7dab0d173ceabef968` |
 
 ### 독립 검토 이력 (역사 기록 — 판정을 덮어쓰지 않는다)
 
