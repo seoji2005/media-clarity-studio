@@ -4,7 +4,7 @@
 >
 > - Gate S는 REVIEW-012 승인 후 TASK-022·023 / PR #16으로 구현·병합됐다.
 > - M-03은 OpenSLR SLR150·연결 LICENSE, CHiME challenge/steward, CC BY-SA 4.0 원문을
->   이 통합 작업에서 직접 열어 확인했다. 범위는 SLR150 배포본에 한정하며 독립 리뷰 전이다.
+>   이 통합 작업에서 직접 열어 확인했다. 범위는 SLR150 배포본에 한정하며 PR #21 제한 재검토를 통과했다.
 > - M-05의 Durian sharing/about/download는 직접 요청이 모두 `402 Payment Required`였다.
 >   검색 스니펫을 원문 확인으로 승격하지 않고 **Sintel을 현재 후보에서 제외**한다.
 > - U-31은 TASK-025 / PR #19에서 한국어(`ko`)로 해소됐다. U-06·U-07은 미해결, U-22는 보류다.
@@ -15,23 +15,23 @@
 
 - **TASK:** [TASK-003](tasks/TASK-003.md)
 - **조사일:** 2026-08-12
-- **상태:** `In review` — Gate S 완료, Gate E 직접 증거 통합의 독립 리뷰 대기
+- **상태:** `Done` — Gate S는 PR #16, Gate E 직접 증거 통합은 PR #21로 병합
 - **두 게이트 (2026-08-22 사람 제품 오너 결정 — [TASK-003](tasks/TASK-003.md) 머리말):**
   - **Gate S — 합성 vertical slice 기술 게이트.** 범위는 **§7과 §8**이다. 6초 로컬 합성
     fixture, 98-byte SRT 규약, 고정 FFmpeg build에서의 해시·크기, soft-sub mux와 subtitle
     추출, raw/canonical 검증, staging 서브셸 안전성, F-01~F-03 수정. **외부 저작물·계정·
     네트워크·모델·API에 의존하지 않으며, Gate E와 독립적이다.**
   - **Gate E — 외부 출처·코퍼스 검증 게이트.** M-03·M-05의 공식 1차 원문 **독립 검증**과
-    외부 코퍼스(CHiME-6·Sintel 등)의 실제 채택·다운로드·재배포가 여기에 속한다.
-    **별도 후속 작업으로 유예됐다.**
-- **1차 출처 확인 상태 (해소·승인·확정이 아니다):**
-  - **M-03** — **외부 검증에서 확인됐다고 보고됐고 Source Owner가 그 증거를 반영했다** (§3.6.2).
-    **독립 Reviewer가 원문을 직접 확인한 최종 판정이 아니다.** 공식 독립 검증은 **Gate E**다.
-  - **M-05** — **Durian sharing/about 1차 페이지 직접 확인 미완** (§3.2.1). 외부 검증에서도
-    본문을 열지 못했다. 공식 독립 검증은 **Gate E**다.
+    외부 코퍼스(CHiME-6·Sintel 등)의 실제 채택·다운로드·재배포 경계를 다룬다.
+    **M-03 증거와 Sintel 제외는 PR #21에서 검토·병합됐고, 실제 외부 코퍼스 채택은 U-06으로 남았다.**
+- **Gate E 최종 처분:**
+  - **M-03** — OpenSLR SLR150·연결 LICENSE와 공식 steward 근거를 직접 대조했고 PR #21 제한
+    재검토를 통과했다. 이 판정은 **SLR150 배포본에만 적용**하며 CHiME-6 채택 승인이 아니다.
+  - **M-05** — Durian sharing/about/download 본문을 직접 확인하지 못했으므로 **Sintel을 현재
+    후보에서 제외**했다. 원문 직접 검증이 가능한 별도 후속 작업이 승인될 때만 다시 연다.
 - **결정 경계:** U-31은 한국어(`ko`)로 해소됐고, U-06·U-07은 미해결이며 U-22는 보류됨(Deferred) 유지.
-  **Gate E 완료 전에는 CHiME-6를 채택·다운로드하지 않고, Sintel을 첫 합성 vertical slice에도
-  2차 acceptance에도 사용하지 않는다.**
+  **U-06 사람 선택 전에는 CHiME-6를 채택·다운로드하지 않는다. Sintel은 별도 후속 검증 승인 전까지
+  첫 합성 vertical slice와 2차 acceptance 모두에 사용하지 않는다.**
 
 이 문서는 [EVALS §2.5~2.6](EVALS.md)가 요구한 seed 코퍼스 조사와 첫 로컬 vertical slice용
 fixture 조사를 함께 기록한다. 두 용도를 섞지 않는다. 6초 합성 fixture는 컨테이너·자막·내보내기
