@@ -121,6 +121,21 @@ dev와 test에 나뉘어 들어가면 test는 이미 오염된 것입니다.
 - 오너에게는 **조사 결과를 놓고 고르는 결정**만 요청합니다 (U-06).
 - 조사 산출물: 후보별 `{ 이름, 언어, 규모, 정답 형식, 라이선스, 재배포 가능성, 비용, 위험 }`.
 
+#### 2.5.1 U-06 승인 계약
+
+사람 제품 오너는 TASK-003 결과를 바탕으로 다음 최소 조합을 승인했다.
+
+| 역할 | 선택 | 고정 범위 |
+|---|---|---|
+| 일본어 clean seed | [Common Voice Scripted Speech 26.0 Japanese](https://mozilladatacollective.com/datasets/cmqim4lxy00tunr07cjkcupeg) | dataset ID `cmqim4lxy00tunr07cjkcupeg`, 14.35 GB. local-only cache; 재호스팅·재공유·재식별 금지 |
+| 영어 seed | [LibriSpeech SLR12](https://www.openslr.org/12/) | `dev-clean`, `dev-other`, `test-clean`, `test-other` 4개 archive만. CC BY 4.0 고지 보존 |
+| 일본어↔영어 전환 | 위 두 seed의 source/speaker-disjoint 발화를 deterministic recipe로 합성 | 원본 분할을 넘나드는 재사용 금지; recipe·seed·source ID 기록 |
+| 자연 겹침 | CHiME-6 dev | cpWER 구현 시점까지 **유예**. 현재 다운로드 금지 |
+| 실제 코드스위칭 JECS | 제외 | 비상업·개인 사용 및 재배포 금지 조건이 장기 상업화 경계와 충돌 |
+
+이 승인은 **데이터 다운로드·계정 생성·저장소 포함을 승인하지 않는다.** 실제 확보 작업은 고정 archive,
+약관 snapshot, hash, local cache 경로, 삭제 rehearsal을 갖춘 별도 Gate H로 수행한다.
+
 ### 2.6 seed 코퍼스 요구사항
 
 | 요구 | 이유 |
@@ -131,7 +146,7 @@ dev와 test에 나뉘어 들어가면 test는 이미 오염된 것입니다.
 | 여러 화자·성별·연령 | 특정 음성에 과적합 방지 |
 | 겹치는 발화 정답이 화자별로 분리되어 있을 것 | cpWER의 전제 (§4.2) |
 | 원래 깨끗할 것 | 열화를 우리가 통제해야 함 |
-| 사용·재배포가 허용될 것 | 라이선스 (`AGENTS.md` §8) |
+| 사용이 허용되고 재배포 경계가 명확할 것 | 라이선스·서비스 약관 (`AGENTS.md` §8) |
 | 영상 트랙 포함 (일부) | 시각 도메인 평가에 필요 |
 
 ---
@@ -1144,7 +1159,7 @@ cue 누락률 / 허위율           __      __          [__, __]    ← §4.7(c)
 
 | ID | 미정 항목 |
 |---|---|
-| U-06 | seed 코퍼스 최종 선택 (조사는 에이전트, 승인은 사람 — §2.5) |
+| U-06 | **해소 — §2.5.1 조합을 제품 오너가 승인. 실제 다운로드는 별도 Gate H** |
 | U-07 | MVP 목표 수치 |
 | U-17 | 열화 프로파일이 실제 입력과 얼마나 비슷한가 |
 | U-18 | 언어별 CPS·줄 길이 임계값, `T_match`·`T_sync`·`T_sw` 확정값 |

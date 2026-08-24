@@ -7,7 +7,7 @@
 >   이 통합 작업에서 직접 열어 확인했다. 범위는 SLR150 배포본에 한정하며 PR #21 제한 재검토를 통과했다.
 > - M-05의 Durian sharing/about/download는 직접 요청이 모두 `402 Payment Required`였다.
 >   검색 스니펫을 원문 확인으로 승격하지 않고 **Sintel을 현재 후보에서 제외**한다.
-> - U-31은 TASK-025 / PR #19에서 한국어(`ko`)로 해소됐다. U-06·U-07은 미해결, U-22는 보류다.
+> - U-31은 한국어(`ko`)로 해소됐다. U-06은 TASK-026에서 seed 조합이 승인됐고, U-07은 미해결이며 U-22는 보류다.
 > - 외부 코퍼스 다운로드·채택·재배포는 0건이다.
 >
 > 이 박스가 상태 판정의 현재 기준이다. 아래의 `유예`, `미확인`, `U-31 미해결` 문구는
@@ -29,9 +29,9 @@
     재검토를 통과했다. 이 판정은 **SLR150 배포본에만 적용**하며 CHiME-6 채택 승인이 아니다.
   - **M-05** — Durian sharing/about/download 본문을 직접 확인하지 못했으므로 **Sintel을 현재
     후보에서 제외**했다. 원문 직접 검증이 가능한 별도 후속 작업이 승인될 때만 다시 연다.
-- **결정 경계:** U-31은 한국어(`ko`)로 해소됐고, U-06·U-07은 미해결이며 U-22는 보류됨(Deferred) 유지.
-  **U-06 사람 선택 전에는 CHiME-6를 채택·다운로드하지 않는다. Sintel은 별도 후속 검증 승인 전까지
-  첫 합성 vertical slice와 2차 acceptance 모두에 사용하지 않는다.**
+- **결정 경계:** U-31은 한국어(`ko`)로, U-06은 TASK-026의 seed 조합으로 해소됐다. U-07은 미해결이며 U-22는 보류됨(Deferred) 유지.
+  **실제 코퍼스 다운로드는 별도 Gate H 전까지 금지한다. CHiME-6 dev는 cpWER 구현 시점까지 유예하고,
+  Sintel은 별도 후속 검증 승인 전까지 사용하지 않는다.**
 
 이 문서는 [EVALS §2.5~2.6](EVALS.md)가 요구한 seed 코퍼스 조사와 첫 로컬 vertical slice용
 fixture 조사를 함께 기록한다. 두 용도를 섞지 않는다. 6초 합성 fixture는 컨테이너·자막·내보내기
@@ -54,8 +54,8 @@ fixture 조사를 함께 기록한다. 두 용도를 섞지 않는다. 6초 합�
 - 생성 바이너리는 저장소에 커밋하지 않고 매번 로컬에서 만든다.
 - ASR·번역·모델·공급자·API·downloader를 선택하지 않는다.
 
-이 권고는 **U-06 seed 코퍼스 최종 선택이 아니다.** U-06은 아래 외부 코퍼스 비교를 보고 사람 제품
-오너가 별도로 결정한다.
+이 합성 fixture는 외부 seed를 대체하지 않는다. U-06은 TASK-026에서 아래 최소 조합으로 해소됐으며,
+이 fixture는 배선 smoke 역할만 유지한다.
 
 **이 권고의 완료 조건이 곧 Gate S다.** 기계적 확인 기준은 **§8**에 있고, 그 사양·명령·실측은
 **§7**에 있다. Gate S는 **외부 자료·저작권·서비스 약관·계정·네트워크·모델·API에 의존하지 않으므로
@@ -64,16 +64,17 @@ M-03·M-05(Gate E)와 독립적으로 판정할 수 있다.** 아래 §1.2 이�
 
 ### 1.2 외부 후보의 역할 분리
 
-**아래 후보는 전부 Gate E의 대상이다.** 이 표의 "후보"는 조사 결과이지 채택이 아니며,
-**Gate E 완료 전에는 어느 것도 다운로드·채택·사용하지 않는다.**
+U-06은 아래 조합으로 승인됐다. 이 표는 **선택 계약**이며 실제 다운로드 승인이 아니다.
 
-| 역할 | 우선 검토 후보 | 이번 판정 |
+| 역할 | 선택 | 현재 판정 |
 |---|---|---|
-| 실제 영상 + 기존 SRT의 2차 acceptance | Sintel 공식 배포본 | **현재 후보에서 제외.** Durian 3개 원문 직접 요청이 402로 실패했다. 직접 검증 가능한 후속 작업이 승인될 때만 재등록한다 |
-| 영어 ASR 기준선 | LibriSpeech | **U-06 선택 후보 — Gate E 대상** — 명확한 CC BY 4.0, 영상 없음 |
-| 다국어 ASR 기준선 | Multilingual LibriSpeech (MLS) | **U-06 선택 후보 — Gate E 대상** — CC BY 4.0, 8개 언어, 매우 큼 |
-| 한국어·광범위 언어 ASR | Common Voice 26.0 | **조건부 후보 — Gate E 대상** — CC0와 별개로 MDC 재호스팅·재공유 금지 및 계정 약관 적용 |
-| 겹치는 발화·회의 음성 | CHiME-6 | **첫 fixture 제외 / seed 후보 유지.** SLR150의 CC BY-SA 4.0 표시와 LICENSE를 직접 확인했다. 독립 리뷰·U-06 결정·ShareAlike 검토 전에는 다운로드하지 않는다 |
+| 실제 영상 + 기존 SRT의 2차 acceptance | Sintel 공식 배포본 | **제외 유지.** 직접 검증 가능한 후속 작업이 승인될 때만 재등록 |
+| 일본어 clean seed | Common Voice Scripted Speech 26.0 Japanese | **선택.** dataset ID `cmqim4lxy00tunr07cjkcupeg`, 14.35 GB, local-only; 재호스팅·재공유·재식별 금지 |
+| 영어 seed | LibriSpeech | **선택.** `dev-clean`, `dev-other`, `test-clean`, `test-other`만 사용; CC BY 4.0 고지 보존 |
+| 일본어↔영어 전환 | 선택된 일본어·영어 seed의 deterministic 합성 | **선택.** source/speaker 분리, recipe·seed·source ID 기록 |
+| Multilingual LibriSpeech | MLS | **미선택.** 일본어 부재와 과도한 크기 때문에 현재 목적에 추가 가치가 낮음 |
+| 실제 일본어·영어 코드스위칭 | JECS | **제외.** 비상업·개인 사용 및 재배포 금지 조건이 장기 상업화 경계와 충돌 |
+| 겹치는 발화·회의 음성 | CHiME-6 dev | **유예.** cpWER 구현 시점에 ShareAlike·cache·삭제 rehearsal을 재확인한 뒤 별도 승인 |
 
 ## 2. 비교 기준
 
@@ -853,35 +854,30 @@ paste 직후 `$-`로 확인한 부모의 **`errexit`·`nounset`이 둘 다 OFF�
 모델·API·공급자 선택, hard-sub, 실제 iCloud API·동기화, GUI, 시각 재구성.
 이 중 하나라도 필요해지면 그것은 Gate S가 아니라 별도 후속 단계다.
 
-## 9. U-06 의사결정 카드
+## 9. U-06 결정 — 제품 오너 승인
 
-사람 제품 오너가 별도로 선택해야 할 질문은 다음과 같다.
-
-| 질문 | 선택지와 현재 근거 |
+| 역할 | 승인 결과 |
 |---|---|
-| 첫 배선 fixture | **합성 6초 권고.** 외부 권리·네트워크 없이 지금 실행 가능. **Gate S 대상이며 U-06과 무관하게 진행할 수 있다** |
-| 실제 미디어 2차 acceptance | **현재 없음.** Sintel은 M-05 원문 직접 검증 실패로 제외. 합성 fixture를 유지하고 필요하면 새 후보를 조사한다 |
-| 영어 ASR seed | LibriSpeech 채택 여부. 단순한 CC BY 4.0, 영어 read speech 한계 |
-| 다국어 ASR seed | MLS 또는 Common Voice. MLS는 크고 언어 제한, Common Voice는 MDC 약관상 local-only |
-| 겹치는 발화 seed | **CHiME-6가 현재 유일한 실질 후보다.** 직접 근거의 독립 리뷰, U-06 결정, ShareAlike 파생물 검토 전에는 다운로드하지 않는다 |
+| 첫 배선 fixture | 기존 6초 합성 fixture 유지 |
+| 일본어 seed | Common Voice Scripted Speech 26.0 Japanese 전체 package를 local-only source로 선택 |
+| 영어 seed | LibriSpeech dev/test 4개 archive 선택 |
+| 코드스위칭 | 선택 seed에서 source/speaker-disjoint deterministic 합성 |
+| 자연 겹침 | CHiME-6 dev는 cpWER 구현 시점까지 유예 |
+| 실제 코드스위칭 | JECS는 비상업 제한으로 제외 |
 
-TASK-003은 비교표와 권고를 제공할 뿐 U-06을 `해결됨`으로 바꾸지 않는다.
+**다운로드·계정 생성·재배포는 승인되지 않았다.** 실제 확보 시 archive URL·서비스 약관·hash를 다시
+고정하고 local cache만 사용한다. 데이터나 추출 clip을 저장소·artifact·PR에 올리지 않는다.
 
-> **이 카드의 어느 항목도 Gate S를 막지 않는다.** 첫 배선 fixture는 외부 코퍼스를 쓰지 않으므로
-> **U-06이 미해결인 채로 Gate S를 통과할 수 있다.** 반대로 **Gate S 통과는 이 카드의 어떤
-> 질문에도 답하지 않는다** — U-06 선택과 CHiME-6 채택은 그대로 남는다. Sintel은 현재 제외 상태이며,
-> 공식 원문을 직접 검증하는 별도 후속 작업이 승인될 때만 후보로 재등록할 수 있다.
-
-## 10. 미해결 유지와 다음 구현 인계
+## 10. 현재 결정과 다음 구현 인계
 
 | ID | 상태 | 이 조사에서 하지 않은 것 |
 |---|---|---|
-| U-06 | **미해결** | seed corpus 최종 선택·다운로드 없음 |
+| U-06 | **해소 — TASK-026** | seed 조합 선택 완료; 실제 다운로드는 별도 Gate H |
 | U-22 | **보류됨(Deferred) 유지** | ASR·번역·재구성 모델, 공급자, API, 실행 방식 선택 없음 |
 | U-31 | **해소 — 한국어(`ko`)** | TASK-025 / PR #19 결정 재사용; 모델·번역 구현 선택 없음 |
 | U-07 | **미해결** | 절대 품질 목표 수치 설정 없음 |
 
-**현재 경계:** U-31은 TASK-025 / PR #19에서 한국어(`ko`)로 해소됐다. U-06·U-07은 미해결이고 U-22는 보류다. 이 통합은 모델·공급자·서비스·API·downloader를 선택하지 않는다.
+**현재 경계:** U-31은 한국어(`ko`)로, U-06은 TASK-026 seed 조합으로 해소됐다. U-07은 미해결이고 U-22는 보류다. 모델·공급자·서비스·API·downloader는 선택하지 않았다.
 
 ### 10.1 실행 순서 — 좁은 예외 하나 (2026-08-22 사람 제품 오너 결정)
 
