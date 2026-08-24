@@ -16,10 +16,10 @@
 | Phase 0 | **완료 — `main`에 병합됨** (PR #1, 병합 SHA `d11b2450d324ac7f509741acc1ac591313876d30`) |
 | 기능 코드 | **있음** — TASK-022 CLI: local input → probe → SRT → soft-sub → verify → local staging export |
 | 런타임 / 의존성 | Python 3.12+ 표준 라이브러리와 FFmpeg/ffprobe. Python package 의존성·모델·CI·비밀정보 없음 |
-| 병합된 PR | **#1·#5·#16·#18·#19·#21·#22** — 각 merge commit은 §3에 기록; 현재 HEAD는 GitHub에서 조회 |
+| 병합된 PR | **#1·#5·#16·#18·#19·#21·#22·#23** — 각 merge commit은 §3에 기록; 현재 HEAD는 GitHub에서 조회 |
 | 열린 PR | **#6~#10·#12·#14·#15·#17** — Draft, 미병합 |
 | 미병합 종료 | **#2·#3·#4·#11** — #11은 TASK-024로 대체, branch·원문 보존 |
-| 운영 구조 | **전환됨** — GPT Work / Claude 주 세션 / 독립 Claude 리뷰 세션 / Claude 일반 대화 (`AGENTS.md` §3, ADR-0027) |
+| 운영 구조 | **TASK-027 결정** — 코드는 Claude Code, 비코드·검증·리뷰·승인 후 통합은 Lean Root (`AGENTS.md` §3, ADR-0028) |
 | 현재 작업 | **TASK-005** — 평가 하네스 설계 명세 |
 | U-31 | **답변됨 (2026-08-22)** — 번역 대상 언어 **한국어(`ko`)** |
 | 다음 실행 의존성 | **TASK-003 완료 · U-06 선택 완료.** TASK-005 착수 가능 |
@@ -77,6 +77,7 @@
 | [TASK-024](docs/tasks/TASK-024.md) | PR #16 병합 후 상태 정합성 정리 | Lean Root Orchestrator | 없음 — Gate L/M 상태 기록 | Phase 1a reconciliation | **Done** — PR #18 병합 |
 | [TASK-025](docs/tasks/TASK-025.md) | U-31 번역 대상 언어 한국어 확정 | Lean Root Orchestrator | 없음 — Gate M 제품 결정 전사 | Phase 1a translation contract | **Done** (PR #19) |
 | [TASK-026](docs/tasks/TASK-026.md) | U-06 seed 코퍼스 선택 계약 | 사람 제품 오너 결정 → Lean Root 기록 | 없음 — Gate M 결정 전사; 실제 다운로드는 별도 Gate H | Phase 1a evaluation data contract | **Done** — 제품 오너 승인 |
+| [TASK-027](docs/tasks/TASK-027.md) | Lean Root / Claude Code 운영 분업 계약 | 사람 제품 오너 결정 → Lean Root 기록 | 없음 — Gate M 운영 결정 전사 | Project operations | **Done** — 제품 오너 승인 |
 
 > Owner와 Reviewer는 절대 같을 수 없으며, **반드시 서로 다른 Claude Code 세션**입니다 (`AGENTS.md` §3.1, R8).
 > **작성자 세션은 자기 변경을 스스로 승인하지 않습니다.**
