@@ -3,8 +3,8 @@
 **"지금 무엇이 되어 있고, 누가 무엇을 들고 있는가."**
 새 세션을 시작하는 에이전트는 [`AGENTS.md`](AGENTS.md) 다음으로 이 파일을 봅니다 (`AGENTS.md` §0.2).
 
-마지막 갱신: 2026-08-22 (PR #19 병합 — U-31 한국어 계약 반영 완료)
-현재 단계: **Phase 1a** — 합성 media plumbing vertical slice 병합 완료; 일반 실행 순서는 **제안됨 유지**
+마지막 갱신: 2026-08-25 (TASK-005 — 평가 하네스 설계 검토)
+현재 단계: **Phase 1a** — TASK-005 평가 하네스 실행 계약 In review; 일반 실행 순서는 **제안됨 유지**
 
 ---
 
@@ -16,13 +16,13 @@
 | Phase 0 | **완료 — `main`에 병합됨** (PR #1, 병합 SHA `d11b2450d324ac7f509741acc1ac591313876d30`) |
 | 기능 코드 | **있음** — TASK-022 CLI: local input → probe → SRT → soft-sub → verify → local staging export |
 | 런타임 / 의존성 | Python 3.12+ 표준 라이브러리와 FFmpeg/ffprobe. Python package 의존성·모델·CI·비밀정보 없음 |
-| 병합된 PR | **#1·#5·#16·#18·#19·#21·#22·#23** — 각 merge commit은 §3에 기록; 현재 HEAD는 GitHub에서 조회 |
-| 열린 PR | **#6~#10·#12·#14·#15·#17** — Draft, 미병합 |
+| 병합된 PR | **#1·#5·#16·#18·#19·#21·#22·#23·#24** — 각 merge commit은 §3에 기록; 현재 HEAD는 GitHub에서 조회 |
+| 열린 PR | **#17만** — 과거 TASK-022 리뷰 기록 Draft, 현재 작업 차단 아님 |
 | 미병합 종료 | **#2·#3·#4·#11** — #11은 TASK-024로 대체, branch·원문 보존 |
 | 운영 구조 | **TASK-027 결정** — 코드는 Claude Code, 비코드·검증·리뷰·승인 후 통합은 Lean Root (`AGENTS.md` §3, ADR-0028) |
-| 현재 작업 | **TASK-005** — 평가 하네스 설계 명세 |
+| 현재 작업 | **TASK-005 — In review** — 평가 하네스 실행·실패·metric·fixture 계약 |
 | U-31 | **답변됨 (2026-08-22)** — 번역 대상 언어 **한국어(`ko`)** |
-| 다음 실행 의존성 | **TASK-003 완료 · U-06 선택 완료.** TASK-005 착수 가능 |
+| 다음 실행 의존성 | **TASK-005 검토·병합 후 TASK-006** `ReferenceBundle/v1` 구체화 |
 | U-08 | **답변됨 (2026-08-09)** — **채점 정답은 번역 자막** |
 | U-11 | **부분 답변됨 (2026-08-09)** — **약 2개월·품질 우선.** 정확한 제출 날짜는 **미확정** |
 | 차단 요인 | **TASK-005 제품 차단 없음.** 정밀 일정만 정확한 제출 날짜를 기다림 (§4·§5) |
@@ -65,6 +65,7 @@
 | TASK | 제목 | Owner | Reviewer | Phase | Status |
 |---|---|---|---|---|---|
 | [TASK-003](docs/tasks/TASK-003.md) | seed 코퍼스·라이선스·합성 fixture 조사 및 Gate E 증거 통합 | Claude Code 주 세션 → Lean Root 통합 | Gate S: TASK-021/REVIEW-012 승인; Gate E: PR #21 고정 HEAD 제한 재검토 통과 | Phase 1a seed corpus | **Done** — PR #21 병합 |
+| [TASK-005](docs/tasks/TASK-005.md) | 평가 하네스 설계 명세 | Lean Root Orchestrator | 없음 — Gate M 비코드 설계; 제품 오너가 PR diff 판단 | Phase 1a evaluation foundation | **In review** |
 | [TASK-012](docs/tasks/TASK-012.md) | Phase 1 계획 기준선 확립 | Claude Code 주 세션 | TASK-013~017 / REVIEW-005~009 (사람 오너의 예외 승인) | Phase 1 planning / 1a 진입 | **Done** — REVIEW-009 승인 후 PR #5 병합 (`10d34b4a4545f9ae8894c8038e7f1cc9a7706d61`) |
 | [TASK-013](docs/tasks/TASK-013.md) | TASK-012 고정 HEAD 독립 검토 | **이 독립 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 review | **In review** (판정: 변경 요청 — [REVIEW-005](docs/reviews/REVIEW-005.md)) |
 | [TASK-014](docs/tasks/TASK-014.md) | TASK-012 M-01·M-02 제한 재검토 | **REVIEW-005를 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 limited rereview | **In review** (M-01·M-02 부분 해소 · 판정: 변경 요청 — [REVIEW-006](docs/reviews/REVIEW-006.md)) |
@@ -79,8 +80,8 @@
 | [TASK-026](docs/tasks/TASK-026.md) | U-06 seed 코퍼스 선택 계약 | 사람 제품 오너 결정 → Lean Root 기록 | 없음 — Gate M 결정 전사; 실제 다운로드는 별도 Gate H | Phase 1a evaluation data contract | **Done** — 제품 오너 승인 |
 | [TASK-027](docs/tasks/TASK-027.md) | Lean Root / Claude Code 운영 분업 계약 | 사람 제품 오너 결정 → Lean Root 기록 | 없음 — Gate M 운영 결정 전사 | Project operations | **Done** — 제품 오너 승인 |
 
-> Owner와 Reviewer는 절대 같을 수 없으며, **반드시 서로 다른 Claude Code 세션**입니다 (`AGENTS.md` §3.1, R8).
-> **작성자 세션은 자기 변경을 스스로 승인하지 않습니다.**
+> 코드 변경은 Claude Code가 작성하고 Lean Root가 검증·리뷰합니다 (`AGENTS.md` §3.1, R8).
+> Gate H·S 독립 리뷰는 구현 세션과 분리하며, **작성자 세션은 자기 변경을 스스로 승인하지 않습니다.**
 > **Owner는 "수행 소유자"이며 구현자를 뜻하지 않습니다.** 리뷰 TASK의 Owner는 리뷰 수행자입니다.
 > 이 표와 `docs/tasks/TASK-XXX.md`가 다르면 **TASK 파일이 정답**입니다.
 
@@ -220,6 +221,21 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 - M-03 근거는 OpenSLR SLR150 배포본 범위로 제한하고, 직접 검증하지 못한 M-05는 Sintel 후보 제외로 닫았다.
 - TASK-003은 `Done`이다. U-06은 TASK-026에서 해소됐으며 외부 코퍼스 다운로드·재배포는 아직 없다.
 
+### 3.15 TASK-003 상태 정합성 병합 (PR #22)
+
+- PR #22는 TASK-003·조사 문서·STATUS를 `Done`으로 맞췄고 merge commit은 `52b2ea92b0f913326c99efc1777026641a294663`이다.
+- 코드·의존성·CI·외부 데이터 변경은 없었다.
+
+### 3.16 U-06 seed 코퍼스 계약 병합 (TASK-026 / PR #23)
+
+- 사람 제품 오너가 선택 조합과 local-only·재배포 경계를 승인했고 merge commit은 `a42bcf504e51707ea26aa5e84ba7edf31a10ad04`이다.
+- 실제 외부 데이터 다운로드·cache 생성은 별도 Gate H이며 아직 수행하지 않았다.
+
+### 3.17 현재 운영 분업 계약 병합 (TASK-027 / PR #24)
+
+- 모든 코드 변경은 Claude Code가 작성하고 Lean Root가 비코드 작업·검증·리뷰·승인 후 통합을 맡는다.
+- 사람 제품 오너 승인 후 일반 merge했으며 현재 `main` merge commit은 `176a6f106940e02e2c1d88c5fc372a4b2269d441`이다.
+
 ---
 
 ## 4. 다음 작업
@@ -228,7 +244,7 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 
 | TASK | 내용 | Owner |
 |---|---|---|
-| **TASK-005** | **평가 하네스 설계 명세** — 원문 ASR 축과 한국어 번역 축, 지표·실패 상태·필수 fixture 계약 확정 | Lean Root Orchestrator (비코드 설계) |
+| **TASK-005 — In review** | **평가 하네스 설계 명세** — 원문 ASR 축과 한국어 번역 축, 지표·실패 상태·필수 fixture 계약 확정 | Lean Root Orchestrator (비코드 설계) |
 
 > **판정과 반영 상태는 서로 다른 사실입니다. 섞지 마십시오.**
 >
@@ -255,20 +271,20 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 > TASK-012와 PR #5는 완료·병합됐지만, `docs/DECISIONS.md`에서 **제안됨**인 ADR과
 > 아래 실행 순서를 자동 승인한 것으로 해석하지 않습니다. 사람 제품 오너의 별도 승인 전까지
 > 결정 상태는 **제안됨**입니다. TASK-022/PR #16은 별도로 승인된 합성 plumbing 예외이며,
-> 일반 ASR·번역·외부 코퍼스 구현 승인이 아닙니다. TASK-003은 선행 조건 없이 계속 진행할 수 있습니다.
+> 일반 ASR·번역·외부 코퍼스 구현 승인이 아닙니다. TASK-003과 U-06 선택은 완료됐습니다.
 
 | 노드 | 내용 | **선행 (PLAN.md §3-1d와 동일)** | U-31 상태 |
 |---|---|---|---|
 | **U-31** | 번역 대상 언어 | 없음 | **완료 — 한국어(`ko`)** |
 | **TASK-003** | seed 코퍼스·라이선스·합성 데이터 대안 조사 + 비교표 작성 | 없음 | **완료** |
 | **(사람) U-06 선택** | Common Voice 26 일본어 + LibriSpeech dev/test, 합성 코드스위칭; CHiME-6 유예 | TASK-003 결과 | **완료 — TASK-026** |
-| **TASK-005** | 평가 하네스 설계 명세 (Phase 1a) | **TASK-003 · U-06 선택 (둘 모두)** | **차단 해제** |
-| **TASK-006** | `ReferenceBundle/v1` 구체화 | **TASK-005** | 차단 해제 |
-| 코드 구현 | — | TASK-006까지 완료 | 차단 해제 |
+| **TASK-005** | 평가 하네스 설계 명세 (Phase 1a) | TASK-003 · U-06 선택 | **In review** |
+| **TASK-006** | `ReferenceBundle/v1` 구체화 | **TASK-005** | 대기 |
+| 코드 구현 | — | TASK-006까지 완료 | 대기 |
 
-> **다음 실행 작업은 TASK-005 평가 하네스 설계 명세입니다.** TASK-003과 U-06이 완료되어
-> 선행 차단은 해제됐습니다. U-31도 더 이상 어떤 단계도 막지 않습니다.
-> **TASK-006은 TASK-005 뒤입니다.** 병행 가능 여부는 검증되지 않아 직렬로 둡니다 (PLAN §3-1d).
+> **TASK-005 평가 하네스 설계는 In review입니다.** TASK-003·U-06·U-31 선행 차단은 없습니다.
+> 제품 오너 승인과 병합 뒤 **TASK-006 `ReferenceBundle/v1` 구체화**로 진행합니다.
+> 병행 가능 여부는 검증되지 않아 직렬로 둡니다 (PLAN §3-1d).
 > **TASK-003·005·006은 예약된 번호이며 의미를 바꾸지 않았습니다.**
 > **일반 Phase 1 구현은 위 순서가 끝나기 전에 시작하지 않습니다.** PR #16은 승인된 좁은 합성 예외입니다.
 
