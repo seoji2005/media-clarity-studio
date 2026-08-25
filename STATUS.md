@@ -17,7 +17,7 @@
 | 기능 코드 | **있음** — TASK-022 CLI: local input → probe → SRT → soft-sub → verify → local staging export |
 | 런타임 / 의존성 | Python 3.12+ 표준 라이브러리와 FFmpeg/ffprobe. Python package 의존성·모델·CI·비밀정보 없음 |
 | 병합된 PR | **#1·#5·#16·#18·#19·#21·#22·#23·#24** — 각 merge commit은 §3에 기록; 현재 HEAD는 GitHub에서 조회 |
-| 열린 PR | **#17만** — 과거 TASK-022 리뷰 기록 Draft, 현재 작업 차단 아님 |
+| 열린 PR | **#6~#10·#12·#14·#15·#17** — 과거 작업·리뷰 Draft, 현재 TASK-005 차단 아님 |
 | 미병합 종료 | **#2·#3·#4·#11** — #11은 TASK-024로 대체, branch·원문 보존 |
 | 운영 구조 | **TASK-027 결정** — 코드는 Claude Code, 비코드·검증·리뷰·승인 후 통합은 Lean Root (`AGENTS.md` §3, ADR-0028) |
 | 현재 작업 | **TASK-005 — In review** — 평가 하네스 실행·실패·metric·fixture 계약 |
