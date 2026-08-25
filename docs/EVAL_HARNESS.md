@@ -1,6 +1,6 @@
 # EVAL_HARNESS.md — Phase 1a 평가 하네스 실행 계약
 
-상태: **TASK-005 설계안 — In review**
+상태: **TASK-005 완료 — PR #25 병합**
 
 이 문서는 [EVALS.md](EVALS.md)의 지표 계산 규약을 실제 실행 단위로 묶는 계약이다.
 지표 알고리즘 자체는 EVALS가 정답이며, 이 문서는 입력 검증·실행 상태·필수 metric plan·artifact·
