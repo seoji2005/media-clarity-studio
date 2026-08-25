@@ -6,7 +6,7 @@
 | **Owner** | Lean Root Orchestrator |
 | **Reviewer** | 없음 — Gate M 비코드 설계. 제품 오너가 PR diff 판단; TASK-006 schema와 구현은 고정 HEAD 검토 |
 | **Phase** | Phase 1a / evaluation foundation |
-| **Status** | In review |
+| **Status** | **Done — PR #25 병합** |
 | **기준 main** | 176a6f106940e02e2c1d88c5fc372a4b2269d441 |
 | **선행 조건** | TASK-003 Done, U-06 TASK-026에서 해소, U-31=ko |
 
@@ -73,4 +73,8 @@ ASR/번역 모델 선택, U-07·U-18·U-19·U-26·U-27 수치 확정.
 
 ## 완료 증거
 
-고정 HEAD, 변경 파일 목록, 문서 검사 결과, 제품 오너 승인 및 PR 상태.
+- 승인된 고정 HEAD: `19e5084b344c6d0e19d18f5785facd91086eda04`
+- PR #25: 사람 제품 오너 승인 후 일반 merge
+- `main` merge commit: `744c84e684f56662cc0e324d7de32df0fb66db47`
+- Markdown 5개만 변경; 코드·테스트·의존성·CI·외부 데이터 변경 0
+- 병합 후 `main`의 5개 blob이 승인본과 일치
