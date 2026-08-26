@@ -61,6 +61,22 @@
 
 두 도메인이 함께 쓰는 기본 자료형입니다. **모든 공통 계약은 `schema_version`을 가집니다.**
 
+**기계 검증 형태는 저장소의 실제 JSON Schema 파일입니다** (TASK-006). 아래 의사코드와
+schema 파일이 다르면 **schema 파일이 정답**입니다.
+
+| 계약 | schema 파일 |
+|---|---|
+| `ArtifactRef/v1` · `Timebase/v1` · `TimeMapping/v1` · `MetricResult/v1` | [`schemas/common-v1.schema.json`](../schemas/common-v1.schema.json) |
+| `ReferenceBundle/v1` | [`schemas/reference-bundle-v1.schema.json`](../schemas/reference-bundle-v1.schema.json) |
+| `EvalRunManifest/v1` | [`schemas/eval-run-manifest-v1.schema.json`](../schemas/eval-run-manifest-v1.schema.json) |
+| `EvalReport/v1` | [`schemas/eval-report-v1.schema.json`](../schemas/eval-report-v1.schema.json) |
+| `EvalEvent/v1` (`events.jsonl`) | [`schemas/eval-event-v1.schema.json`](../schemas/eval-event-v1.schema.json) |
+| `PerSourceMetricRecord/v1` (`per_source.jsonl`) | [`schemas/per-source-metric-record-v1.schema.json`](../schemas/per-source-metric-record-v1.schema.json) |
+| `HumanReviewRecord/v1` (`human_review.jsonl`) | [`schemas/human-review-record-v1.schema.json`](../schemas/human-review-record-v1.schema.json) |
+
+> `RegionMask/v1`(§2.4)은 Phase 2 시각 도메인 계약이며 TASK-006 범위에 포함되지 않았습니다.
+> schema 파일은 아직 없습니다.
+
 ### 2.1 `ArtifactRef/v1` — 산출물 참조
 
 파일 경로를 직접 주고받지 않습니다. 모든 산출물은 `ArtifactRef`로 참조됩니다.
@@ -746,7 +762,10 @@ EvalReport/v1:
                        # 번역 자막 축 (EVALS §4.7). 현재 제품 target_language="ko"
   metrics            : { 지표명 -> { value, ci_low?, ci_high?, n, status } }
                        # 축이 없는 지표(시각 도메인 등)
-                       # status: "computed" | "unsupported" | "insufficient_n"
+                       # status: "computed" | "unsupported" | "insufficient_n" | "failed"
+                       #   (네 값 — EVAL_HARNESS §4. "failed"는 metric 실행 자체가
+                       #    실패한 경우이며, unsupported·insufficient_n과 마찬가지로
+                       #    value를 쓰지 않고 reason을 남깁니다)
   per_condition[]    : { condition_id, severity, metrics }
   per_stratum[]      : { stratum_key, metrics }
   paired_comparison? : { baseline_run_id, deltas{}, ci{}, n_pairs,

@@ -1,0 +1,259 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.media-clarity-studio.invalid/common-v1.schema.json",
+  "title": "media-clarity-studio common contracts v1",
+  "description": "ARCHITECTURE.md §2 공통 계약의 기계 검증 형태. $id는 안정적인 식별자이며 네트워크에서 가져오는 주소가 아니다(.invalid, RFC 2606). $ref는 같은 디렉터리의 파일 이름으로 해석한다.",
+  "type": "object",
+  "$defs": {
+    "schema_version": {
+      "description": "이 계약 묶음의 버전. major가 다르면 산출물을 비교하지 않는다.",
+      "const": "1.0.0"
+    },
+    "identifier": {
+      "description": "저장소 안에서 안전하게 쓰는 식별자. 경로 구분자와 공백을 허용하지 않는다.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "timestamp": {
+      "description": "RFC 3339 UTC. 오프셋 표기 없이 Z만 허용한다.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"
+    },
+    "content_hash": {
+      "description": "sha256:<64 lowercase hex>. content/fingerprint 양쪽에 같은 형식을 쓴다.",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "seconds": {
+      "description": "정준 단위는 항상 초(ARCHITECTURE §2.2). 음수는 허용하지 않는다.",
+      "type": "number",
+      "minimum": 0
+    },
+    "time_range": {
+      "description": "반개구간 [start_seconds, end_seconds). end > start >= 0은 validator가 E_TIME_RANGE로 강제한다.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_seconds", "end_seconds"],
+      "properties": {
+        "start_seconds": { "$ref": "#/$defs/seconds" },
+        "end_seconds": { "$ref": "#/$defs/seconds" }
+      }
+    },
+    "run_output_path": {
+      "description": "run 산출물의 portable relative path. 절대 경로·Windows drive/UNC·.. traversal 거부는 validator가 E_ARTIFACT_PATH로 강제한다. ArtifactRef.uri에는 이 제한을 적용하지 않는다.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "reference_axis": {
+      "description": "정답 축(ARCHITECTURE §3.0.1). 두 축을 하나의 숫자로 합치지 않는다.",
+      "enum": ["source", "target"]
+    },
+    "metric_axis": {
+      "description": "지표가 붙는 축. axisless는 시각 도메인 등 축이 없는 지표.",
+      "enum": ["source", "target", "axisless"]
+    },
+    "metric_status": {
+      "description": "EVAL_HARNESS §4. unsupported·insufficient_n·failed는 0점이 아니다.",
+      "enum": ["computed", "unsupported", "insufficient_n", "failed"]
+    },
+    "run_status": {
+      "description": "EVAL_HARNESS §4 실행 상태.",
+      "enum": [
+        "planned",
+        "invalid",
+        "running",
+        "completed",
+        "partial",
+        "failed",
+        "aborted"
+      ]
+    },
+    "split": {
+      "enum": ["dev", "test"]
+    },
+    "ArtifactRef": {
+      "description": "ARCHITECTURE §2.1. uri는 외부 입력 URI도 표현할 수 있는 불투명 문자열이다.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "artifact_id",
+        "kind",
+        "uri",
+        "content_hash",
+        "byte_size",
+        "media_type",
+        "produced_by",
+        "created_at",
+        "parent_refs",
+        "is_estimate"
+      ],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "artifact_id": { "$ref": "#/$defs/identifier" },
+        "kind": {
+          "enum": [
+            "audio",
+            "video",
+            "frames",
+            "text",
+            "mask",
+            "subtitle",
+            "report",
+            "reference_bundle",
+            "blob"
+          ]
+        },
+        "uri": {
+          "description": "불투명 문자열. 외부 매체 URI를 표현할 수 있으므로 run 산출물 경로 제한을 적용하지 않는다.",
+          "type": "string",
+          "minLength": 1
+        },
+        "content_hash": { "$ref": "#/$defs/content_hash" },
+        "byte_size": { "type": "integer", "minimum": 0 },
+        "media_type": { "type": "string", "minLength": 1 },
+        "timebase_ref": { "$ref": "#/$defs/identifier" },
+        "produced_by": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["stage_id", "job_id"],
+          "properties": {
+            "stage_id": { "$ref": "#/$defs/identifier" },
+            "job_id": { "$ref": "#/$defs/identifier" },
+            "adapter_id": { "$ref": "#/$defs/identifier" },
+            "adapter_version": { "type": "string", "minLength": 1 }
+          }
+        },
+        "created_at": { "$ref": "#/$defs/timestamp" },
+        "parent_refs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "is_estimate": { "type": "boolean" }
+      }
+    },
+    "Timebase": {
+      "description": "ARCHITECTURE §2.2 정준 시간축.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "timebase_id",
+        "domain",
+        "origin_artifact",
+        "unit",
+        "rate_num",
+        "rate_den",
+        "start_offset_seconds",
+        "is_variable_rate"
+      ],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "timebase_id": { "$ref": "#/$defs/identifier" },
+        "domain": { "enum": ["source", "degraded", "output"] },
+        "origin_artifact": { "$ref": "#/$defs/identifier" },
+        "unit": { "const": "seconds" },
+        "rate_num": { "type": "integer", "minimum": 1 },
+        "rate_den": { "type": "integer", "minimum": 1 },
+        "start_offset_seconds": { "type": "number", "minimum": 0 },
+        "is_variable_rate": { "type": "boolean" },
+        "frame_index_base": { "enum": [0, 1] }
+      }
+    },
+    "TimeMappingSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_start", "from_end", "to_start", "to_end", "scale"],
+      "properties": {
+        "from_start": { "$ref": "#/$defs/seconds" },
+        "from_end": { "$ref": "#/$defs/seconds" },
+        "to_start": { "$ref": "#/$defs/seconds" },
+        "to_end": { "$ref": "#/$defs/seconds" },
+        "scale": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "TimeMapping": {
+      "description": "ARCHITECTURE §2.3. inserted_spans는 to_timebase 기준 반개구간이다.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "from_timebase",
+        "to_timebase",
+        "method",
+        "is_monotonic",
+        "is_invertible",
+        "segments",
+        "inserted_spans",
+        "dropped_spans"
+      ],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "from_timebase": { "$ref": "#/$defs/identifier" },
+        "to_timebase": { "$ref": "#/$defs/identifier" },
+        "method": {
+          "enum": ["identity", "piecewise_linear", "step", "explicit_pairs"]
+        },
+        "is_monotonic": { "type": "boolean" },
+        "is_invertible": { "type": "boolean" },
+        "segments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/TimeMappingSegment" }
+        },
+        "inserted_spans": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["to_start", "to_end", "kind"],
+            "properties": {
+              "to_start": { "$ref": "#/$defs/seconds" },
+              "to_end": { "$ref": "#/$defs/seconds" },
+              "kind": { "enum": ["silence", "duplicate", "other"] }
+            }
+          }
+        },
+        "dropped_spans": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["from_start", "from_end"],
+            "properties": {
+              "from_start": { "$ref": "#/$defs/seconds" },
+              "from_end": { "$ref": "#/$defs/seconds" }
+            }
+          }
+        }
+      }
+    },
+    "MetricResult": {
+      "description": "status와 value/reason/n의 관계는 validator가 E_METRIC_VALUE_FORBIDDEN / E_METRIC_VALUE_REQUIRED로 강제한다. schema만으로 닫으면 두 코드를 구분할 수 없다.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "metric_id", "status"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "metric_id": { "$ref": "#/$defs/identifier" },
+        "status": { "$ref": "#/$defs/metric_status" },
+        "value": {
+          "description": "status=computed일 때만 허용되며 finite여야 한다. NaN/Infinity는 JSON 파싱 단계에서 거부한다.",
+          "type": "number"
+        },
+        "reason": {
+          "description": "unsupported·insufficient_n·failed의 안정 사유 문자열.",
+          "type": "string",
+          "minLength": 1
+        },
+        "n": { "type": "integer", "minimum": 0 },
+        "ci_low": { "type": "number" },
+        "ci_high": { "type": "number" },
+        "unit": { "type": "string", "minLength": 1 },
+        "normalization_version": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

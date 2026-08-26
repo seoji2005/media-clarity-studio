@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.media-clarity-studio.invalid/reference-bundle-v1.schema.json",
+  "title": "ReferenceBundle/v1",
+  "description": "ARCHITECTURE.md §3 정답 계약. 축 분리(X-1~X-5)와 부분 번들 허용은 validator의 의미 불변식이 함께 강제한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bundle_id",
+    "source_media",
+    "source_timebase",
+    "provenance",
+    "completeness",
+    "known_limitations",
+    "speaker_streams",
+    "reference_cues",
+    "speech_mask",
+    "language_spans"
+  ],
+  "properties": {
+    "schema_version": { "$ref": "common-v1.schema.json#/$defs/schema_version" },
+    "bundle_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "source_media": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" },
+    "source_timebase": { "$ref": "common-v1.schema.json#/$defs/Timebase" },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "license_id", "consent_status", "curated_by", "curated_at"],
+      "properties": {
+        "origin": { "type": "string", "minLength": 1 },
+        "license_id": { "type": "string", "minLength": 1 },
+        "consent_status": {
+          "enum": ["not_applicable", "recorded", "unknown"]
+        },
+        "curated_by": { "type": "string", "minLength": 1 },
+        "curated_at": { "$ref": "common-v1.schema.json#/$defs/timestamp" }
+      }
+    },
+    "completeness": {
+      "description": "어떤 지표를 계산할 수 있는지 결정한다(ARCHITECTURE §3.1). 누락은 unsupported이지 0점이 아니다.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "has_source_axis_reference",
+        "has_target_axis_reference",
+        "has_speaker_streams",
+        "has_speech_mask",
+        "has_language_spans",
+        "has_visual_reference"
+      ],
+      "properties": {
+        "has_source_axis_reference": { "type": "boolean" },
+        "has_target_axis_reference": { "type": "boolean" },
+        "has_speaker_streams": { "type": "boolean" },
+        "has_speech_mask": { "type": "boolean" },
+        "has_language_spans": { "type": "boolean" },
+        "has_visual_reference": { "type": "boolean" }
+      }
+    },
+    "known_limitations": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "target_language": {
+      "description": "번역 축 대상 언어. target-axis cue가 있으면 정확히 ko여야 한다(X-5). validator가 E_TARGET_LANGUAGE로 강제한다.",
+      "type": "string",
+      "minLength": 1
+    },
+    "speaker_streams": {
+      "description": "언제나 원문 축이다(X-2). 화자 중첩 표현을 위해 화자별로 독립 배열을 둔다. 빈 배열도 유효하다.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["speaker_id", "utterances", "is_complete"],
+        "properties": {
+          "speaker_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+          "is_complete": { "type": "boolean" },
+          "utterances": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["utterance_id", "start_seconds", "end_seconds", "text"],
+              "properties": {
+                "utterance_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+                "start_seconds": { "$ref": "common-v1.schema.json#/$defs/seconds" },
+                "end_seconds": { "$ref": "common-v1.schema.json#/$defs/seconds" },
+                "text": { "type": "string" },
+                "language": {
+                  "description": "파생 편의 필드. 정답은 language_spans[]다(§3.0).",
+                  "type": "string",
+                  "minLength": 1
+                },
+                "timebase_ref": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "reference_cues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "cue_id",
+          "start_seconds",
+          "end_seconds",
+          "lines",
+          "reference_axis"
+        ],
+        "properties": {
+          "cue_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+          "start_seconds": { "$ref": "common-v1.schema.json#/$defs/seconds" },
+          "end_seconds": { "$ref": "common-v1.schema.json#/$defs/seconds" },
+          "lines": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string" }
+          },
+          "reference_axis": { "$ref": "common-v1.schema.json#/$defs/reference_axis" },
+          "language": {
+            "description": "파생 편의 필드. 정답은 language_spans[]다(§3.0).",
+            "type": "string",
+            "minLength": 1
+          },
+          "speaker_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+          "timebase_ref": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+        }
+      }
+    },
+    "speech_mask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["segments", "overlap_spans"],
+      "properties": {
+        "timebase_ref": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+        "segments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["start_seconds", "end_seconds", "kind"],
+            "properties": {
+              "start_seconds": { "$ref": "common-v1.schema.json#/$defs/seconds" },
+              "end_seconds": { "$ref": "common-v1.schema.json#/$defs/seconds" },
+              "kind": {
+                "enum": ["speech", "silence", "non_speech_audio", "unknown"]
+              }
+            }
+          }
+        },
+        "overlap_spans": {
+          "description": "화자 중첩 구간. single-stream 가정을 강제하지 않는다.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["start_seconds", "end_seconds", "speaker_ids"],
+            "properties": {
+              "start_seconds": { "$ref": "common-v1.schema.json#/$defs/seconds" },
+              "end_seconds": { "$ref": "common-v1.schema.json#/$defs/seconds" },
+              "speaker_ids": {
+                "type": "array",
+                "minItems": 2,
+                "items": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "language_spans": {
+      "description": "언어 귀속의 authoritative source(§3.0).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["start_seconds", "end_seconds", "language", "switch_kind"],
+        "properties": {
+          "start_seconds": { "$ref": "common-v1.schema.json#/$defs/seconds" },
+          "end_seconds": { "$ref": "common-v1.schema.json#/$defs/seconds" },
+          "language": { "type": "string", "minLength": 1 },
+          "speaker_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+          "switch_kind": {
+            "enum": ["inter_sentential", "intra_sentential", "unknown"]
+          }
+        }
+      }
+    },
+    "clean_video": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" },
+    "visual_masks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["recipe_id", "degradation_kind", "severity"],
+        "properties": {
+          "recipe_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+          "degradation_kind": {
+            "enum": [
+              "blur",
+              "mosaic",
+              "low_resolution",
+              "compression",
+              "sensor_noise",
+              "unknown"
+            ]
+          },
+          "severity": { "type": "integer", "minimum": 0, "maximum": 5 }
+        }
+      }
+    },
+    "degraded_media": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" },
+    "degraded_timebase": { "$ref": "common-v1.schema.json#/$defs/Timebase" },
+    "time_mapping": { "$ref": "common-v1.schema.json#/$defs/TimeMapping" }
+  }
+}

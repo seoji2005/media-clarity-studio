@@ -3,12 +3,17 @@
 ## 상태
 
 - **위험 등급:** Gate H — 데이터 구조·파일 형식·재개 계약
-- **상태:** Contract proposed
-- **기준선:** `main@400622760643d5216c9e86046d3e4c5a3370dcac`
+- **상태:** **Implemented — awaiting fixed HEAD review**
+- **계약 기준선:** `main@400622760643d5216c9e86046d3e4c5a3370dcac`
+- **구현 기준선:** `main@5a6b25d870514433c579be6858de8c23fbd33dfc` (PR #27 병합 후)
+- **구현 브랜치:** `claude/task-006-eval-contracts`
 - **선행:** [TASK-005](TASK-005.md) Done
 - **구현 Owner:** Claude Code 구현 세션
 - **검증·리뷰:** Lean Root Orchestrator, 구현 세션과 분리된 고정 HEAD 검토
 - **통합:** 사람 제품 오너의 명시적 승인 뒤에만 수행
+
+> **구현 세션은 자기 변경을 승인하지 않았고 `Done`으로 전이하지 않았습니다** (`AGENTS.md` R8 / §3.1).
+> `Done`은 Lean Root의 고정 HEAD Gate H 검토와 사람 제품 오너의 병합 뒤에만 도달합니다 (§10).
 
 ## 1. 목표
 
@@ -278,3 +283,47 @@ git status --short
 - 병합 뒤 `main` 재검증과 STATUS 정합성
 
 코드를 작성했거나 테스트를 추가했다는 보고만으로 완료하지 않는다.
+
+## 11. 구현 기록 (Claude Code 구현 세션)
+
+**상태: `Implemented — awaiting fixed HEAD review`.** 아래는 구현 세션의 주장이며 검증이 아니다.
+판정은 Lean Root가 고정 HEAD에서 직접 재현한다 (`AGENTS.md` R10 / §3.5).
+
+### 11.1 산출물
+
+| 파일 | 내용 |
+|---|---|
+| `schemas/*.schema.json` (7개) | Draft 2020-12, 안정 `$id`, `schema_version` `1.0.0` 고정, production 객체 `additionalProperties: false`. 공통 정의는 상대 `$ref`로 재사용 |
+| `src/media_clarity/eval_contracts.py` | 실제 schema 파일을 읽어 검사하는 부분집합 validator + 교차 문서·시간축·재개 불변식 + fixture runner |
+| `tests/test_eval_contracts.py` | 계약 unit·mutation test |
+| `tests/fixtures/eval_contracts/h-01.json` … `h-14.json` | H-01~H-14 |
+| `Makefile` | `fixtures-task-006` · `test-task-006` · `verify-task-006` |
+| `docs/ARCHITECTURE.md` | §2에 실제 schema 경로 표 추가, §7.6 metric status에 `failed` 추가 |
+
+### 11.2 오류 코드
+
+TASK-006 §3.6의 10개를 모두 제공하고, 계약을 기계로 거부하기 위해 다음을 추가했다:
+`E_JSON` · `E_SHARD_DUPLICATE` · `E_METRIC_VALUE_REQUIRED` · `E_METRIC_CAPABILITY` ·
+`E_AGGREGATE_FORBIDDEN` · `E_ARTIFACT_PATH` · `E_REFERENCE_ID` · `E_SILENCE_ATTRIBUTION` ·
+`E_DOCUMENT_LINK`. 메시지 문구가 아니라 코드와 위반 위치가 계약이다.
+
+### 11.3 명시적 한계 (과장하지 않는다)
+
+- **Draft 2020-12 전체 구현이 아니다.** `SUPPORTED_KEYWORDS`에 나열한 부분집합만 검사하고,
+  그 밖의 keyword가 schema에 나타나면 데이터 오류가 아니라 **계약 결함**(`SchemaContractError`)으로
+  중단한다. 외부 JSON Schema 구현체의 meta-validation을 수행하지 않았다.
+- `pattern`은 ECMA-262가 아니라 Python `re`로 해석한다. schema에는 두 문법에서 뜻이 같은
+  표현만 썼다.
+- **미정값을 채우지 않았다.** U-07·U-18·U-19·U-26·U-27, norm-v1 규칙 내용, threshold,
+  모델·공급자·API는 결정하지 않았다. `paired_observation`의 허용 값에 `promote`가 없는 것은
+  의도적이다.
+- 실제 ASR·번역·지표 계산은 구현하지 않았다 (§1).
+
+### 11.4 실행한 검증
+
+```bash
+make verify-task-006     # fixture runner + 계약 test + 기존 전체 verify
+make verify              # static + 기존 unit + 실제 FFmpeg smoke
+git diff --check
+git status --short
+```

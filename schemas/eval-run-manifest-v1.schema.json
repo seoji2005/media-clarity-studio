@@ -1,0 +1,261 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.media-clarity-studio.invalid/eval-run-manifest-v1.schema.json",
+  "title": "EvalRunManifest/v1",
+  "description": "EVAL_HARNESS.md §3~§4·§9. split 누수·축 불일치·paired 표본 불일치·resume 불일치는 validator가 안정 코드로 거부한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "created_at",
+    "split",
+    "dataset",
+    "split_evidence",
+    "reference_bundles",
+    "hypotheses",
+    "metric_plan",
+    "config_hash",
+    "fingerprints",
+    "artifacts"
+  ],
+  "properties": {
+    "schema_version": { "$ref": "common-v1.schema.json#/$defs/schema_version" },
+    "run_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "created_at": { "$ref": "common-v1.schema.json#/$defs/timestamp" },
+    "split": { "$ref": "common-v1.schema.json#/$defs/split" },
+    "seeds": {
+      "type": "array",
+      "items": { "type": "integer" }
+    },
+    "reproducibility_tier": { "enum": ["T1", "T2", "T3"] },
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dataset_id", "dataset_hash", "sample_ids", "source_ids", "speaker_ids"],
+      "properties": {
+        "dataset_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+        "dataset_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+        "sample_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+        },
+        "source_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+        },
+        "speaker_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+        }
+      }
+    },
+    "split_evidence": {
+      "description": "dev/test 분할 증거. 교집합이 하나라도 있으면 E_SPLIT_LEAKAGE다(EVALS §2.2).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dev_source_ids", "test_source_ids", "dev_speaker_ids", "test_speaker_ids"],
+      "properties": {
+        "dev_source_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+        },
+        "test_source_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+        },
+        "dev_speaker_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+        },
+        "test_speaker_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+        }
+      }
+    },
+    "reference_bundles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["bundle_id", "content_hash", "available_axes"],
+        "properties": {
+          "bundle_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+          "content_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+          "available_axes": {
+            "description": "이 번들이 실제로 제공하는 정답 축.",
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "$ref": "common-v1.schema.json#/$defs/reference_axis" }
+          }
+        }
+      }
+    },
+    "hypotheses": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["hypothesis_id", "content_hash", "reference_axis", "role"],
+        "properties": {
+          "hypothesis_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+          "content_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+          "reference_axis": { "$ref": "common-v1.schema.json#/$defs/reference_axis" },
+          "target_language": {
+            "description": "reference_axis=target이면 정확히 ko여야 한다(X-5).",
+            "type": "string",
+            "minLength": 1
+          },
+          "role": { "enum": ["primary", "baseline", "candidate"] },
+          "supports_overlap_streams": { "type": "boolean" },
+          "sample_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+          }
+        }
+      }
+    },
+    "metric_plan": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["metric_id", "axis", "required", "implementation_version"],
+        "properties": {
+          "metric_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+          "axis": { "$ref": "common-v1.schema.json#/$defs/metric_axis" },
+          "required": { "type": "boolean" },
+          "implementation_version": { "type": "string", "minLength": 1 },
+          "normalization_version": {
+            "description": "norm-v1 버전. 규칙이 없으면 해당 지표는 unsupported이며 0점이 아니다(U-19 미정).",
+            "type": "string",
+            "minLength": 1
+          },
+          "needs_reference_axis": { "$ref": "common-v1.schema.json#/$defs/reference_axis" }
+        }
+      }
+    },
+    "config_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+    "fingerprints": {
+      "description": "resume 재사용은 이 다섯 값이 모두 같을 때만 허용한다(EVAL_HARNESS §4).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dataset", "reference", "hypothesis", "metric_plan", "config"],
+      "properties": {
+        "dataset": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+        "reference": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+        "hypothesis": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+        "metric_plan": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+        "config": { "$ref": "common-v1.schema.json#/$defs/content_hash" }
+      }
+    },
+    "paired_comparison": {
+      "description": "baseline과 candidate는 같은 표본에서 실행한다(EVAL_HARNESS §2-5).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseline_hypothesis_id", "candidate_hypothesis_id", "baseline_sample_ids", "candidate_sample_ids"],
+      "properties": {
+        "baseline_hypothesis_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+        "candidate_hypothesis_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+        "baseline_sample_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+        },
+        "candidate_sample_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+        }
+      }
+    },
+    "resume": {
+      "description": "재개 요청. fingerprint·버전·완료 shard hash가 하나라도 다르면 기존 run에 이어 쓰지 않는다.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "previous_run_id",
+        "previous_fingerprints",
+        "previous_metric_implementation_versions",
+        "completed_shards"
+      ],
+      "properties": {
+        "previous_run_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+        "previous_fingerprints": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["dataset", "reference", "hypothesis", "metric_plan", "config"],
+          "properties": {
+            "dataset": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+            "reference": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+            "hypothesis": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+            "metric_plan": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+            "config": { "$ref": "common-v1.schema.json#/$defs/content_hash" }
+          }
+        },
+        "previous_metric_implementation_versions": {
+          "type": "object",
+          "patternProperties": {
+            "^[A-Za-z0-9][A-Za-z0-9._:-]*$": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        },
+        "completed_shards": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["shard_id", "content_hash"],
+            "properties": {
+              "shard_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+              "content_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" }
+            }
+          }
+        }
+      }
+    },
+    "artifacts": {
+      "description": "EVAL_HARNESS §9 경로. 전부 portable relative path여야 한다(E_ARTIFACT_PATH).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "output_root",
+        "manifest_path",
+        "report_partial_path",
+        "report_path",
+        "report_md_path",
+        "per_source_path",
+        "events_path",
+        "human_review_path"
+      ],
+      "properties": {
+        "output_root": { "$ref": "common-v1.schema.json#/$defs/run_output_path" },
+        "manifest_path": { "$ref": "common-v1.schema.json#/$defs/run_output_path" },
+        "report_partial_path": { "$ref": "common-v1.schema.json#/$defs/run_output_path" },
+        "report_path": { "$ref": "common-v1.schema.json#/$defs/run_output_path" },
+        "report_md_path": { "$ref": "common-v1.schema.json#/$defs/run_output_path" },
+        "per_source_path": { "$ref": "common-v1.schema.json#/$defs/run_output_path" },
+        "events_path": { "$ref": "common-v1.schema.json#/$defs/run_output_path" },
+        "human_review_path": { "$ref": "common-v1.schema.json#/$defs/run_output_path" }
+      }
+    }
+  }
+}

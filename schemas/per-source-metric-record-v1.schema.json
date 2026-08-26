@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.media-clarity-studio.invalid/per-source-metric-record-v1.schema.json",
+  "title": "PerSourceMetricRecord/v1",
+  "description": "per_source.jsonl 한 줄. source-cluster 통계에 필요한 최소 수치만 담고 원본 미디어·사용자 텍스트를 복제하지 않는다(EVAL_HARNESS.md §9).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "sample_id", "source_id", "axis", "result"],
+  "properties": {
+    "schema_version": { "$ref": "common-v1.schema.json#/$defs/schema_version" },
+    "run_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "sample_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "source_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "speaker_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "axis": { "$ref": "common-v1.schema.json#/$defs/metric_axis" },
+    "shard_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "stratum_key": { "type": "string", "minLength": 1 },
+    "result": { "$ref": "common-v1.schema.json#/$defs/MetricResult" }
+  }
+}
