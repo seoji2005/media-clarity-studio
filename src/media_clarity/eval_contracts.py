@@ -19,6 +19,7 @@ Python `re`로 해석하므로, schema에는 두 문법에서 뜻이 같은 표�
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import math
 import re
@@ -71,8 +72,14 @@ SUPPORTED_KEYWORDS = frozenset(
         "minLength",
         "maxLength",
         "pattern",
+        # 프로젝트 확장 annotation. JSON Schema 표준 keyword가 아니며, 이 validator가
+        # 값에 따라 stdlib 의미 검사를 추가로 수행한다 (현재 "utc_timestamp" 하나).
+        "x-mcs-semantic",
     }
 )
+
+#: `x-mcs-semantic`으로 요청할 수 있는 의미 검사.
+SEMANTIC_CHECKS = frozenset({"utc_timestamp"})
 
 TARGET_LANGUAGE = "ko"
 
@@ -108,6 +115,7 @@ _WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:")
 ERROR_CODES = (
     "E_JSON",
     "E_SCHEMA",
+    "E_TIMESTAMP",
     "E_TARGET_LANGUAGE",
     "E_AXIS_MISMATCH",
     "E_SPLIT_LEAKAGE",
@@ -115,6 +123,9 @@ ERROR_CODES = (
     "E_SHARD_DUPLICATE",
     "E_PAIRED_SAMPLE_SET",
     "E_FINAL_STATUS",
+    "E_REQUIRED_METRIC",
+    "E_METRIC_PLAN_DUPLICATE",
+    "E_METRIC_ID_MISMATCH",
     "E_METRIC_VALUE_FORBIDDEN",
     "E_METRIC_VALUE_REQUIRED",
     "E_METRIC_CAPABILITY",
@@ -241,6 +252,13 @@ class SchemaSet:
                         f"{child}: 지원하지 않는 JSON Schema keyword {key!r}. "
                         "이 validator는 SUPPORTED_KEYWORDS 부분집합만 검사한다."
                     )
+                if key == "x-mcs-semantic":
+                    if value not in SEMANTIC_CHECKS:
+                        raise SchemaContractError(
+                            f"{child}: 알 수 없는 x-mcs-semantic 값 {value!r}. "
+                            f"지원: {', '.join(sorted(SEMANTIC_CHECKS))}"
+                        )
+                    continue
                 if key in {"enum", "const", "required"}:
                     continue
                 self._assert_supported(value, child)
@@ -372,6 +390,13 @@ class SchemaValidator:
         pattern = schema.get("pattern")
         if pattern is not None and re.search(pattern, instance) is None:
             self._fail(findings, location, f"pattern 불일치: {pattern}")
+            return
+        if schema.get("x-mcs-semantic") == "utc_timestamp":
+            reason = utc_timestamp_error(instance)
+            if reason is not None:
+                findings.append(
+                    Finding(location, "E_TIMESTAMP", f"RFC 3339 UTC timestamp가 아니다: {reason}")
+                )
 
     def _check_number(
         self, instance: float, schema: Mapping[str, Any], location: str, findings: list[Finding]
@@ -453,6 +478,47 @@ class SchemaValidator:
 
 
 # ---------------------------------------------------------------------------
+# 의미 검사 — schema pattern이 모양만 고정하는 값의 실제 유효성
+# ---------------------------------------------------------------------------
+
+_TIMESTAMP_RE = re.compile(
+    r"^(?P<y>[0-9]{4})-(?P<mo>[0-9]{2})-(?P<d>[0-9]{2})"
+    r"T(?P<h>[0-9]{2}):(?P<mi>[0-9]{2}):(?P<s>[0-9]{2})(?:\.[0-9]+)?Z$"
+)
+
+
+def utc_timestamp_error(value: Any) -> str | None:
+    """실제 달력·시각으로 성립하지 않는 UTC timestamp의 사유. 성립하면 None.
+
+    schema의 `pattern`은 모양만 고정하므로 `2026-99-99T99:99:99Z`가 통과한다
+    (REVIEW-014 R-01). 여기서 stdlib `datetime`으로 월별 일수와 윤년, 시·분·초
+    범위를 실제로 검사한다. 외부 dependency를 쓰지 않는다.
+
+    **경계:** RFC 3339가 허용하는 윤초(`:60`)는 `datetime`이 표현하지 못하므로
+    거부한다. 이 프로젝트의 timestamp는 윤초를 쓰지 않는다.
+    """
+
+    if not isinstance(value, str):
+        return "문자열이 아니다"
+    match = _TIMESTAMP_RE.match(value)
+    if match is None:
+        return "Z로 끝나는 RFC 3339 UTC 형식이 아니다"
+    try:
+        datetime.datetime(
+            int(match.group("y")),
+            int(match.group("mo")),
+            int(match.group("d")),
+            int(match.group("h")),
+            int(match.group("mi")),
+            int(match.group("s")),
+            tzinfo=datetime.timezone.utc,
+        )
+    except ValueError as exc:
+        return str(exc)
+    return None
+
+
+# ---------------------------------------------------------------------------
 # 경로 규칙 — run 산출물만 portable relative path로 제한한다.
 # ---------------------------------------------------------------------------
 
@@ -507,17 +573,49 @@ LIST_DOCUMENTS = frozenset(
 )
 
 
-def _iter_documents(documents: Mapping[str, Any]) -> Iterable[tuple[str, str, Any]]:
-    """(schema 파일, 위치, 인스턴스) 순회. 위치는 결정적 순서로 만든다."""
+def check_document_containers(documents: Mapping[str, Any]) -> list[Finding]:
+    """알려진 document key의 container type을 강제한다.
 
+    잘못된 container를 조용히 건너뛰면 `reference_bundles = {}` 같은 입력이
+    아무 검사도 받지 않고 통과한다 (REVIEW-014 M-04).
+    """
+
+    findings: list[Finding] = []
     for key in sorted(documents):
-        schema_file = DOCUMENT_SCHEMA.get(key)
-        if schema_file is None:
+        if key not in DOCUMENT_SCHEMA:
             continue
         value = documents[key]
         if key in LIST_DOCUMENTS:
             if not isinstance(value, list):
-                continue
+                findings.append(
+                    Finding(
+                        key,
+                        "E_SCHEMA",
+                        f"{key}는 배열이어야 한다 ({type(value).__name__} 발견)",
+                    )
+                )
+        elif not isinstance(value, dict):
+            findings.append(
+                Finding(
+                    key,
+                    "E_SCHEMA",
+                    f"{key}는 객체여야 한다 ({type(value).__name__} 발견)",
+                )
+            )
+    return findings
+
+
+def _iter_documents(
+    documents: Mapping[str, Any], skip: frozenset[str] = frozenset()
+) -> Iterable[tuple[str, str, Any]]:
+    """(schema 파일, 위치, 인스턴스) 순회. 위치는 결정적 순서로 만든다."""
+
+    for key in sorted(documents):
+        schema_file = DOCUMENT_SCHEMA.get(key)
+        if schema_file is None or key in skip:
+            continue
+        value = documents[key]
+        if key in LIST_DOCUMENTS:
             for index, item in enumerate(value):
                 yield schema_file, f"{key}/{index}", item
         else:
@@ -650,7 +748,113 @@ def check_reference_bundle(bundle: Any, location: str) -> list[Finding]:
                         )
                     )
 
+    findings.extend(_check_bundle_reference_ids(bundle, location))
     findings.extend(_check_time_mapping(bundle, location))
+    return findings
+
+
+def _bundle_timebase_ids(bundle: Mapping[str, Any]) -> set[str]:
+    ids: set[str] = set()
+    for key in ("source_timebase", "degraded_timebase"):
+        node = bundle.get(key)
+        if isinstance(node, dict) and isinstance(node.get("timebase_id"), str):
+            ids.add(node["timebase_id"])
+    return ids
+
+
+def _check_bundle_reference_ids(bundle: Mapping[str, Any], location: str) -> list[Finding]:
+    """artifact·timebase 참조 무결성 (TASK-006 §3.3 불변식 4, REVIEW-014 M-01).
+
+    speaker ID만 확인하면 `timebase_ref = "tb-ghost"`나 존재하지 않는
+    `origin_artifact`가 그대로 통과한다.
+    """
+
+    findings: list[Finding] = []
+    artifact_ids: set[str] = set()
+    for key in ("source_media", "degraded_media", "clean_video"):
+        node = bundle.get(key)
+        if isinstance(node, dict) and isinstance(node.get("artifact_id"), str):
+            artifact_ids.add(node["artifact_id"])
+    timebase_ids = _bundle_timebase_ids(bundle)
+
+    def require_timebase(value: Any, where: str) -> None:
+        if isinstance(value, str) and value not in timebase_ids:
+            findings.append(
+                Finding(
+                    where,
+                    "E_REFERENCE_ID",
+                    f"존재하지 않는 timebase_id: {value!r} "
+                    f"(bundle의 timebase: {', '.join(sorted(timebase_ids)) or '없음'})",
+                )
+            )
+
+    def require_artifact(value: Any, where: str) -> None:
+        if isinstance(value, str) and value not in artifact_ids:
+            findings.append(
+                Finding(
+                    where,
+                    "E_REFERENCE_ID",
+                    f"존재하지 않는 artifact_id: {value!r} "
+                    f"(bundle의 artifact: {', '.join(sorted(artifact_ids)) or '없음'})",
+                )
+            )
+
+    # timebase는 자기 origin artifact와 실제로 연결되어야 한다.
+    media_of_timebase = {
+        "source_timebase": "source_media",
+        "degraded_timebase": "degraded_media",
+    }
+    for timebase_key, media_key in media_of_timebase.items():
+        timebase = bundle.get(timebase_key)
+        if not isinstance(timebase, dict):
+            continue
+        origin = timebase.get("origin_artifact")
+        origin_location = f"{location}/{timebase_key}/origin_artifact"
+        require_artifact(origin, origin_location)
+        media = bundle.get(media_key)
+        if not isinstance(media, dict):
+            findings.append(
+                Finding(
+                    f"{location}/{media_key}",
+                    "E_REFERENCE_ID",
+                    f"{timebase_key}가 있는데 {media_key}가 없다",
+                )
+            )
+        elif origin != media.get("artifact_id"):
+            findings.append(
+                Finding(
+                    origin_location,
+                    "E_REFERENCE_ID",
+                    f"{timebase_key}.origin_artifact가 {media_key}.artifact_id"
+                    f"({media.get('artifact_id')!r})와 다르다",
+                )
+            )
+
+    for key in ("source_media", "degraded_media", "clean_video"):
+        node = bundle.get(key)
+        if isinstance(node, dict):
+            require_timebase(node.get("timebase_ref"), f"{location}/{key}/timebase_ref")
+
+    for index, stream in enumerate(bundle.get("speaker_streams") or []):
+        if not isinstance(stream, dict):
+            continue
+        for u_index, utterance in enumerate(stream.get("utterances") or []):
+            if isinstance(utterance, dict):
+                require_timebase(
+                    utterance.get("timebase_ref"),
+                    f"{location}/speaker_streams/{index}/utterances/{u_index}/timebase_ref",
+                )
+
+    for index, cue in enumerate(bundle.get("reference_cues") or []):
+        if isinstance(cue, dict):
+            require_timebase(
+                cue.get("timebase_ref"), f"{location}/reference_cues/{index}/timebase_ref"
+            )
+
+    mask = bundle.get("speech_mask")
+    if isinstance(mask, dict):
+        require_timebase(mask.get("timebase_ref"), f"{location}/speech_mask/timebase_ref")
+
     return findings
 
 
@@ -674,6 +878,21 @@ def _check_time_mapping(bundle: Mapping[str, Any], location: str) -> list[Findin
         return findings
 
     map_location = f"{location}/time_mapping"
+
+    # from/to는 이 bundle에 실제로 존재하는 timebase를 가리켜야 한다 (REVIEW-014 M-01).
+    timebase_ids = _bundle_timebase_ids(bundle)
+    for key in ("from_timebase", "to_timebase"):
+        value = mapping.get(key)
+        if isinstance(value, str) and value not in timebase_ids:
+            findings.append(
+                Finding(
+                    f"{map_location}/{key}",
+                    "E_REFERENCE_ID",
+                    f"존재하지 않는 timebase_id: {value!r} "
+                    f"(bundle의 timebase: {', '.join(sorted(timebase_ids)) or '없음'})",
+                )
+            )
+
     if isinstance(source_timebase, dict):
         source_id = source_timebase.get("timebase_id")
         if mapping.get("from_timebase") != source_id:
@@ -754,10 +973,47 @@ def _check_time_mapping(bundle: Mapping[str, Any], location: str) -> list[Findin
     return findings
 
 
+def _metric_plan_versions(manifest: Mapping[str, Any]) -> dict[tuple[str, str], tuple[Any, Any]]:
+    """(axis, metric_id) -> (implementation_version, normalization_version)."""
+
+    versions: dict[tuple[str, str], tuple[Any, Any]] = {}
+    for entry in manifest.get("metric_plan") or []:
+        if not isinstance(entry, dict):
+            continue
+        axis = entry.get("axis")
+        metric_id = entry.get("metric_id")
+        if isinstance(axis, str) and isinstance(metric_id, str):
+            versions.setdefault(
+                (axis, metric_id),
+                (entry.get("implementation_version"), entry.get("normalization_version")),
+            )
+    return versions
+
+
 def check_manifest(manifest: Any, location: str) -> list[Finding]:
     findings: list[Finding] = []
     if not isinstance(manifest, dict):
         return findings
+
+    # metric plan의 (axis, metric_id)는 유일해야 한다. 중복이면 어느 버전이
+    # 유효한지 결정할 수 없다 (REVIEW-014 M-03).
+    seen_plan_keys: set[tuple[str, str]] = set()
+    for index, entry in enumerate(manifest.get("metric_plan") or []):
+        if not isinstance(entry, dict):
+            continue
+        axis = entry.get("axis")
+        metric_id = entry.get("metric_id")
+        if not isinstance(axis, str) or not isinstance(metric_id, str):
+            continue
+        if (axis, metric_id) in seen_plan_keys:
+            findings.append(
+                Finding(
+                    f"{location}/metric_plan/{index}",
+                    "E_METRIC_PLAN_DUPLICATE",
+                    f"({axis}, {metric_id})가 metric plan에 두 번 나온다",
+                )
+            )
+        seen_plan_keys.add((axis, metric_id))
 
     evidence = manifest.get("split_evidence")
     if isinstance(evidence, dict):
@@ -773,6 +1029,7 @@ def check_manifest(manifest: Any, location: str) -> list[Finding]:
                         f"dev/test {kind} 교집합: {', '.join(shared)}",
                     )
                 )
+        findings.extend(_check_split_evidence_covers_dataset(manifest, evidence, location))
 
     available_axes: set[str] = set()
     for bundle in manifest.get("reference_bundles") or []:
@@ -819,22 +1076,133 @@ def check_manifest(manifest: Any, location: str) -> list[Finding]:
                 )
             )
 
+    findings.extend(_check_paired_comparison(manifest, location))
+    findings.extend(_check_resume(manifest, location))
+    findings.extend(_check_artifact_paths(manifest, location))
+    return findings
+
+
+def _check_split_evidence_covers_dataset(
+    manifest: Mapping[str, Any], evidence: Mapping[str, Any], location: str
+) -> list[Finding]:
+    """split evidence가 실제 dataset을 증명하는지 (REVIEW-014 M-04).
+
+    dataset과 무관한 ID로 evidence를 채우면 dev/test 교집합이 비어 있어도
+    분할을 증명하지 못한다.
+    """
+
+    findings: list[Finding] = []
+    split = manifest.get("split")
+    if split not in {"dev", "test"}:
+        return findings
+    other = "test" if split == "dev" else "dev"
+    dataset = manifest.get("dataset")
+    if not isinstance(dataset, dict):
+        return findings
+
+    for kind in ("source", "speaker"):
+        declared = set(dataset.get(f"{kind}_ids") or [])
+        if not declared:
+            continue
+        own = set(evidence.get(f"{split}_{kind}_ids") or [])
+        opposite = set(evidence.get(f"{other}_{kind}_ids") or [])
+        missing = sorted(declared - own)
+        if missing:
+            findings.append(
+                Finding(
+                    f"{location}/split_evidence/{split}_{kind}_ids",
+                    "E_DOCUMENT_LINK",
+                    f"dataset의 {kind} ID가 {split} evidence에 없다: {', '.join(missing)}",
+                )
+            )
+        crossed = sorted(declared & opposite)
+        if crossed:
+            findings.append(
+                Finding(
+                    f"{location}/split_evidence/{other}_{kind}_ids",
+                    "E_SPLIT_LEAKAGE",
+                    f"split={split}인데 dataset의 {kind} ID가 {other} evidence에도 있다: "
+                    f"{', '.join(crossed)}",
+                )
+            )
+    return findings
+
+
+def _check_paired_comparison(manifest: Mapping[str, Any], location: str) -> list[Finding]:
+    """paired comparison이 실제 hypothesis·dataset과 연결되는지 (REVIEW-014 M-04)."""
+
+    findings: list[Finding] = []
     paired = manifest.get("paired_comparison")
-    if isinstance(paired, dict):
-        baseline = paired.get("baseline_sample_ids")
-        candidate = paired.get("candidate_sample_ids")
-        if isinstance(baseline, list) and isinstance(candidate, list):
-            if set(baseline) != set(candidate):
+    if not isinstance(paired, dict):
+        return findings
+    paired_location = f"{location}/paired_comparison"
+
+    hypotheses = {
+        entry.get("hypothesis_id"): entry
+        for entry in manifest.get("hypotheses") or []
+        if isinstance(entry, dict) and isinstance(entry.get("hypothesis_id"), str)
+    }
+    dataset = manifest.get("dataset")
+    dataset_samples = (
+        set(dataset.get("sample_ids") or []) if isinstance(dataset, dict) else set()
+    )
+
+    baseline_ids = paired.get("baseline_sample_ids")
+    candidate_ids = paired.get("candidate_sample_ids")
+    if isinstance(baseline_ids, list) and isinstance(candidate_ids, list):
+        if set(baseline_ids) != set(candidate_ids):
+            findings.append(
+                Finding(
+                    f"{paired_location}/candidate_sample_ids",
+                    "E_PAIRED_SAMPLE_SET",
+                    "baseline과 candidate의 표본 집합이 다르다",
+                )
+            )
+
+    for role in ("baseline", "candidate"):
+        hypothesis_id = paired.get(f"{role}_hypothesis_id")
+        samples = paired.get(f"{role}_sample_ids")
+        id_location = f"{paired_location}/{role}_hypothesis_id"
+        sample_location = f"{paired_location}/{role}_sample_ids"
+
+        hypothesis = hypotheses.get(hypothesis_id)
+        if hypothesis is None:
+            findings.append(
+                Finding(
+                    id_location,
+                    "E_DOCUMENT_LINK",
+                    f"manifest hypotheses에 없는 {role} 가설: {hypothesis_id!r}",
+                )
+            )
+        elif hypothesis.get("role") != role:
+            findings.append(
+                Finding(
+                    id_location,
+                    "E_DOCUMENT_LINK",
+                    f"{hypothesis_id!r}의 role이 {hypothesis.get('role')!r}인데 "
+                    f"{role}로 지정됐다",
+                )
+            )
+        elif isinstance(samples, list) and isinstance(hypothesis.get("sample_ids"), list):
+            if set(samples) != set(hypothesis["sample_ids"]):
                 findings.append(
                     Finding(
-                        f"{location}/paired_comparison/candidate_sample_ids",
+                        sample_location,
                         "E_PAIRED_SAMPLE_SET",
-                        "baseline과 candidate의 표본 집합이 다르다",
+                        f"{role} 표본 집합이 가설 {hypothesis_id!r}의 sample_ids와 다르다",
                     )
                 )
 
-    findings.extend(_check_resume(manifest, location))
-    findings.extend(_check_artifact_paths(manifest, location))
+        if isinstance(samples, list) and dataset_samples:
+            outside = sorted(set(samples) - dataset_samples)
+            if outside:
+                findings.append(
+                    Finding(
+                        sample_location,
+                        "E_PAIRED_SAMPLE_SET",
+                        f"dataset sample 집합 밖의 {role} 표본: {', '.join(outside)}",
+                    )
+                )
     return findings
 
 
@@ -858,21 +1226,76 @@ def _check_resume(manifest: Mapping[str, Any], location: str) -> list[Finding]:
                     )
                 )
 
-    planned_versions: dict[str, Any] = {}
-    for entry in manifest.get("metric_plan") or []:
-        if isinstance(entry, dict) and isinstance(entry.get("metric_id"), str):
-            planned_versions.setdefault(entry["metric_id"], entry.get("implementation_version"))
-    previous_versions = resume.get("previous_metric_implementation_versions")
-    if isinstance(previous_versions, dict):
-        for metric_id in sorted(set(planned_versions) | set(previous_versions)):
-            if planned_versions.get(metric_id) != previous_versions.get(metric_id):
-                findings.append(
-                    Finding(
-                        f"{resume_location}/previous_metric_implementation_versions/{metric_id}",
-                        "E_RESUME_FINGERPRINT",
-                        f"metric {metric_id} 구현 버전 불일치 — 기존 run에 이어 쓰지 않는다",
-                    )
+    # 버전 비교는 (axis, metric_id) 단위다. metric_id만으로 묶으면 source와 target의
+    # 같은 지표를 구분하지 못한다 (REVIEW-014 M-03).
+    planned_versions = _metric_plan_versions(manifest)
+    previous_versions: dict[tuple[str, str], tuple[Any, Any]] = {}
+    for index, entry in enumerate(resume.get("previous_metric_versions") or []):
+        if not isinstance(entry, dict):
+            continue
+        axis = entry.get("axis")
+        metric_id = entry.get("metric_id")
+        if not isinstance(axis, str) or not isinstance(metric_id, str):
+            continue
+        key = (axis, metric_id)
+        if key in previous_versions:
+            findings.append(
+                Finding(
+                    f"{resume_location}/previous_metric_versions/{index}",
+                    "E_METRIC_PLAN_DUPLICATE",
+                    f"이전 버전 목록에 ({axis}, {metric_id})가 두 번 나온다",
                 )
+            )
+            continue
+        previous_versions[key] = (
+            entry.get("implementation_version"),
+            entry.get("normalization_version"),
+        )
+
+    for key in sorted(set(planned_versions) | set(previous_versions)):
+        axis, metric_id = key
+        where = f"{resume_location}/previous_metric_versions/{axis}/{metric_id}"
+        current_entry = planned_versions.get(key)
+        previous_entry = previous_versions.get(key)
+        if current_entry is None:
+            findings.append(
+                Finding(
+                    where,
+                    "E_RESUME_FINGERPRINT",
+                    f"현재 metric plan에 없는 ({axis}, {metric_id})가 이전 버전 목록에 있다",
+                )
+            )
+            continue
+        if previous_entry is None:
+            findings.append(
+                Finding(
+                    where,
+                    "E_RESUME_FINGERPRINT",
+                    f"({axis}, {metric_id})의 이전 버전 기록이 없다 — 기존 run에 이어 쓰지 않는다",
+                )
+            )
+            continue
+        current_impl, current_norm = current_entry
+        previous_impl, previous_norm = previous_entry
+        if current_impl != previous_impl:
+            findings.append(
+                Finding(
+                    where,
+                    "E_RESUME_FINGERPRINT",
+                    f"({axis}, {metric_id}) implementation_version 불일치: "
+                    f"이전 {previous_impl!r} vs 현재 {current_impl!r}",
+                )
+            )
+        # normalization version은 존재 여부까지 비교한다. 한쪽에만 있으면 불일치다.
+        if current_norm != previous_norm:
+            findings.append(
+                Finding(
+                    where,
+                    "E_RESUME_FINGERPRINT",
+                    f"({axis}, {metric_id}) normalization_version 불일치: "
+                    f"이전 {previous_norm!r} vs 현재 {current_norm!r}",
+                )
+            )
 
     shards = resume.get("completed_shards")
     if isinstance(shards, list):
@@ -946,17 +1369,37 @@ def check_report(report: Any, location: str) -> list[Finding]:
     if not isinstance(report, dict):
         return findings
 
-    # final artifact는 completed일 때만 허용한다.
-    if report.get("document_kind") == "final" and report.get("run_status") != "completed":
+    # completed ↔ final은 양방향이다 (REVIEW-014 M-02).
+    kind = report.get("document_kind")
+    status = report.get("run_status")
+    if kind == "final" and status != "completed":
         findings.append(
             Finding(
                 f"{location}/document_kind",
                 "E_FINAL_STATUS",
-                f"run_status={report.get('run_status')!r}인 실행을 final report로 선언했다",
+                f"run_status={status!r}인 실행을 final report로 선언했다",
+            )
+        )
+    if status == "completed" and kind != "final":
+        findings.append(
+            Finding(
+                f"{location}/document_kind",
+                "E_FINAL_STATUS",
+                f"run_status=completed인 실행의 document_kind가 {kind!r}다 (final이어야 한다)",
             )
         )
 
     for axis, metric_id, metric_location, result in _iter_metric_results(report, location):
+        # map의 key가 지표의 정체다. 내부 metric_id가 다르면 저장 위치를 신뢰할 수 없다.
+        inner_id = result.get("metric_id")
+        if isinstance(inner_id, str) and inner_id != metric_id:
+            findings.append(
+                Finding(
+                    f"{metric_location}/metric_id",
+                    "E_METRIC_ID_MISMATCH",
+                    f"map key {metric_id!r}와 MetricResult.metric_id {inner_id!r}가 다르다",
+                )
+            )
         if metric_id.lower() in FORBIDDEN_AGGREGATE_NAMES:
             findings.append(
                 Finding(
@@ -1067,6 +1510,7 @@ def check_cross_document(documents: Mapping[str, Any]) -> list[Finding]:
 
     if manifest_is_dict and report_is_dict:
         findings.extend(_check_metric_axis_placement(manifest, report))
+        findings.extend(_check_required_metrics(manifest, report))
         findings.extend(_check_capability_unsupported(manifest, report, bundles))
 
     findings.extend(_check_silence_attribution(bundles, report if report_is_dict else None))
@@ -1097,6 +1541,83 @@ def _check_metric_axis_placement(
                     f"{metric_id}의 계획 축은 {sorted(allowed)}인데 {axis!r} 칸에 담겼다",
                 )
             )
+    return findings
+
+
+def _check_required_metrics(
+    manifest: Mapping[str, Any], report: Mapping[str, Any]
+) -> list[Finding]:
+    """completed 실행의 required metric 완료 조건 (EVAL_HARNESS §4, REVIEW-014 M-02).
+
+    completed는 required metric이 **전부 computed**이거나, metric plan이
+    `allow_insufficient_n: true`로 **사전 허용한** insufficient_n일 때뿐이다.
+    누락·`failed`·예상 밖 `unsupported`는 completed를 거부한다.
+    """
+
+    findings: list[Finding] = []
+    if report.get("run_status") != "completed":
+        return findings
+
+    buckets: dict[str, Mapping[str, Any]] = {}
+    by_axis = report.get("metrics_by_axis")
+    if isinstance(by_axis, dict):
+        for axis in ("source", "target"):
+            bucket = by_axis.get(axis)
+            buckets[axis] = bucket if isinstance(bucket, dict) else {}
+    axisless = report.get("metrics")
+    buckets["axisless"] = axisless if isinstance(axisless, dict) else {}
+
+    seen: set[tuple[str, str]] = set()
+    for entry in manifest.get("metric_plan") or []:
+        if not isinstance(entry, dict) or entry.get("required") is not True:
+            continue
+        axis = entry.get("axis")
+        metric_id = entry.get("metric_id")
+        if not isinstance(axis, str) or not isinstance(metric_id, str):
+            continue
+        if (axis, metric_id) in seen:
+            continue
+        seen.add((axis, metric_id))
+
+        where = (
+            f"eval_report/metrics/{metric_id}"
+            if axis == "axisless"
+            else f"eval_report/metrics_by_axis/{axis}/{metric_id}"
+        )
+        result = buckets.get(axis, {}).get(metric_id)
+        if not isinstance(result, dict):
+            findings.append(
+                Finding(
+                    where,
+                    "E_REQUIRED_METRIC",
+                    f"completed 실행인데 required 지표 ({axis}, {metric_id})가 report에 없다",
+                )
+            )
+            continue
+
+        status = result.get("status")
+        if status == "computed":
+            continue
+        if status == "insufficient_n":
+            if entry.get("allow_insufficient_n") is True:
+                continue
+            findings.append(
+                Finding(
+                    where,
+                    "E_REQUIRED_METRIC",
+                    f"required 지표 ({axis}, {metric_id})의 insufficient_n을 completed로 "
+                    "승격하려면 metric plan에 allow_insufficient_n: true가 있어야 한다",
+                )
+            )
+            continue
+        findings.append(
+            Finding(
+                where,
+                "E_REQUIRED_METRIC",
+                f"required 지표 ({axis}, {metric_id})가 status={status!r}인데 "
+                "run_status=completed다",
+            )
+        )
     return findings
 
 
@@ -1305,6 +1826,11 @@ def validate_documents(documents: Mapping[str, Any], schemas: SchemaSet) -> Vali
     validator = SchemaValidator(schemas)
     findings: list[Finding] = []
     schema_failed: set[str] = set()
+
+    container_findings = check_document_containers(documents)
+    if container_findings:
+        # container가 깨진 문서는 파생 오류를 쌓지 않고 여기서 멈춘다.
+        return ValidationResult(findings=tuple(sort_findings(container_findings)))
 
     for schema_file, location, instance in _iter_documents(documents):
         document_findings = validator.validate(instance, schema_file, location)

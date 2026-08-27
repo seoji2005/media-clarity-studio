@@ -140,6 +140,10 @@
           "metric_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
           "axis": { "$ref": "common-v1.schema.json#/$defs/metric_axis" },
           "required": { "type": "boolean" },
+          "allow_insufficient_n": {
+            "description": "completed 실행에서 이 required 지표의 insufficient_n을 사전 허용할지. 필드가 없거나 false이면 required 지표의 insufficient_n은 completed로 승격되지 않는다 (EVAL_HARNESS §4, REVIEW-014 M-02).",
+            "type": "boolean"
+          },
           "implementation_version": { "type": "string", "minLength": 1 },
           "normalization_version": {
             "description": "norm-v1 버전. 규칙이 없으면 해당 지표는 unsupported이며 0점이 아니다(U-19 미정).",
@@ -193,7 +197,7 @@
       "required": [
         "previous_run_id",
         "previous_fingerprints",
-        "previous_metric_implementation_versions",
+        "previous_metric_versions",
         "completed_shards"
       ],
       "properties": {
@@ -210,12 +214,20 @@
             "config": { "$ref": "common-v1.schema.json#/$defs/content_hash" }
           }
         },
-        "previous_metric_implementation_versions": {
-          "type": "object",
-          "patternProperties": {
-            "^[A-Za-z0-9][A-Za-z0-9._:-]*$": { "type": "string", "minLength": 1 }
-          },
-          "additionalProperties": false
+        "previous_metric_versions": {
+          "description": "이전 metric plan의 버전을 (axis, metric_id) 단위로 고정한다. metric_id만으로 key를 잡으면 source와 target의 같은 지표를 구분하지 못한다 (REVIEW-014 M-03). implementation/normalization version은 존재 여부와 값을 모두 비교한다.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["axis", "metric_id", "implementation_version"],
+            "properties": {
+              "axis": { "$ref": "common-v1.schema.json#/$defs/metric_axis" },
+              "metric_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+              "implementation_version": { "type": "string", "minLength": 1 },
+              "normalization_version": { "type": "string", "minLength": 1 }
+            }
+          }
         },
         "completed_shards": {
           "type": "array",

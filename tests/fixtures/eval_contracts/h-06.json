@@ -305,7 +305,7 @@
         {
           "metric_id": "timing.start_error_median",
           "axis": "source",
-          "required": true,
+          "required": false,
           "implementation_version": "timing/1.0.0",
           "needs_reference_axis": "source"
         },
@@ -327,7 +327,7 @@
         {
           "metric_id": "timing.start_error_median",
           "axis": "target",
-          "required": true,
+          "required": false,
           "implementation_version": "timing/1.0.0",
           "needs_reference_axis": "target"
         },

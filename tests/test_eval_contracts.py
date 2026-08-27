@@ -18,6 +18,7 @@ from media_clarity.eval_contracts import (
     DEFAULT_SCHEMA_DIR,
     ERROR_CODES,
     EXPECTED_CASE_IDS,
+    Finding,
     SCHEMA_DIALECT,
     SCHEMA_FILES,
     SCHEMA_VERSION,
@@ -25,6 +26,7 @@ from media_clarity.eval_contracts import (
     JsonInputError,
     SchemaContractError,
     SchemaSet,
+    check_document_containers,
     discover_fixtures,
     evaluate_fixture,
     load_fixture,
@@ -32,6 +34,7 @@ from media_clarity.eval_contracts import (
     metric_status_map,
     portable_relative_path_error,
     sort_findings,
+    utc_timestamp_error,
     validate_documents,
 )
 
@@ -48,6 +51,35 @@ def documents_of(case: str) -> dict[str, Any]:
 
 def codes_for(documents: dict[str, Any]) -> tuple[str, ...]:
     return validate_documents(documents, SCHEMAS).codes
+
+
+def findings_for(documents: dict[str, Any]) -> tuple[Finding, ...]:
+    return validate_documents(documents, SCHEMAS).findings
+
+
+def assert_rejected(
+    case: unittest.TestCase, documents: dict[str, Any], code: str, location: str
+) -> None:
+    """반례가 기대 코드와 **정확한 JSON Pointer**로 거부되는지 확인한다."""
+
+    findings = findings_for(documents)
+    case.assertTrue(findings, f"{code} 반례가 통과했다")
+    hits = [f for f in findings if f.code == code and f.location == location]
+    case.assertTrue(
+        hits,
+        f"{code} @ {location} 없음. 실제: {[(f.code, f.location) for f in findings]}",
+    )
+
+
+def previous_versions_of(documents: dict[str, Any]) -> list[dict[str, Any]]:
+    return documents["eval_run_manifest"]["resume"]["previous_metric_versions"]
+
+
+def plan_entry(documents: dict[str, Any], axis: str, metric_id: str) -> dict[str, Any]:
+    for entry in documents["eval_run_manifest"]["metric_plan"]:
+        if entry["axis"] == axis and entry["metric_id"] == metric_id:
+            return entry
+    raise AssertionError(f"metric plan에 ({axis}, {metric_id})가 없다")
 
 
 class SchemaFileContractTests(unittest.TestCase):
@@ -394,10 +426,9 @@ class ResumeTests(unittest.TestCase):
 
     def test_changed_metric_implementation_version_is_rejected(self) -> None:
         documents = documents_of("H-11")
-        versions = documents["eval_run_manifest"]["resume"][
-            "previous_metric_implementation_versions"
-        ]
-        versions["cer"] = "cer/9.9.9"
+        for entry in previous_versions_of(documents):
+            if entry["axis"] == "source" and entry["metric_id"] == "cer":
+                entry["implementation_version"] = "cer/9.9.9"
         self.assertIn("E_RESUME_FINGERPRINT", codes_for(documents))
 
     def test_duplicate_completed_shard_is_rejected(self) -> None:
@@ -580,6 +611,517 @@ class ErrorCodeTests(unittest.TestCase):
         self.assertEqual(finding.code, "E_SPLIT_LEAKAGE")
         self.assertTrue(finding.location.startswith("eval_run_manifest/split_evidence/"))
         self.assertIn("E_SPLIT_LEAKAGE", finding.as_line())
+
+
+class ReviewM01ReferenceIntegrityTests(unittest.TestCase):
+    """REVIEW-014 M-01 — artifact·timebase 참조 무결성."""
+
+    def test_dangling_cue_timebase_ref_is_rejected(self) -> None:
+        documents = documents_of("H-01")
+        documents["reference_bundles"][0]["reference_cues"][0]["timebase_ref"] = "tb-ghost"
+        assert_rejected(
+            self,
+            documents,
+            "E_REFERENCE_ID",
+            "reference_bundles/0/reference_cues/0/timebase_ref",
+        )
+
+    def test_dangling_utterance_timebase_ref_is_rejected(self) -> None:
+        documents = documents_of("H-01")
+        stream = documents["reference_bundles"][0]["speaker_streams"][0]
+        stream["utterances"][0]["timebase_ref"] = "tb-ghost"
+        assert_rejected(
+            self,
+            documents,
+            "E_REFERENCE_ID",
+            "reference_bundles/0/speaker_streams/0/utterances/0/timebase_ref",
+        )
+
+    def test_dangling_speech_mask_timebase_ref_is_rejected(self) -> None:
+        documents = documents_of("H-01")
+        documents["reference_bundles"][0]["speech_mask"]["timebase_ref"] = "tb-ghost"
+        assert_rejected(
+            self, documents, "E_REFERENCE_ID", "reference_bundles/0/speech_mask/timebase_ref"
+        )
+
+    def test_dangling_origin_artifact_is_rejected(self) -> None:
+        documents = documents_of("H-01")
+        documents["reference_bundles"][0]["source_timebase"]["origin_artifact"] = "artifact-ghost"
+        assert_rejected(
+            self,
+            documents,
+            "E_REFERENCE_ID",
+            "reference_bundles/0/source_timebase/origin_artifact",
+        )
+
+    def test_source_timebase_must_point_at_source_media(self) -> None:
+        """존재하는 artifact라도 source_media가 아니면 거부한다."""
+
+        documents = documents_of("H-06")
+        bundle = documents["reference_bundles"][0]
+        bundle["source_timebase"]["origin_artifact"] = bundle["degraded_media"]["artifact_id"]
+        assert_rejected(
+            self,
+            documents,
+            "E_REFERENCE_ID",
+            "reference_bundles/0/source_timebase/origin_artifact",
+        )
+
+    def test_degraded_timebase_link_is_checked(self) -> None:
+        documents = documents_of("H-06")
+        documents["reference_bundles"][0]["degraded_timebase"]["origin_artifact"] = "artifact-ghost"
+        assert_rejected(
+            self,
+            documents,
+            "E_REFERENCE_ID",
+            "reference_bundles/0/degraded_timebase/origin_artifact",
+        )
+
+    def test_degraded_timebase_without_degraded_media_is_rejected(self) -> None:
+        documents = documents_of("H-06")
+        del documents["reference_bundles"][0]["degraded_media"]
+        assert_rejected(
+            self, documents, "E_REFERENCE_ID", "reference_bundles/0/degraded_media"
+        )
+
+    def test_time_mapping_endpoints_must_be_real_timebases(self) -> None:
+        for key in ("from_timebase", "to_timebase"):
+            with self.subTest(endpoint=key):
+                documents = documents_of("H-06")
+                documents["reference_bundles"][0]["time_mapping"][key] = "tb-ghost"
+                assert_rejected(
+                    self,
+                    documents,
+                    "E_REFERENCE_ID",
+                    f"reference_bundles/0/time_mapping/{key}",
+                )
+
+    def test_artifact_ref_timebase_ref_is_checked(self) -> None:
+        documents = documents_of("H-01")
+        documents["reference_bundles"][0]["source_media"]["timebase_ref"] = "tb-ghost"
+        assert_rejected(
+            self, documents, "E_REFERENCE_ID", "reference_bundles/0/source_media/timebase_ref"
+        )
+
+    def test_valid_timebase_refs_are_accepted(self) -> None:
+        documents = documents_of("H-06")
+        bundle = documents["reference_bundles"][0]
+        bundle["reference_cues"][0]["timebase_ref"] = "tb-source"
+        bundle["source_media"]["timebase_ref"] = "tb-source"
+        bundle["degraded_media"]["timebase_ref"] = "tb-degraded"
+        self.assertEqual(codes_for(documents), ())
+
+
+class ReviewM02CompletedContractTests(unittest.TestCase):
+    """REVIEW-014 M-02 — completed/final 양방향과 required metric 완료 조건."""
+
+    def test_missing_required_metric_rejects_completed(self) -> None:
+        documents = documents_of("H-01")
+        del documents["eval_report"]["metrics_by_axis"]["source"]["cer"]
+        assert_rejected(
+            self, documents, "E_REQUIRED_METRIC", "eval_report/metrics_by_axis/source/cer"
+        )
+
+    def test_failed_required_metric_rejects_completed(self) -> None:
+        documents = documents_of("H-01")
+        documents["eval_report"]["metrics_by_axis"]["source"]["cer"] = {
+            "schema_version": "1.0.0",
+            "metric_id": "cer",
+            "status": "failed",
+            "reason": "tokenizer raised",
+        }
+        assert_rejected(
+            self, documents, "E_REQUIRED_METRIC", "eval_report/metrics_by_axis/source/cer"
+        )
+
+    def test_unexpected_unsupported_required_metric_rejects_completed(self) -> None:
+        documents = documents_of("H-01")
+        documents["eval_report"]["metrics_by_axis"]["source"]["cer"] = {
+            "schema_version": "1.0.0",
+            "metric_id": "cer",
+            "status": "unsupported",
+            "reason": "norm-v1 missing rule",
+        }
+        assert_rejected(
+            self, documents, "E_REQUIRED_METRIC", "eval_report/metrics_by_axis/source/cer"
+        )
+
+    def test_completed_declared_as_partial_is_rejected(self) -> None:
+        documents = documents_of("H-01")
+        documents["eval_report"]["document_kind"] = "partial"
+        assert_rejected(self, documents, "E_FINAL_STATUS", "eval_report/document_kind")
+
+    def test_final_with_non_completed_status_is_rejected(self) -> None:
+        documents = documents_of("H-10")
+        documents["eval_report"]["document_kind"] = "final"
+        assert_rejected(self, documents, "E_FINAL_STATUS", "eval_report/document_kind")
+
+    def test_insufficient_n_needs_explicit_plan_permission(self) -> None:
+        documents = documents_of("H-08")
+        entry = plan_entry(documents, "source", "cer")
+        self.assertIs(entry["allow_insufficient_n"], True)
+        self.assertEqual(codes_for(documents), ())
+
+        removed = documents_of("H-08")
+        plan_entry(removed, "source", "cer").pop("allow_insufficient_n")
+        assert_rejected(
+            self, removed, "E_REQUIRED_METRIC", "eval_report/metrics_by_axis/source/cer"
+        )
+
+        disabled = documents_of("H-08")
+        plan_entry(disabled, "source", "cer")["allow_insufficient_n"] = False
+        assert_rejected(
+            self, disabled, "E_REQUIRED_METRIC", "eval_report/metrics_by_axis/source/cer"
+        )
+
+    def test_required_metric_in_the_wrong_bucket_is_rejected(self) -> None:
+        documents = documents_of("H-01")
+        by_axis = documents["eval_report"]["metrics_by_axis"]
+        documents["eval_report"]["metrics"]["cer"] = by_axis["source"].pop("cer")
+        codes = codes_for(documents)
+        self.assertIn("E_REQUIRED_METRIC", codes)
+        self.assertIn("E_AXIS_MISMATCH", codes)
+
+    def test_non_completed_runs_keep_metrics_and_diagnostics(self) -> None:
+        for status in ("partial", "failed", "aborted"):
+            with self.subTest(status=status):
+                documents = documents_of("H-10")
+                documents["eval_report"]["run_status"] = status
+                self.assertEqual(codes_for(documents), ())
+                report = documents["eval_report"]
+                self.assertEqual(
+                    report["metrics_by_axis"]["source"]["cer"]["status"], "computed"
+                )
+                self.assertEqual(report["metrics_by_axis"]["source"]["wer"]["status"], "failed")
+                self.assertTrue(report["diagnostics"])
+
+
+class ReviewM03ResumeVersionTests(unittest.TestCase):
+    """REVIEW-014 M-03 — (axis, metric_id) 단위 version 동일성."""
+
+    def test_previous_versions_are_keyed_by_axis_and_metric(self) -> None:
+        documents = documents_of("H-11")
+        entries = previous_versions_of(documents)
+        keys = [(e["axis"], e["metric_id"]) for e in entries]
+        self.assertEqual(len(keys), len(set(keys)))
+        self.assertIn(("source", "timing.start_error_median"), keys)
+        self.assertIn(("target", "timing.start_error_median"), keys)
+
+    def test_normalization_version_change_alone_is_rejected(self) -> None:
+        documents = documents_of("H-11")
+        for entry in previous_versions_of(documents):
+            if entry["axis"] == "source" and entry["metric_id"] == "cer":
+                entry["normalization_version"] = "norm-v1/9.9.9"
+        assert_rejected(
+            self,
+            documents,
+            "E_RESUME_FINGERPRINT",
+            "eval_run_manifest/resume/previous_metric_versions/source/cer",
+        )
+
+    def test_missing_normalization_version_is_rejected(self) -> None:
+        documents = documents_of("H-11")
+        for entry in previous_versions_of(documents):
+            if entry["axis"] == "source" and entry["metric_id"] == "cer":
+                entry.pop("normalization_version")
+        assert_rejected(
+            self,
+            documents,
+            "E_RESUME_FINGERPRINT",
+            "eval_run_manifest/resume/previous_metric_versions/source/cer",
+        )
+
+    def test_added_normalization_version_is_rejected(self) -> None:
+        documents = documents_of("H-11")
+        for entry in previous_versions_of(documents):
+            if entry["axis"] == "source" and entry["metric_id"] == "cpwer":
+                entry["normalization_version"] = "norm-v1/0.1.0-draft"
+        assert_rejected(
+            self,
+            documents,
+            "E_RESUME_FINGERPRINT",
+            "eval_run_manifest/resume/previous_metric_versions/source/cpwer",
+        )
+
+    def test_single_axis_implementation_version_change_is_rejected(self) -> None:
+        for axis in ("source", "target"):
+            with self.subTest(axis=axis):
+                documents = documents_of("H-11")
+                for entry in previous_versions_of(documents):
+                    if (
+                        entry["axis"] == axis
+                        and entry["metric_id"] == "timing.start_error_median"
+                    ):
+                        entry["implementation_version"] = "timing/9.9.9"
+                assert_rejected(
+                    self,
+                    documents,
+                    "E_RESUME_FINGERPRINT",
+                    f"eval_run_manifest/resume/previous_metric_versions/{axis}/"
+                    "timing.start_error_median",
+                )
+
+    def test_missing_previous_entry_is_rejected(self) -> None:
+        documents = documents_of("H-11")
+        entries = previous_versions_of(documents)
+        removed = next(e for e in entries if e["metric_id"] == "chrf2")
+        entries.remove(removed)
+        assert_rejected(
+            self,
+            documents,
+            "E_RESUME_FINGERPRINT",
+            "eval_run_manifest/resume/previous_metric_versions/target/chrf2",
+        )
+
+    def test_unknown_previous_entry_is_rejected(self) -> None:
+        documents = documents_of("H-11")
+        previous_versions_of(documents).append(
+            {"axis": "source", "metric_id": "ghost", "implementation_version": "ghost/1.0.0"}
+        )
+        assert_rejected(
+            self,
+            documents,
+            "E_RESUME_FINGERPRINT",
+            "eval_run_manifest/resume/previous_metric_versions/source/ghost",
+        )
+
+    def test_duplicate_metric_plan_key_is_rejected(self) -> None:
+        documents = documents_of("H-11")
+        plan = documents["eval_run_manifest"]["metric_plan"]
+        plan.append(copy.deepcopy(plan[0]))
+        assert_rejected(
+            self,
+            documents,
+            "E_METRIC_PLAN_DUPLICATE",
+            f"eval_run_manifest/metric_plan/{len(plan) - 1}",
+        )
+
+    def test_duplicate_previous_version_entry_is_rejected(self) -> None:
+        documents = documents_of("H-11")
+        entries = previous_versions_of(documents)
+        entries.append(copy.deepcopy(entries[0]))
+        assert_rejected(
+            self,
+            documents,
+            "E_METRIC_PLAN_DUPLICATE",
+            f"eval_run_manifest/resume/previous_metric_versions/{len(entries) - 1}",
+        )
+
+    def test_five_fingerprints_and_shard_checks_still_apply(self) -> None:
+        for key in ("dataset", "reference", "hypothesis", "metric_plan", "config"):
+            with self.subTest(fingerprint=key):
+                documents = documents_of("H-11")
+                documents["eval_run_manifest"]["resume"]["previous_fingerprints"][key] = (
+                    "sha256:" + "ff" * 32
+                )
+                assert_rejected(
+                    self,
+                    documents,
+                    "E_RESUME_FINGERPRINT",
+                    f"eval_run_manifest/resume/previous_fingerprints/{key}",
+                )
+        documents = documents_of("H-11")
+        shards = documents["eval_run_manifest"]["resume"]["completed_shards"]
+        shards.append({"shard_id": "shard-000", "content_hash": "sha256:" + "cd" * 32})
+        assert_rejected(
+            self,
+            documents,
+            "E_SHARD_DUPLICATE",
+            f"eval_run_manifest/resume/completed_shards/{len(shards) - 1}/shard_id",
+        )
+
+
+class ReviewM04DocumentGraphTests(unittest.TestCase):
+    """REVIEW-014 M-04 — 문서 그래프의 자기 일관성."""
+
+    def test_split_evidence_must_cover_dataset(self) -> None:
+        for kind in ("source", "speaker"):
+            with self.subTest(kind=kind):
+                documents = documents_of("H-01")
+                documents["eval_run_manifest"]["split_evidence"][f"dev_{kind}_ids"] = ["zzz-1"]
+                assert_rejected(
+                    self,
+                    documents,
+                    "E_DOCUMENT_LINK",
+                    f"eval_run_manifest/split_evidence/dev_{kind}_ids",
+                )
+
+    def test_dataset_id_in_opposite_split_evidence_is_leakage(self) -> None:
+        documents = documents_of("H-01")
+        documents["eval_run_manifest"]["split_evidence"]["test_source_ids"] = ["src-001"]
+        assert_rejected(
+            self,
+            documents,
+            "E_SPLIT_LEAKAGE",
+            "eval_run_manifest/split_evidence/test_source_ids",
+        )
+
+    def test_test_split_uses_the_mirrored_rule(self) -> None:
+        documents = documents_of("H-01")
+        manifest = documents["eval_run_manifest"]
+        manifest["split"] = "test"
+        documents["eval_report"]["split"] = "test"
+        codes = codes_for(documents)
+        self.assertIn("E_DOCUMENT_LINK", codes)
+        self.assertIn("E_SPLIT_LEAKAGE", codes)
+
+    def test_paired_hypothesis_must_exist_with_matching_role(self) -> None:
+        documents = documents_of("H-14")
+        documents["eval_run_manifest"]["paired_comparison"][
+            "baseline_hypothesis_id"
+        ] = "hyp-ghost"
+        assert_rejected(
+            self,
+            documents,
+            "E_DOCUMENT_LINK",
+            "eval_run_manifest/paired_comparison/baseline_hypothesis_id",
+        )
+
+        swapped = documents_of("H-14")
+        swapped["eval_run_manifest"]["paired_comparison"][
+            "baseline_hypothesis_id"
+        ] = "hyp-candidate"
+        assert_rejected(
+            self,
+            swapped,
+            "E_DOCUMENT_LINK",
+            "eval_run_manifest/paired_comparison/baseline_hypothesis_id",
+        )
+
+    def test_paired_samples_must_match_hypothesis_samples(self) -> None:
+        documents = documents_of("H-14")
+        paired = documents["eval_run_manifest"]["paired_comparison"]
+        paired["baseline_sample_ids"] = ["smp-001"]
+        assert_rejected(
+            self,
+            documents,
+            "E_PAIRED_SAMPLE_SET",
+            "eval_run_manifest/paired_comparison/baseline_sample_ids",
+        )
+
+    def test_paired_samples_must_be_inside_the_dataset(self) -> None:
+        documents = documents_of("H-14")
+        paired = documents["eval_run_manifest"]["paired_comparison"]
+        paired["baseline_sample_ids"] = ["smp-999"]
+        paired["candidate_sample_ids"] = ["smp-999"]
+        for hypothesis in documents["eval_run_manifest"]["hypotheses"]:
+            if hypothesis["role"] in {"baseline", "candidate"}:
+                hypothesis["sample_ids"] = ["smp-999"]
+        assert_rejected(
+            self,
+            documents,
+            "E_PAIRED_SAMPLE_SET",
+            "eval_run_manifest/paired_comparison/baseline_sample_ids",
+        )
+
+    def test_metric_map_key_must_match_inner_metric_id(self) -> None:
+        documents = documents_of("H-01")
+        documents["eval_report"]["metrics_by_axis"]["source"]["cer"]["metric_id"] = "wer"
+        assert_rejected(
+            self,
+            documents,
+            "E_METRIC_ID_MISMATCH",
+            "eval_report/metrics_by_axis/source/cer/metric_id",
+        )
+
+    def test_wrong_container_type_is_rejected_not_skipped(self) -> None:
+        for key in (
+            "reference_bundles",
+            "per_source_records",
+            "event_records",
+            "human_review_records",
+        ):
+            with self.subTest(key=key):
+                documents = documents_of("H-01")
+                documents[key] = {}
+                assert_rejected(self, documents, "E_SCHEMA", key)
+
+    def test_wrong_container_type_for_single_documents_is_rejected(self) -> None:
+        for key in ("eval_run_manifest", "eval_report"):
+            with self.subTest(key=key):
+                documents = documents_of("H-01")
+                documents[key] = []
+                assert_rejected(self, documents, "E_SCHEMA", key)
+
+    def test_container_check_is_reusable_on_its_own(self) -> None:
+        self.assertEqual(check_document_containers({"reference_bundles": []}), [])
+        findings = check_document_containers({"event_records": "nope"})
+        self.assertEqual([f.code for f in findings], ["E_SCHEMA"])
+        self.assertEqual(findings[0].location, "event_records")
+
+
+class ReviewR01TimestampTests(unittest.TestCase):
+    """REVIEW-014 R-01 — RFC 3339 UTC의 실제 달력·시각 유효성."""
+
+    def test_impossible_date_and_time_is_rejected(self) -> None:
+        documents = documents_of("H-01")
+        documents["eval_run_manifest"]["created_at"] = "2026-99-99T99:99:99Z"
+        assert_rejected(self, documents, "E_TIMESTAMP", "eval_run_manifest/created_at")
+
+    def test_month_lengths_follow_the_real_calendar(self) -> None:
+        cases = {
+            "2026-04-31T00:00:00Z": "4월은 30일까지",
+            "2026-02-30T00:00:00Z": "2월 30일 없음",
+            "2026-13-01T00:00:00Z": "13월 없음",
+            "2026-00-10T00:00:00Z": "0월 없음",
+            "2026-01-00T00:00:00Z": "0일 없음",
+        }
+        for value, why in cases.items():
+            with self.subTest(value=value, why=why):
+                self.assertIsNotNone(utc_timestamp_error(value), why)
+
+    def test_leap_day_follows_the_real_calendar(self) -> None:
+        self.assertIsNone(utc_timestamp_error("2024-02-29T00:00:00Z"))
+        self.assertIsNone(utc_timestamp_error("2000-02-29T00:00:00Z"))
+        self.assertIsNotNone(utc_timestamp_error("2027-02-29T00:00:00Z"))
+        self.assertIsNotNone(utc_timestamp_error("1900-02-29T00:00:00Z"))
+
+    def test_time_ranges_are_checked(self) -> None:
+        for value in (
+            "2026-08-26T24:00:00Z",
+            "2026-08-26T00:60:00Z",
+            "2026-08-26T00:00:60Z",
+        ):
+            with self.subTest(value=value):
+                self.assertIsNotNone(utc_timestamp_error(value))
+
+    def test_valid_timestamps_still_pass(self) -> None:
+        for value in ("2026-08-26T00:00:00Z", "2026-08-26T23:59:59.123456Z"):
+            with self.subTest(value=value):
+                self.assertIsNone(utc_timestamp_error(value))
+
+    def test_every_timestamp_field_is_checked(self) -> None:
+        cases = [
+            (lambda d: d["reference_bundles"][0]["source_media"], "created_at",
+             "reference_bundles/0/source_media/created_at"),
+            (lambda d: d["reference_bundles"][0]["provenance"], "curated_at",
+             "reference_bundles/0/provenance/curated_at"),
+            (lambda d: d["eval_run_manifest"], "created_at", "eval_run_manifest/created_at"),
+            (lambda d: d["eval_report"], "created_at", "eval_report/created_at"),
+        ]
+        for pick, field, location in cases:
+            with self.subTest(location=location):
+                documents = documents_of("H-01")
+                pick(documents)[field] = "2026-02-30T00:00:00Z"
+                assert_rejected(self, documents, "E_TIMESTAMP", location)
+
+    def test_event_record_timestamp_is_checked(self) -> None:
+        documents = documents_of("H-10")
+        documents["event_records"][0]["emitted_at"] = "2026-02-30T00:00:00Z"
+        assert_rejected(self, documents, "E_TIMESTAMP", "event_records/0/emitted_at")
+
+    def test_semantic_annotation_is_declared_in_the_schema(self) -> None:
+        common = SCHEMAS.documents["common-v1.schema.json"]
+        self.assertEqual(
+            common["$defs"]["timestamp"]["x-mcs-semantic"], "utc_timestamp"
+        )
+        self.assertIn("x-mcs-semantic", SUPPORTED_KEYWORDS)
+
+    def test_unknown_semantic_annotation_is_a_contract_error(self) -> None:
+        injected = copy.deepcopy(SCHEMAS.documents["common-v1.schema.json"])
+        injected["$defs"]["timestamp"]["x-mcs-semantic"] = "not-a-real-check"
+        with self.assertRaises(SchemaContractError):
+            SCHEMAS._assert_supported(injected, "common-v1.schema.json#")
 
 
 if __name__ == "__main__":

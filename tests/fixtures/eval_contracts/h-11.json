@@ -305,13 +305,45 @@
           "metric_plan": "sha256:2424242424242424242424242424242424242424242424242424242424242424",
           "config": "sha256:2525252525252525252525252525252525252525252525252525252525252525"
         },
-        "previous_metric_implementation_versions": {
-          "cer": "cer/1.0.0",
-          "cpwer": "cpwer/1.0.0",
-          "chrf2": "chrf2/1.0.0",
-          "timing.start_error_median": "timing/1.0.0",
-          "silence.hallucination_chars_per_min": "silence/1.0.0"
-        },
+        "previous_metric_versions": [
+          {
+            "axis": "source",
+            "metric_id": "cer",
+            "implementation_version": "cer/1.0.0",
+            "normalization_version": "norm-v1/0.1.0-draft"
+          },
+          {
+            "axis": "source",
+            "metric_id": "cpwer",
+            "implementation_version": "cpwer/1.0.0"
+          },
+          {
+            "axis": "source",
+            "metric_id": "timing.start_error_median",
+            "implementation_version": "timing/1.0.0"
+          },
+          {
+            "axis": "source",
+            "metric_id": "silence.hallucination_chars_per_min",
+            "implementation_version": "silence/1.0.0"
+          },
+          {
+            "axis": "target",
+            "metric_id": "chrf2",
+            "implementation_version": "chrf2/1.0.0",
+            "normalization_version": "norm-v1/0.1.0-draft"
+          },
+          {
+            "axis": "target",
+            "metric_id": "timing.start_error_median",
+            "implementation_version": "timing/1.0.0"
+          },
+          {
+            "axis": "target",
+            "metric_id": "silence.hallucination_chars_per_min",
+            "implementation_version": "silence/1.0.0"
+          }
+        ],
         "completed_shards": [
           {
             "shard_id": "shard-000",

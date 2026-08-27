@@ -3,10 +3,11 @@
 ## 상태
 
 - **위험 등급:** Gate H — 데이터 구조·파일 형식·재개 계약
-- **상태:** **Implemented — awaiting fixed HEAD review**
+- **상태:** **Implemented — awaiting fixed HEAD rereview**
 - **계약 기준선:** `main@400622760643d5216c9e86046d3e4c5a3370dcac`
 - **구현 기준선:** `main@5a6b25d870514433c579be6858de8c23fbd33dfc` (PR #27 병합 후)
 - **구현 브랜치:** `claude/task-006-eval-contracts`
+- **1차 Gate H 검토:** `REVIEW-014` (PR #29 `lean-root-review/task-006-gate-h`) — 고정 HEAD `d72325737d1088104a11d05228b84bd47616fee0`, 판정 **변경 요청** (차단 0 · 중대 4 · 경미 1). 반영은 §11.5
 - **선행:** [TASK-005](TASK-005.md) Done
 - **구현 Owner:** Claude Code 구현 세션
 - **검증·리뷰:** Lean Root Orchestrator, 구현 세션과 분리된 고정 HEAD 검토
@@ -324,6 +325,35 @@ TASK-006 §3.6의 10개를 모두 제공하고, 계약을 기계로 거부하기
 ```bash
 make verify-task-006     # fixture runner + 계약 test + 기존 전체 verify
 make verify              # static + 기존 unit + 실제 FFmpeg smoke
+make verify-task-006 PYTHON=python3.12
 git diff --check
 git status --short
 ```
+
+### 11.5 REVIEW-014 변경 요청 반영 (2차 커밋)
+
+`REVIEW-014` (PR #29 `lean-root-review/task-006-gate-h`)가 고정 HEAD `d723257…`에서 **변경 요청**으로 지목한
+M-01~M-04·R-01을 제한 범위로 반영했다. 리뷰 원문과 PR #29는 수정하지 않았다.
+
+| ID | 반영 위치 |
+|---|---|
+| **M-01** | `eval_contracts.py`: `_check_bundle_reference_ids()` 신설 — artifact/timebase ID 집합을 만들어 cue·utterance·speech mask·ArtifactRef의 `timebase_ref`, `Timebase.origin_artifact`, degraded media/timebase 연결을 검사. `_check_time_mapping()`에 `from_timebase`/`to_timebase` 멤버십 검사 추가. 코드 `E_REFERENCE_ID` |
+| **M-02** | `check_report()`: `completed ↔ final` **양방향** 강제. `_check_required_metrics()` 신설 — completed 실행에서 metric plan의 모든 required `(axis, metric_id)`가 올바른 bucket에 존재하고 `computed`이거나 plan이 `allow_insufficient_n: true`로 사전 허용한 `insufficient_n`이어야 한다. 코드 `E_FINAL_STATUS` · `E_REQUIRED_METRIC`. schema: metric plan에 `allow_insufficient_n` 추가 |
+| **M-03** | schema: `resume.previous_metric_implementation_versions`(metric_id key 객체)를 **`previous_metric_versions`(`(axis, metric_id)` entry 배열)** 로 교체. `_check_resume()`: implementation/normalization version을 존재 여부까지 정확히 비교. `check_manifest()`: metric plan의 `(axis, metric_id)` 중복 거부. 코드 `E_RESUME_FINGERPRINT` · `E_METRIC_PLAN_DUPLICATE`. 기존 다섯 fingerprint와 shard ID/hash 검사는 유지 |
+| **M-04** | `_check_split_evidence_covers_dataset()`·`_check_paired_comparison()` 신설, `check_report()`에 metric map key ↔ `MetricResult.metric_id` 일치 검사, `check_document_containers()` 신설로 잘못된 container를 조용히 건너뛰지 않고 `E_SCHEMA`로 거부. 코드 `E_DOCUMENT_LINK` · `E_SPLIT_LEAKAGE` · `E_PAIRED_SAMPLE_SET` · `E_METRIC_ID_MISMATCH` · `E_SCHEMA` |
+| **R-01** | `common-v1.schema.json`의 `timestamp`에 프로젝트 확장 annotation `x-mcs-semantic: "utc_timestamp"` 추가. `utc_timestamp_error()`가 stdlib `datetime`으로 실제 달력·시각을 검사한다. `Z` 전용 pattern은 유지. 코드 `E_TIMESTAMP` |
+
+**호환 우회 경로를 만들지 않았다.** PR #28은 미병합이므로 M-03의 이전 resume 구조를 함께
+지원하지 않고 새 구조로 교체했다.
+
+**직접 영향을 받은 fixture:** H-02·H-04·H-05·H-06은 정답·능력이 없어 unsupported가 되는
+지표를 `required: false`로 계획하도록 고쳤다 (EVAL_HARNESS §3.2 — preflight가 unsupported로
+계획한다). H-08은 `allow_insufficient_n: true`를 명시했다. H-11·H-12는 새 resume 구조를 쓴다.
+**H-01~H-14의 의미는 약화하지 않았다.**
+
+**새 오류 코드 4종:** `E_TIMESTAMP` · `E_REQUIRED_METRIC` · `E_METRIC_PLAN_DUPLICATE` ·
+`E_METRIC_ID_MISMATCH`. `events.jsonl`의 `error_code` pattern(`^E_[A-Z_]+$`)과
+`_check_record_links()`의 `ERROR_CODES` 대조가 그대로 적용된다.
+
+**추가 한계 (R-01):** RFC 3339가 허용하는 윤초(`:60`)는 stdlib `datetime`이 표현하지 못하므로
+거부한다. 이 프로젝트의 timestamp는 윤초를 쓰지 않는다.

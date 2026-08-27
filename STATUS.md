@@ -3,8 +3,8 @@
 **"지금 무엇이 되어 있고, 누가 무엇을 들고 있는가."**
 새 세션을 시작하는 에이전트는 [`AGENTS.md`](AGENTS.md) 다음으로 이 파일을 봅니다 (`AGENTS.md` §0.2).
 
-마지막 갱신: 2026-08-26 (TASK-006 구현 — 고정 HEAD 검토 대기)
-현재 단계: **Phase 1a** — TASK-006 Gate H 구현 완료, 고정 HEAD 검토 대기
+마지막 갱신: 2026-08-27 (TASK-006 REVIEW-014 반영 — 고정 HEAD 재검토 대기)
+현재 단계: **Phase 1a** — TASK-006 Gate H REVIEW-014 반영 완료, 고정 HEAD 재검토 대기
 
 ---
 
@@ -20,9 +20,9 @@
 | 열린 PR | **#6~#10·#12·#14·#15·#17** — 과거 작업·리뷰 Draft, 현재 TASK-005 차단 아님 |
 | 미병합 종료 | **#2·#3·#4·#11** — #11은 TASK-024로 대체, branch·원문 보존 |
 | 운영 구조 | **TASK-027 결정** — 코드는 Claude Code, 비코드·검증·리뷰·승인 후 통합은 Lean Root (`AGENTS.md` §3, ADR-0028) |
-| 현재 작업 | **TASK-006 고정 HEAD 검토 대기** — schema 7종·validator·H-01~H-14 fixture·`verify-task-006` 구현됨 (`claude/task-006-eval-contracts`) |
+| 현재 작업 | **TASK-006 고정 HEAD 재검토 대기** — `REVIEW-014` (PR #29)의 M-01~M-04·R-01 반영 완료 (`claude/task-006-eval-contracts`) |
 | U-31 | **답변됨 (2026-08-22)** — 번역 대상 언어 **한국어(`ko`)** |
-| 다음 실행 의존성 | **TASK-006 Gate H 고정 HEAD 검토** → 사람 오너 승인·병합 → 일반 Phase 1 구현 |
+| 다음 실행 의존성 | **TASK-006 Gate H 제한 재검토** (M-01~M-04·R-01과 직접 회귀만) → 사람 오너 승인·병합 → 일반 Phase 1 구현 |
 | U-08 | **답변됨 (2026-08-09)** — **채점 정답은 번역 자막** |
 | U-11 | **부분 답변됨 (2026-08-09)** — **약 2개월·품질 우선.** 정확한 제출 날짜는 **미확정** |
 | 차단 요인 | **TASK-006 착수 차단 없음.** U-07·U-18·U-19·U-26·U-27은 미정값으로 명시하며 임의 확정 금지 |
@@ -66,7 +66,7 @@
 |---|---|---|---|---|---|
 | [TASK-003](docs/tasks/TASK-003.md) | seed 코퍼스·라이선스·합성 fixture 조사 및 Gate E 증거 통합 | Claude Code 주 세션 → Lean Root 통합 | Gate S: TASK-021/REVIEW-012 승인; Gate E: PR #21 고정 HEAD 제한 재검토 통과 | Phase 1a seed corpus | **Done** — PR #21 병합 |
 | [TASK-005](docs/tasks/TASK-005.md) | 평가 하네스 설계 명세 | Lean Root Orchestrator | 없음 — Gate M 비코드 설계; 제품 오너가 고정 HEAD 승인 | Phase 1a evaluation foundation | **Done — PR #25 병합** |
-| [TASK-006](docs/tasks/TASK-006.md) | ReferenceBundle/v1 및 평가 실행 계약 구체화 | Claude Code 구현 세션 | Lean Root 고정 HEAD 검토 | Phase 1a evaluation contracts | **Implemented — awaiting fixed HEAD review** (구현 세션 자기 승인 없음) |
+| [TASK-006](docs/tasks/TASK-006.md) | ReferenceBundle/v1 및 평가 실행 계약 구체화 | Claude Code 구현 세션 | Lean Root 고정 HEAD 검토 — 1차 `REVIEW-014` (PR #29) **변경 요청** | Phase 1a evaluation contracts | **Implemented — awaiting fixed HEAD rereview** (구현 세션 자기 승인 없음) |
 | [TASK-012](docs/tasks/TASK-012.md) | Phase 1 계획 기준선 확립 | Claude Code 주 세션 | TASK-013~017 / REVIEW-005~009 (사람 오너의 예외 승인) | Phase 1 planning / 1a 진입 | **Done** — REVIEW-009 승인 후 PR #5 병합 (`10d34b4a4545f9ae8894c8038e7f1cc9a7706d61`) |
 | [TASK-013](docs/tasks/TASK-013.md) | TASK-012 고정 HEAD 독립 검토 | **이 독립 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 review | **In review** (판정: 변경 요청 — [REVIEW-005](docs/reviews/REVIEW-005.md)) |
 | [TASK-014](docs/tasks/TASK-014.md) | TASK-012 M-01·M-02 제한 재검토 | **REVIEW-005를 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 limited rereview | **In review** (M-01·M-02 부분 해소 · 판정: 변경 요청 — [REVIEW-006](docs/reviews/REVIEW-006.md)) |
@@ -252,7 +252,7 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 
 | TASK | 내용 | Owner |
 |---|---|---|
-| [TASK-006](docs/tasks/TASK-006.md) — Gate H 검토 대기 | schema 7종·stdlib validator·H-01~H-14 fixture·`make verify-task-006` 구현됨. 판정은 Lean Root 고정 HEAD 검토 | Claude Code 구현 → Lean Root 검증 (Gate H) |
+| [TASK-006](docs/tasks/TASK-006.md) — Gate H 재검토 대기 | REVIEW-014의 M-01~M-04·R-01 반영. 판정은 Lean Root 고정 HEAD 제한 재검토 | Claude Code 구현 → Lean Root 검증 (Gate H) |
 
 > **판정과 반영 상태는 서로 다른 사실입니다. 섞지 마십시오.**
 >
@@ -287,12 +287,13 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 | **TASK-003** | seed 코퍼스·라이선스·합성 데이터 대안 조사 + 비교표 작성 | 없음 | **완료** |
 | **(사람) U-06 선택** | Common Voice 26 일본어 + LibriSpeech dev/test, 합성 코드스위칭; CHiME-6 유예 | TASK-003 결과 | **완료 — TASK-026** |
 | **TASK-005** | 평가 하네스 설계 명세 (Phase 1a) | TASK-003 · U-06 선택 | **Done — PR #25** |
-| **TASK-006** | `ReferenceBundle/v1` 및 평가 실행 계약 구체화 | **TASK-005** | **Implemented — 고정 HEAD 검토 대기** |
+| **TASK-006** | `ReferenceBundle/v1` 및 평가 실행 계약 구체화 | **TASK-005** | **Implemented — 고정 HEAD 재검토 대기** |
 | 코드 구현 | TASK-006 schema·validator·fixture | TASK-006 계약 승인·병합 | **구현됨 — 검토·병합 전** |
 
 > **TASK-005 평가 하네스 설계는 완료됐습니다.** TASK-006 계약은 PR #27로 병합됐고,
 > schema·validator·fixture 구현이 `claude/task-006-eval-contracts`에 올라왔습니다.
-> **구현 세션은 자기 변경을 승인하지 않았습니다.** Lean Root가 고정 HEAD를 직접 검증합니다.
+> **구현 세션은 자기 변경을 승인하지 않았습니다.** 1차 Gate H 검토(REVIEW-014)는 **변경 요청**이었고,
+> M-01~M-04·R-01을 후속 커밋으로 반영했습니다. Lean Root가 새 고정 HEAD를 직접 재검토합니다.
 > Gate H 고정 HEAD 리뷰 전에는 완료·통합하지 않습니다.
 > **TASK-003·005·006은 예약된 번호이며 의미를 바꾸지 않았습니다.**
 > **일반 Phase 1 구현은 위 순서가 끝나기 전에 시작하지 않습니다.** PR #16은 승인된 좁은 합성 예외입니다.
