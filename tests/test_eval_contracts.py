@@ -75,6 +75,42 @@ def previous_versions_of(documents: dict[str, Any]) -> list[dict[str, Any]]:
     return documents["eval_run_manifest"]["resume"]["previous_metric_versions"]
 
 
+def previous_version_index(documents: dict[str, Any], axis: str, metric_id: str) -> int:
+    for index, entry in enumerate(previous_versions_of(documents)):
+        if entry["axis"] == axis and entry["metric_id"] == metric_id:
+            return index
+    raise AssertionError(f"이전 버전 목록에 ({axis}, {metric_id})가 없다")
+
+
+_MISSING = object()
+
+
+def resolve_location(documents: dict[str, Any], location: str) -> Any:
+    """finding location을 입력에 JSON Pointer로 적용한다. 해석 실패면 `_MISSING`."""
+
+    node: Any = documents
+    for token in location.split("/"):
+        if isinstance(node, list):
+            if not token.isdigit() or int(token) >= len(node):
+                return _MISSING
+            node = node[int(token)]
+        elif isinstance(node, dict):
+            if token not in node:
+                return _MISSING
+            node = node[token]
+        else:
+            return _MISSING
+    return node
+
+
+def assert_location_resolves(
+    case: unittest.TestCase, documents: dict[str, Any], location: str
+) -> Any:
+    value = resolve_location(documents, location)
+    case.assertIsNot(value, _MISSING, f"입력에서 해석되지 않는 위치: {location}")
+    return value
+
+
 def plan_entry(documents: dict[str, Any], axis: str, metric_id: str) -> dict[str, Any]:
     for entry in documents["eval_run_manifest"]["metric_plan"]:
         if entry["axis"] == axis and entry["metric_id"] == metric_id:
@@ -809,81 +845,70 @@ class ReviewM03ResumeVersionTests(unittest.TestCase):
 
     def test_normalization_version_change_alone_is_rejected(self) -> None:
         documents = documents_of("H-11")
-        for entry in previous_versions_of(documents):
-            if entry["axis"] == "source" and entry["metric_id"] == "cer":
-                entry["normalization_version"] = "norm-v1/9.9.9"
-        assert_rejected(
-            self,
-            documents,
-            "E_RESUME_FINGERPRINT",
-            "eval_run_manifest/resume/previous_metric_versions/source/cer",
+        index = previous_version_index(documents, "source", "cer")
+        previous_versions_of(documents)[index]["normalization_version"] = "norm-v1/9.9.9"
+        location = (
+            f"eval_run_manifest/resume/previous_metric_versions/{index}/normalization_version"
         )
+        assert_rejected(self, documents, "E_RESUME_FINGERPRINT", location)
+        self.assertEqual(assert_location_resolves(self, documents, location), "norm-v1/9.9.9")
 
     def test_missing_normalization_version_is_rejected(self) -> None:
         documents = documents_of("H-11")
-        for entry in previous_versions_of(documents):
-            if entry["axis"] == "source" and entry["metric_id"] == "cer":
-                entry.pop("normalization_version")
-        assert_rejected(
-            self,
-            documents,
-            "E_RESUME_FINGERPRINT",
-            "eval_run_manifest/resume/previous_metric_versions/source/cer",
-        )
+        index = previous_version_index(documents, "source", "cer")
+        previous_versions_of(documents)[index].pop("normalization_version")
+        # 필드가 없으므로 실제로 존재하는 부모 entry를 가리킨다.
+        location = f"eval_run_manifest/resume/previous_metric_versions/{index}"
+        assert_rejected(self, documents, "E_RESUME_FINGERPRINT", location)
+        entry = assert_location_resolves(self, documents, location)
+        self.assertNotIn("normalization_version", entry)
 
     def test_added_normalization_version_is_rejected(self) -> None:
         documents = documents_of("H-11")
-        for entry in previous_versions_of(documents):
-            if entry["axis"] == "source" and entry["metric_id"] == "cpwer":
-                entry["normalization_version"] = "norm-v1/0.1.0-draft"
-        assert_rejected(
-            self,
-            documents,
-            "E_RESUME_FINGERPRINT",
-            "eval_run_manifest/resume/previous_metric_versions/source/cpwer",
+        index = previous_version_index(documents, "source", "cpwer")
+        previous_versions_of(documents)[index]["normalization_version"] = "norm-v1/0.1.0-draft"
+        location = (
+            f"eval_run_manifest/resume/previous_metric_versions/{index}/normalization_version"
         )
+        assert_rejected(self, documents, "E_RESUME_FINGERPRINT", location)
+        assert_location_resolves(self, documents, location)
 
     def test_single_axis_implementation_version_change_is_rejected(self) -> None:
         for axis in ("source", "target"):
             with self.subTest(axis=axis):
                 documents = documents_of("H-11")
-                for entry in previous_versions_of(documents):
-                    if (
-                        entry["axis"] == axis
-                        and entry["metric_id"] == "timing.start_error_median"
-                    ):
-                        entry["implementation_version"] = "timing/9.9.9"
-                assert_rejected(
-                    self,
-                    documents,
-                    "E_RESUME_FINGERPRINT",
-                    f"eval_run_manifest/resume/previous_metric_versions/{axis}/"
-                    "timing.start_error_median",
+                index = previous_version_index(documents, axis, "timing.start_error_median")
+                previous_versions_of(documents)[index][
+                    "implementation_version"
+                ] = "timing/9.9.9"
+                location = (
+                    "eval_run_manifest/resume/previous_metric_versions/"
+                    f"{index}/implementation_version"
+                )
+                assert_rejected(self, documents, "E_RESUME_FINGERPRINT", location)
+                self.assertEqual(
+                    assert_location_resolves(self, documents, location), "timing/9.9.9"
                 )
 
     def test_missing_previous_entry_is_rejected(self) -> None:
         documents = documents_of("H-11")
         entries = previous_versions_of(documents)
-        removed = next(e for e in entries if e["metric_id"] == "chrf2")
-        entries.remove(removed)
-        assert_rejected(
-            self,
-            documents,
-            "E_RESUME_FINGERPRINT",
-            "eval_run_manifest/resume/previous_metric_versions/target/chrf2",
-        )
+        entries.remove(next(e for e in entries if e["metric_id"] == "chrf2"))
+        # entry 자체가 없으므로 실제로 존재하는 부모 배열을 가리킨다.
+        location = "eval_run_manifest/resume/previous_metric_versions"
+        assert_rejected(self, documents, "E_RESUME_FINGERPRINT", location)
+        self.assertIsInstance(assert_location_resolves(self, documents, location), list)
 
     def test_unknown_previous_entry_is_rejected(self) -> None:
         documents = documents_of("H-11")
-        previous_versions_of(documents).append(
+        entries = previous_versions_of(documents)
+        entries.append(
             {"axis": "source", "metric_id": "ghost", "implementation_version": "ghost/1.0.0"}
         )
-        assert_rejected(
-            self,
-            documents,
-            "E_RESUME_FINGERPRINT",
-            "eval_run_manifest/resume/previous_metric_versions/source/ghost",
-        )
+        location = f"eval_run_manifest/resume/previous_metric_versions/{len(entries) - 1}"
+        assert_rejected(self, documents, "E_RESUME_FINGERPRINT", location)
+        entry = assert_location_resolves(self, documents, location)
+        self.assertEqual(entry["metric_id"], "ghost")
 
     def test_duplicate_metric_plan_key_is_rejected(self) -> None:
         documents = documents_of("H-11")
@@ -1122,6 +1147,291 @@ class ReviewR01TimestampTests(unittest.TestCase):
         injected["$defs"]["timestamp"]["x-mcs-semantic"] = "not-a-real-check"
         with self.assertRaises(SchemaContractError):
             SCHEMAS._assert_supported(injected, "common-v1.schema.json#")
+
+
+def valid_paired_documents() -> dict[str, Any]:
+    """독립된 **유효한** paired 문서.
+
+    H-14는 다른 이유로 이미 invalid이므로 positive base로 쓰지 않는다
+    (REVIEW-015 M-04-R1). 유효한 H-01에 baseline/candidate 가설과 paired
+    comparison을 더해 다섯 sample 집합이 정확히 같은 문서를 만든다.
+    """
+
+    documents = documents_of("H-01")
+    manifest = documents["eval_run_manifest"]
+    samples = list(manifest["dataset"]["sample_ids"])
+    for role, seed in (("baseline", "aa"), ("candidate", "bb")):
+        manifest["hypotheses"].append(
+            {
+                "hypothesis_id": f"hyp-{role}",
+                "content_hash": "sha256:" + seed * 32,
+                "reference_axis": "target",
+                "target_language": "ko",
+                "role": role,
+                "sample_ids": list(samples),
+            }
+        )
+    manifest["paired_comparison"] = {
+        "baseline_hypothesis_id": "hyp-baseline",
+        "candidate_hypothesis_id": "hyp-candidate",
+        "baseline_sample_ids": list(samples),
+        "candidate_sample_ids": list(samples),
+    }
+    documents["eval_report"]["paired_observation"] = {
+        "baseline_hypothesis_id": "hyp-baseline",
+        "candidate_hypothesis_id": "hyp-candidate",
+        "n_pairs": len(samples),
+        "observation": "blocked_by_open_thresholds",
+    }
+    return documents
+
+
+def hypothesis_index(documents: dict[str, Any], hypothesis_id: str) -> int:
+    for index, entry in enumerate(documents["eval_run_manifest"]["hypotheses"]):
+        if entry["hypothesis_id"] == hypothesis_id:
+            return index
+    raise AssertionError(f"가설 {hypothesis_id!r}가 없다")
+
+
+class ReviewM01R1MediaTimebaseRoleTests(unittest.TestCase):
+    """REVIEW-015 M-01-R1 — 역할별 media↔timebase 연결."""
+
+    def test_correct_source_and_degraded_links_are_accepted(self) -> None:
+        """positive를 먼저 고정한다."""
+
+        documents = documents_of("H-06")
+        bundle = documents["reference_bundles"][0]
+        bundle["source_media"]["timebase_ref"] = bundle["source_timebase"]["timebase_id"]
+        bundle["degraded_media"]["timebase_ref"] = bundle["degraded_timebase"]["timebase_id"]
+        self.assertEqual(codes_for(documents), ())
+
+    def test_source_media_pointing_at_degraded_timebase_is_rejected(self) -> None:
+        documents = documents_of("H-06")
+        bundle = documents["reference_bundles"][0]
+        bundle["source_media"]["timebase_ref"] = bundle["degraded_timebase"]["timebase_id"]
+        location = "reference_bundles/0/source_media/timebase_ref"
+        assert_rejected(self, documents, "E_REFERENCE_ID", location)
+        self.assertEqual(assert_location_resolves(self, documents, location), "tb-degraded")
+
+    def test_degraded_media_pointing_at_source_timebase_is_rejected(self) -> None:
+        documents = documents_of("H-06")
+        bundle = documents["reference_bundles"][0]
+        bundle["degraded_media"]["timebase_ref"] = bundle["source_timebase"]["timebase_id"]
+        location = "reference_bundles/0/degraded_media/timebase_ref"
+        assert_rejected(self, documents, "E_REFERENCE_ID", location)
+        self.assertEqual(assert_location_resolves(self, documents, location), "tb-source")
+
+    def test_both_directions_swapped_is_rejected(self) -> None:
+        documents = documents_of("H-06")
+        bundle = documents["reference_bundles"][0]
+        source_id = bundle["source_timebase"]["timebase_id"]
+        degraded_id = bundle["degraded_timebase"]["timebase_id"]
+        bundle["source_media"]["timebase_ref"] = degraded_id
+        bundle["degraded_media"]["timebase_ref"] = source_id
+        findings = findings_for(documents)
+        locations = {f.location for f in findings if f.code == "E_REFERENCE_ID"}
+        self.assertIn("reference_bundles/0/source_media/timebase_ref", locations)
+        self.assertIn("reference_bundles/0/degraded_media/timebase_ref", locations)
+
+    def test_role_counterpart_missing_is_rejected(self) -> None:
+        """연결을 검증할 수 없는 구성도 거부한다."""
+
+        documents = documents_of("H-06")
+        bundle = documents["reference_bundles"][0]
+        bundle["degraded_media"]["timebase_ref"] = bundle["degraded_timebase"]["timebase_id"]
+        del bundle["degraded_timebase"]
+        codes = codes_for(documents)
+        self.assertIn("E_REFERENCE_ID", codes)
+
+    def test_membership_check_is_still_applied(self) -> None:
+        documents = documents_of("H-06")
+        documents["reference_bundles"][0]["source_media"]["timebase_ref"] = "tb-ghost"
+        assert_rejected(
+            self,
+            documents,
+            "E_REFERENCE_ID",
+            "reference_bundles/0/source_media/timebase_ref",
+        )
+
+    def test_absent_timebase_ref_stays_optional(self) -> None:
+        documents = documents_of("H-06")
+        bundle = documents["reference_bundles"][0]
+        self.assertNotIn("timebase_ref", bundle["source_media"])
+        self.assertEqual(codes_for(documents), ())
+
+
+class ReviewM04R1PairedSampleSetTests(unittest.TestCase):
+    """REVIEW-015 M-04-R1 — paired/hypothesis/dataset 다섯 집합의 정확한 동일성."""
+
+    def test_independent_valid_paired_document_passes(self) -> None:
+        documents = valid_paired_documents()
+        self.assertEqual(codes_for(documents), ())
+        manifest = documents["eval_run_manifest"]
+        dataset = set(manifest["dataset"]["sample_ids"])
+        paired = manifest["paired_comparison"]
+        self.assertEqual(set(paired["baseline_sample_ids"]), dataset)
+        self.assertEqual(set(paired["candidate_sample_ids"]), dataset)
+        for role in ("baseline", "candidate"):
+            index = hypothesis_index(documents, f"hyp-{role}")
+            self.assertEqual(set(manifest["hypotheses"][index]["sample_ids"]), dataset)
+
+    def test_proper_subset_of_dataset_is_rejected(self) -> None:
+        """다섯 집합이 서로 같아도 dataset의 진부분집합이면 거부한다."""
+
+        documents = valid_paired_documents()
+        manifest = documents["eval_run_manifest"]
+        subset = manifest["dataset"]["sample_ids"][:1]
+        manifest["paired_comparison"]["baseline_sample_ids"] = list(subset)
+        manifest["paired_comparison"]["candidate_sample_ids"] = list(subset)
+        for role in ("baseline", "candidate"):
+            index = hypothesis_index(documents, f"hyp-{role}")
+            manifest["hypotheses"][index]["sample_ids"] = list(subset)
+        for location in (
+            "eval_run_manifest/paired_comparison/baseline_sample_ids",
+            "eval_run_manifest/paired_comparison/candidate_sample_ids",
+        ):
+            with self.subTest(location=location):
+                assert_rejected(self, documents, "E_PAIRED_SAMPLE_SET", location)
+                assert_location_resolves(self, documents, location)
+
+    def test_missing_baseline_hypothesis_sample_ids_is_rejected(self) -> None:
+        documents = valid_paired_documents()
+        index = hypothesis_index(documents, "hyp-baseline")
+        documents["eval_run_manifest"]["hypotheses"][index].pop("sample_ids")
+        location = f"eval_run_manifest/hypotheses/{index}"
+        assert_rejected(self, documents, "E_PAIRED_SAMPLE_SET", location)
+        entry = assert_location_resolves(self, documents, location)
+        self.assertNotIn("sample_ids", entry)
+
+    def test_missing_candidate_hypothesis_sample_ids_is_rejected(self) -> None:
+        documents = valid_paired_documents()
+        index = hypothesis_index(documents, "hyp-candidate")
+        documents["eval_run_manifest"]["hypotheses"][index].pop("sample_ids")
+        assert_rejected(
+            self, documents, "E_PAIRED_SAMPLE_SET", f"eval_run_manifest/hypotheses/{index}"
+        )
+
+    def test_paired_and_hypothesis_mismatch_is_rejected(self) -> None:
+        documents = valid_paired_documents()
+        manifest = documents["eval_run_manifest"]
+        index = hypothesis_index(documents, "hyp-baseline")
+        manifest["hypotheses"][index]["sample_ids"] = ["smp-001"]
+        location = f"eval_run_manifest/hypotheses/{index}/sample_ids"
+        assert_rejected(self, documents, "E_PAIRED_SAMPLE_SET", location)
+        assert_location_resolves(self, documents, location)
+
+    def test_hypothesis_and_dataset_mismatch_is_rejected(self) -> None:
+        documents = valid_paired_documents()
+        manifest = documents["eval_run_manifest"]
+        manifest["dataset"]["sample_ids"] = ["smp-001", "smp-002", "smp-003"]
+        codes = codes_for(documents)
+        self.assertIn("E_PAIRED_SAMPLE_SET", codes)
+        locations = {
+            f.location for f in findings_for(documents) if f.code == "E_PAIRED_SAMPLE_SET"
+        }
+        self.assertIn("eval_run_manifest/paired_comparison/baseline_sample_ids", locations)
+        self.assertIn("eval_run_manifest/paired_comparison/candidate_sample_ids", locations)
+
+    def test_duplicate_sample_ids_are_blocked_by_schema(self) -> None:
+        """중복은 schema의 uniqueItems가 이미 금지한다."""
+
+        manifest_schema = SCHEMAS.documents["eval-run-manifest-v1.schema.json"]
+        paired = manifest_schema["properties"]["paired_comparison"]["properties"]
+        self.assertIs(paired["baseline_sample_ids"]["uniqueItems"], True)
+        self.assertIs(paired["candidate_sample_ids"]["uniqueItems"], True)
+        dataset = manifest_schema["properties"]["dataset"]["properties"]
+        self.assertIs(dataset["sample_ids"]["uniqueItems"], True)
+        hypotheses = manifest_schema["properties"]["hypotheses"]["items"]["properties"]
+        self.assertIs(hypotheses["sample_ids"]["uniqueItems"], True)
+
+        documents = valid_paired_documents()
+        documents["eval_run_manifest"]["paired_comparison"]["baseline_sample_ids"].append(
+            "smp-001"
+        )
+        assert_rejected(
+            self,
+            documents,
+            "E_SCHEMA",
+            "eval_run_manifest/paired_comparison/baseline_sample_ids/2",
+        )
+
+    def test_h14_still_fails_for_its_own_reason(self) -> None:
+        self.assertEqual(codes_for(documents_of("H-14")), ("E_PAIRED_SAMPLE_SET",))
+
+
+class ReviewR031ResumeLocationTests(unittest.TestCase):
+    """REVIEW-015 R-03-1 — resume finding이 실제 입력 노드를 가리킨다."""
+
+    def test_no_synthetic_axis_metric_pointer_is_emitted(self) -> None:
+        documents = documents_of("H-11")
+        index = previous_version_index(documents, "source", "cer")
+        previous_versions_of(documents)[index]["normalization_version"] = "norm-v1/9.9.9"
+        locations = [f.location for f in findings_for(documents)]
+        self.assertTrue(locations)
+        for location in locations:
+            self.assertNotIn("previous_metric_versions/source/", location)
+            self.assertNotIn("previous_metric_versions/target/", location)
+
+    def test_every_resume_finding_location_resolves(self) -> None:
+        def mutate_impl(documents: dict[str, Any]) -> None:
+            index = previous_version_index(documents, "target", "chrf2")
+            previous_versions_of(documents)[index]["implementation_version"] = "chrf2/9.9.9"
+
+        def mutate_norm(documents: dict[str, Any]) -> None:
+            index = previous_version_index(documents, "target", "chrf2")
+            previous_versions_of(documents)[index]["normalization_version"] = "norm-v1/9.9.9"
+
+        def drop_norm(documents: dict[str, Any]) -> None:
+            index = previous_version_index(documents, "source", "cer")
+            previous_versions_of(documents)[index].pop("normalization_version")
+
+        def drop_entry(documents: dict[str, Any]) -> None:
+            entries = previous_versions_of(documents)
+            entries.remove(next(e for e in entries if e["metric_id"] == "cpwer"))
+
+        def add_unknown(documents: dict[str, Any]) -> None:
+            previous_versions_of(documents).append(
+                {"axis": "target", "metric_id": "ghost", "implementation_version": "g/1.0.0"}
+            )
+
+        for mutate in (mutate_impl, mutate_norm, drop_norm, drop_entry, add_unknown):
+            with self.subTest(mutation=mutate.__name__):
+                documents = documents_of("H-11")
+                mutate(documents)
+                findings = findings_for(documents)
+                self.assertTrue(findings)
+                for finding in findings:
+                    self.assertEqual(finding.code, "E_RESUME_FINGERPRINT")
+                    self.assertIn("previous_metric_versions", finding.location)
+                    assert_location_resolves(self, documents, finding.location)
+
+    def test_value_mismatch_points_at_the_exact_field(self) -> None:
+        documents = documents_of("H-11")
+        index = previous_version_index(documents, "target", "chrf2")
+        previous_versions_of(documents)[index]["implementation_version"] = "chrf2/9.9.9"
+        location = (
+            f"eval_run_manifest/resume/previous_metric_versions/{index}/implementation_version"
+        )
+        assert_rejected(self, documents, "E_RESUME_FINGERPRINT", location)
+        self.assertEqual(assert_location_resolves(self, documents, location), "chrf2/9.9.9")
+
+    def test_duplicate_entry_points_at_the_real_index(self) -> None:
+        documents = documents_of("H-11")
+        entries = previous_versions_of(documents)
+        entries.append(copy.deepcopy(entries[0]))
+        location = f"eval_run_manifest/resume/previous_metric_versions/{len(entries) - 1}"
+        assert_rejected(self, documents, "E_METRIC_PLAN_DUPLICATE", location)
+        assert_location_resolves(self, documents, location)
+
+    def test_output_order_stays_deterministic(self) -> None:
+        documents = documents_of("H-11")
+        for entry in previous_versions_of(documents):
+            entry["implementation_version"] = "x/9.9.9"
+        first = findings_for(documents)
+        second = findings_for(copy.deepcopy(documents))
+        self.assertEqual(first, second)
+        self.assertEqual(list(first), sort_findings(first))
+        self.assertEqual({f.code for f in first}, {"E_RESUME_FINGERPRINT"})
 
 
 if __name__ == "__main__":

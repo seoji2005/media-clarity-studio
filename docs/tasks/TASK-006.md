@@ -8,6 +8,7 @@
 - **구현 기준선:** `main@5a6b25d870514433c579be6858de8c23fbd33dfc` (PR #27 병합 후)
 - **구현 브랜치:** `claude/task-006-eval-contracts`
 - **1차 Gate H 검토:** `REVIEW-014` (PR #29 `lean-root-review/task-006-gate-h`) — 고정 HEAD `d72325737d1088104a11d05228b84bd47616fee0`, 판정 **변경 요청** (차단 0 · 중대 4 · 경미 1). 반영은 §11.5
+- **2차 Gate H 제한 재검토:** `REVIEW-015` (PR #30, 리뷰 commit `d8d1abd82a1ead14b1ae3e0fac58006eff8fc1b8`) — 고정 HEAD `cd94abf0c23c9e9023abbfed1c3999eda9c7efa0`, 판정 **변경 요청** (차단 0 · 중대 2 · 경미 1). 반영은 §11.6
 - **선행:** [TASK-005](TASK-005.md) Done
 - **구현 Owner:** Claude Code 구현 세션
 - **검증·리뷰:** Lean Root Orchestrator, 구현 세션과 분리된 고정 HEAD 검토
@@ -357,3 +358,29 @@ M-01~M-04·R-01을 제한 범위로 반영했다. 리뷰 원문과 PR #29는 수
 
 **추가 한계 (R-01):** RFC 3339가 허용하는 윤초(`:60`)는 stdlib `datetime`이 표현하지 못하므로
 거부한다. 이 프로젝트의 timestamp는 윤초를 쓰지 않는다.
+
+### 11.6 REVIEW-015 제한 재검토 반영 (3차 커밋)
+
+`REVIEW-015`가 고정 HEAD `cd94abf…`에서 **변경 요청**으로 지목한 M-01-R1·M-04-R1·R-03-1을
+제한 범위로 반영했다. REVIEW-014·015 원문과 PR #29·#30은 수정하지 않았다.
+
+| ID | 반영 위치 |
+|---|---|
+| **M-01-R1** | `_check_bundle_reference_ids()`에 **역할별 정확 연결** 추가 — `source_media.timebase_ref`는 `source_timebase.timebase_id`와, `degraded_media.timebase_ref`는 `degraded_timebase.timebase_id`와 정확히 같아야 한다. 역할상 필요한 timebase가 없어 연결을 검증할 수 없으면 거부한다. 기존 ID 집합 membership 검사는 유지하고, 알 수 없는 ID는 membership이 이미 보고하므로 역할 검사에서 중복 보고하지 않는다. 코드 `E_REFERENCE_ID` |
+| **M-04-R1** | `_check_paired_comparison()`에 **다섯 집합 정확 동일성** 추가 — dataset `sample_ids`, baseline/candidate paired 집합, baseline/candidate 가설 `sample_ids`가 모두 같아야 하며 **dataset의 진부분집합도 거부**한다. 참조된 두 가설에 `sample_ids`가 없으면 거부한다(선택적으로 빠질 수 있는 집합은 paired 비교의 증거가 아니다). 코드 `E_PAIRED_SAMPLE_SET` |
+| **R-03-1** | `_check_resume()`이 `previous_metric_versions`의 **실제 배열 index를 보존**한다. 값 불일치는 `.../<index>/implementation_version` 또는 `.../<index>/normalization_version`을, 필드·entry 누락은 실제 존재하는 부모(`.../<index>` 또는 `.../previous_metric_versions`)를 가리킨다. `<axis>/<metric_id>` 합성 pointer를 만들지 않는다. 코드 `E_RESUME_FINGERPRINT`와 결정적 출력 순서는 유지 |
+
+**중복 ID는 schema가 이미 금지한다.** `dataset.sample_ids`, paired 두 집합, 가설 `sample_ids`가
+모두 `uniqueItems: true`이므로 semantic 중복 검사를 따로 두지 않았고, 테스트가 그 사실을 고정한다.
+
+**positive를 먼저 고정했다.** M-04-R1은 이미 다른 이유로 invalid인 H-14를 positive base로 쓰지
+않고, 유효한 H-01에 baseline/candidate 가설과 paired comparison을 더한 **독립 valid 문서**를
+먼저 통과시킨 뒤 조건을 하나씩 mutation한다. M-01-R1도 정상 source/degraded 연결을 먼저 통과시킨다.
+
+**schema 변경 없음.** 이번 반영은 validator와 테스트만 바꾼다. 7개 schema 파일은 blob 무변경이고
+fixture도 변경하지 않았다 — H-01~H-14의 의미는 그대로다.
+
+**알려진 중복 방어 (숨기지 않는다).** paired 표본 집합과 가설 `sample_ids`의 직접 비교는
+dataset 동일성 검사와 **중복**이다. 두 집합이 모두 dataset과 같으면 서로도 같으므로, 이 줄만
+제거해도 탐지는 유지된다. 다만 `.../baseline_sample_ids`에 별도 진단을 남겨 수정 지점을 좁혀
+주므로 유지했다.

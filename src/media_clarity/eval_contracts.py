@@ -835,6 +835,42 @@ def _check_bundle_reference_ids(bundle: Mapping[str, Any], location: str) -> lis
         if isinstance(node, dict):
             require_timebase(node.get("timebase_ref"), f"{location}/{key}/timebase_ref")
 
+    # 역할별 정확 연결 — 존재하는 **다른** timebase를 가리키면 membership 검사는 통과하지만
+    # source/degraded 시간축이 조용히 뒤바뀐다 (REVIEW-015 M-01-R1).
+    for media_key, timebase_key in (
+        ("source_media", "source_timebase"),
+        ("degraded_media", "degraded_timebase"),
+    ):
+        media = bundle.get(media_key)
+        if not isinstance(media, dict) or "timebase_ref" not in media:
+            continue
+        declared = media["timebase_ref"]
+        where = f"{location}/{media_key}/timebase_ref"
+        if not isinstance(declared, str) or declared not in timebase_ids:
+            # 알 수 없는 ID는 위의 membership 검사가 이미 보고했다.
+            continue
+        timebase = bundle.get(timebase_key)
+        if not isinstance(timebase, dict):
+            findings.append(
+                Finding(
+                    where,
+                    "E_REFERENCE_ID",
+                    f"{media_key}.timebase_ref가 있는데 {timebase_key}가 없어 역할 연결을 "
+                    "검증할 수 없다",
+                )
+            )
+            continue
+        expected = timebase.get("timebase_id")
+        if declared != expected:
+            findings.append(
+                Finding(
+                    where,
+                    "E_REFERENCE_ID",
+                    f"{media_key}.timebase_ref는 {timebase_key}.timebase_id({expected!r})여야 "
+                    f"한다 (발견: {declared!r})",
+                )
+            )
+
     for index, stream in enumerate(bundle.get("speaker_streams") or []):
         if not isinstance(stream, dict):
             continue
@@ -1137,11 +1173,12 @@ def _check_paired_comparison(manifest: Mapping[str, Any], location: str) -> list
         return findings
     paired_location = f"{location}/paired_comparison"
 
-    hypotheses = {
-        entry.get("hypothesis_id"): entry
-        for entry in manifest.get("hypotheses") or []
-        if isinstance(entry, dict) and isinstance(entry.get("hypothesis_id"), str)
-    }
+    hypothesis_index: dict[str, int] = {}
+    hypotheses: dict[str, Mapping[str, Any]] = {}
+    for index, entry in enumerate(manifest.get("hypotheses") or []):
+        if isinstance(entry, dict) and isinstance(entry.get("hypothesis_id"), str):
+            hypotheses.setdefault(entry["hypothesis_id"], entry)
+            hypothesis_index.setdefault(entry["hypothesis_id"], index)
     dataset = manifest.get("dataset")
     dataset_samples = (
         set(dataset.get("sample_ids") or []) if isinstance(dataset, dict) else set()
@@ -1159,11 +1196,36 @@ def _check_paired_comparison(manifest: Mapping[str, Any], location: str) -> list
                 )
             )
 
+    def compare_with_dataset(samples: Any, where: str, what: str) -> None:
+        """paired 비교의 증거는 **같은 전체 dataset 표본**이다. 진부분집합도 거부한다."""
+
+        if not isinstance(samples, list) or not dataset_samples:
+            return
+        actual = set(samples)
+        if actual == dataset_samples:
+            return
+        missing = sorted(dataset_samples - actual)
+        extra = sorted(actual - dataset_samples)
+        detail = []
+        if missing:
+            detail.append(f"누락 {', '.join(missing)}")
+        if extra:
+            detail.append(f"dataset 밖 {', '.join(extra)}")
+        findings.append(
+            Finding(
+                where,
+                "E_PAIRED_SAMPLE_SET",
+                f"{what}이 dataset sample 집합과 다르다 ({'; '.join(detail)})",
+            )
+        )
+
     for role in ("baseline", "candidate"):
         hypothesis_id = paired.get(f"{role}_hypothesis_id")
         samples = paired.get(f"{role}_sample_ids")
         id_location = f"{paired_location}/{role}_hypothesis_id"
         sample_location = f"{paired_location}/{role}_sample_ids"
+
+        compare_with_dataset(samples, sample_location, f"{role} paired 표본 집합")
 
         hypothesis = hypotheses.get(hypothesis_id)
         if hypothesis is None:
@@ -1174,7 +1236,8 @@ def _check_paired_comparison(manifest: Mapping[str, Any], location: str) -> list
                     f"manifest hypotheses에 없는 {role} 가설: {hypothesis_id!r}",
                 )
             )
-        elif hypothesis.get("role") != role:
+            continue
+        if hypothesis.get("role") != role:
             findings.append(
                 Finding(
                     id_location,
@@ -1183,26 +1246,34 @@ def _check_paired_comparison(manifest: Mapping[str, Any], location: str) -> list
                     f"{role}로 지정됐다",
                 )
             )
-        elif isinstance(samples, list) and isinstance(hypothesis.get("sample_ids"), list):
-            if set(samples) != set(hypothesis["sample_ids"]):
-                findings.append(
-                    Finding(
-                        sample_location,
-                        "E_PAIRED_SAMPLE_SET",
-                        f"{role} 표본 집합이 가설 {hypothesis_id!r}의 sample_ids와 다르다",
-                    )
-                )
+            continue
 
-        if isinstance(samples, list) and dataset_samples:
-            outside = sorted(set(samples) - dataset_samples)
-            if outside:
-                findings.append(
-                    Finding(
-                        sample_location,
-                        "E_PAIRED_SAMPLE_SET",
-                        f"dataset sample 집합 밖의 {role} 표본: {', '.join(outside)}",
-                    )
+        index = hypothesis_index[hypothesis_id]
+        hypothesis_samples = hypothesis.get("sample_ids")
+        if not isinstance(hypothesis_samples, list):
+            # 선택적으로 빠질 수 있는 집합은 paired 비교의 증거가 아니다 (REVIEW-015 M-04-R1).
+            findings.append(
+                Finding(
+                    f"{location}/hypotheses/{index}",
+                    "E_PAIRED_SAMPLE_SET",
+                    f"paired {role} 가설 {hypothesis_id!r}에 sample_ids가 없다",
                 )
+            )
+            continue
+
+        compare_with_dataset(
+            hypothesis_samples,
+            f"{location}/hypotheses/{index}/sample_ids",
+            f"{role} 가설 sample_ids",
+        )
+        if isinstance(samples, list) and set(samples) != set(hypothesis_samples):
+            findings.append(
+                Finding(
+                    sample_location,
+                    "E_PAIRED_SAMPLE_SET",
+                    f"{role} 표본 집합이 가설 {hypothesis_id!r}의 sample_ids와 다르다",
+                )
+            )
     return findings
 
 
@@ -1228,8 +1299,12 @@ def _check_resume(manifest: Mapping[str, Any], location: str) -> list[Finding]:
 
     # 버전 비교는 (axis, metric_id) 단위다. metric_id만으로 묶으면 source와 target의
     # 같은 지표를 구분하지 못한다 (REVIEW-014 M-03).
+    # 위반 위치는 **실제 입력 노드**를 가리켜야 한다. `previous_metric_versions`는 배열이므로
+    # `.../<axis>/<metric_id>` 같은 합성 pointer를 만들지 않고 실제 index를 보존한다
+    # (REVIEW-015 R-03-1). 값 불일치는 그 필드를, 누락은 실제 존재하는 부모 container를 가리킨다.
     planned_versions = _metric_plan_versions(manifest)
-    previous_versions: dict[tuple[str, str], tuple[Any, Any]] = {}
+    versions_location = f"{resume_location}/previous_metric_versions"
+    previous_versions: dict[tuple[str, str], tuple[int, Any, Any]] = {}
     for index, entry in enumerate(resume.get("previous_metric_versions") or []):
         if not isinstance(entry, dict):
             continue
@@ -1241,46 +1316,48 @@ def _check_resume(manifest: Mapping[str, Any], location: str) -> list[Finding]:
         if key in previous_versions:
             findings.append(
                 Finding(
-                    f"{resume_location}/previous_metric_versions/{index}",
+                    f"{versions_location}/{index}",
                     "E_METRIC_PLAN_DUPLICATE",
                     f"이전 버전 목록에 ({axis}, {metric_id})가 두 번 나온다",
                 )
             )
             continue
         previous_versions[key] = (
+            index,
             entry.get("implementation_version"),
             entry.get("normalization_version"),
         )
 
     for key in sorted(set(planned_versions) | set(previous_versions)):
         axis, metric_id = key
-        where = f"{resume_location}/previous_metric_versions/{axis}/{metric_id}"
         current_entry = planned_versions.get(key)
         previous_entry = previous_versions.get(key)
         if current_entry is None:
+            index = previous_entry[0]
             findings.append(
                 Finding(
-                    where,
+                    f"{versions_location}/{index}",
                     "E_RESUME_FINGERPRINT",
                     f"현재 metric plan에 없는 ({axis}, {metric_id})가 이전 버전 목록에 있다",
                 )
             )
             continue
         if previous_entry is None:
+            # 해당 entry 자체가 없으므로 실제로 존재하는 부모 배열을 가리킨다.
             findings.append(
                 Finding(
-                    where,
+                    versions_location,
                     "E_RESUME_FINGERPRINT",
                     f"({axis}, {metric_id})의 이전 버전 기록이 없다 — 기존 run에 이어 쓰지 않는다",
                 )
             )
             continue
+        index, previous_impl, previous_norm = previous_entry
         current_impl, current_norm = current_entry
-        previous_impl, previous_norm = previous_entry
         if current_impl != previous_impl:
             findings.append(
                 Finding(
-                    where,
+                    f"{versions_location}/{index}/implementation_version",
                     "E_RESUME_FINGERPRINT",
                     f"({axis}, {metric_id}) implementation_version 불일치: "
                     f"이전 {previous_impl!r} vs 현재 {current_impl!r}",
@@ -1288,6 +1365,12 @@ def _check_resume(manifest: Mapping[str, Any], location: str) -> list[Finding]:
             )
         # normalization version은 존재 여부까지 비교한다. 한쪽에만 있으면 불일치다.
         if current_norm != previous_norm:
+            # 이전 entry에 필드가 없으면 그 필드를 가리킬 수 없으므로 entry 자체를 가리킨다.
+            where = (
+                f"{versions_location}/{index}/normalization_version"
+                if previous_norm is not None
+                else f"{versions_location}/{index}"
+            )
             findings.append(
                 Finding(
                     where,
