@@ -9,6 +9,7 @@
 | **Status** | `In review` |
 | **구현 상태** | **`Implemented — awaiting fixed HEAD rereview`** — 구현 세션 자기 승인 없음 |
 | **1차 Gate H 검토** | `REVIEW-018` (PR #37, 리뷰 commit `a08981795739901b9fa14733ff3e0a9afc614e8a`) — 고정 HEAD `9c60ccb67d5475ce1c794852ccadfd82594383a3`, 판정 **변경 요청** (필수 수정 5건). 반영은 §12.8 |
+| **2차 Gate H 재검토** | `REVIEW-019` (PR #38, 리뷰 commit `c57e22b507a97d1b7f63bc8ab530bb7935efaa2c`) — 고정 HEAD `26139810bb4f3d8c1033d7802254c4144c370eac`, 판정 **변경 요청** (REVIEW-018 5건 해소 · 추가 필수 수정 4건). 반영은 §12.10 |
 | **구현 기준 main** | `b55476086ca55a2bb806fb237239be604ed7efb8` |
 | **구현 브랜치** | `claude/task-028-resumable-runtime` |
 | **계약 상태** | **Approved — PR #34 병합 완료** |
@@ -534,3 +535,81 @@ M-01~M-05의 새 검사 16종을 더해 저장소 밖 임시 사본에서 다시
 
 §12.7의 주석은 그대로 유효하다 — `DAG cycle 검사 제거`는 assertion 실패가 아니라 무한
 루프로 나타나며, per-run timeout이 "정지하지 않음"을 실패로 센다.
+
+### 12.10 REVIEW-019 변경 요청 반영 (3차 커밋)
+
+`REVIEW-019` (PR #38, 리뷰 commit `c57e22b…`)가 고정 HEAD `2613981…`에서 **변경 요청**으로
+지목한 M-01-R1~R3·M-05-R1을 제한 범위로 반영했다. REVIEW-018·019 원문과 PR #37·#38,
+`main`은 수정하지 않았다. 네 반례를 먼저 production API로 **재현한 뒤** 고쳤다.
+
+REVIEW-019는 REVIEW-018의 다섯 직접 반례가 모두 해소됐음을 확인했고, `interrupted_at`으로
+`ended_at`을 추정하지 않은 판단도 승인했다.
+
+| ID | 반영 위치 |
+|---|---|
+| **M-01-R1** | `check_attempt_identity()`·`check_attempt_uniqueness()` 신설. `_read_attempts()`가 각 record의 `job_id`·`stage_id`·`attempt_id`를 현재 spec·stage·**실제 파일 stem**과 대조하고, `aNNNN`의 숫자와 `attempt_number`가 일치하는지 검사하며, 디렉터리 안의 ID·number 중복을 거부한다. `_lookup_cache()`가 record만이 아니라 **`(path, record)` 연결을 유지**해 돌려주고, `StageOutcome.attempt_path`에 실제 경로를 담아 manifest가 검증된 실제 path만 기록한다 |
+| **M-01-R2** | `JobRuntime.check_manifest_semantics()`·`_check_stage_state()` 신설. 기존 manifest를 쓰거나 덮어쓰기 **전에** schema/runtime version·job ID·pipeline ID·source identity 존재 여부와 값·DAG topology와 선언 순서를 대조하고, stage ID 유일성·DAG membership을 검사하며, 각 stage state가 가리키는 **실제 attempt 파일**의 존재·record identity·status·cache key 일치를 확인한다. `completed` manifest는 DAG의 모든 stage를 정확히 한 번 포함하고 전부 completed attempt를 가리켜야 한다 |
+| **M-01-R3** | `ATTEMPT_STATE_RULES` 강화 — `failed`는 `error_code`·`error_location` 필수, `running`은 `error_code`·`error_location`·`interrupted_at`·`ended_at`·`wall_duration_seconds` 전부 금지. `check_attempt_semantics()`가 저장된 `error_code`가 선언된 `ERROR_CODES`에 속하는지, `interrupted`의 code가 정확히 `E_STATE_TRANSITION`인지 검사한다 |
+| **M-05-R1** | `check_seed_inputs()`가 `sorted()` **전에** 모든 key의 타입과 값을 검사한다. non-string key와 안전하지 않은 stage 식별자를 `E_SCHEMA` @ `seed_inputs`로 거부하며 **key 값을 메시지에 복제하지 않는다** |
+
+**실패 경로가 기존 manifest를 덮어쓰지 않게 했다.** `run_job()`이 이번 실행에서 실제로
+attempt record를 쓴 경우에만(`progress`가 비어 있지 않을 때만) 실패 manifest를 기록한다.
+checkpoint 무결성 거부처럼 **새 evidence를 만들지 않은** 실행은 기존 manifest를 건드리지 않는다.
+
+**`E_RESUME_FINGERPRINT`가 먼저다.** manifest semantic 검사는 job fingerprint 비교를
+통과한 뒤에만 실행한다. 그래야 J-11의 "fingerprint가 다르면 `E_RESUME_FINGERPRINT` @
+`job_fingerprint`" 계약이 그대로 유지되고, fingerprint는 유지한 채 identity만 조작한
+manifest는 `E_CHECKPOINT_INVALID`로 잡힌다.
+
+**중복 방어를 숨기지 않는다.** `check_attempt_uniqueness()`는 file stem 검사가 함께 있으면
+디렉터리 경로로는 도달하지 않는다 — 서로 다른 두 파일이 같은 `attempt_id`를 가질 수 없고,
+ID가 `attempt_number`를 결정하기 때문이다. 그래서 이 검사는 stem 검사에 대한 **중복 방어**이며,
+회귀 테스트는 함수 자체를 반례로 검증하고 디렉터리 경로로 실제 도달하는 형태(`a0002.json`
+안의 number 1)는 `attempt_number` 위치에서 별도로 고정한다.
+
+**schema 변경 없음.** 이번 반영은 `job_runtime.py`와 `tests/test_job_runtime.py`만 바꾼다.
+`schemas/job-v1.schema.json`, `artifact_store.py`, `common-v1.schema.json`, TASK-006
+schema·fixture, TASK-022 구현, J-01~J-16 fixture, `schema_core.py`, `Makefile`,
+`.gitignore`, `docs/ARCHITECTURE.md`는 **blob 무변경**이다.
+
+### 12.11 REVIEW-019 반영 뒤 mutation 감사
+
+M-01-R1~R3·M-05-R1의 새 검사 22종을 더해 저장소 밖 임시 사본에서 다시 감사했다.
+
+**74개 mutation 중 72개 탐지. 감사 불가(SKIP) 0건, 미탐지 2건.**
+
+| 묶음 | mutation | 결과 |
+|---|---|---|
+| M-01-R1 | record `job_id` 대조 / `stage_id` 대조 / 파일 stem 대조 / `attempt_id`↔`attempt_number` 수치 일치 / 정체성 검사 호출 자체 (5종) | 전부 탐지 |
+| M-01-R1 | attempt ID·number 중복 검사 **호출** 제거 | **미탐지** — 아래 참조 |
+| M-01-R1 | manifest가 record 내부 ID로 경로를 재구성 | **미탐지** — 아래 참조 |
+| M-01-R2 | semantic validator 호출 / job·pipeline identity / DAG topology / completed 완전성 / stage state 중복 / manifest↔attempt 연결 / dangling attempt_path / status↔record status / 실패 경로의 무조건 덮어쓰기 (9종) | 전부 탐지 |
+| M-01-R3 | failed의 error 필수 규칙 / running의 `error_location` 금지 / 선언된 코드 집합 / interrupted의 정확한 code (4종) | 전부 탐지 |
+| M-05-R1 | seed key 타입 선행 검사 / key 식별자 유효성 검사 (2종) | 전부 탐지 |
+| 기존 50종 (REVIEW-018까지) | cache key·checkpoint·CAS·path·입력 변경·민감정보·DAG·JSON·순서·M-01~M-05 | 전부 탐지 유지 |
+
+**미탐지 2건 — 숨기지 않고 상위 방어를 밝힌다.**
+
+두 항목 모두 **중복 방어**이며, 각각 상위 검사가 대신 잡는다. 그리고 그 사실을
+**보완 mutation으로 실증**했다.
+
+1. **attempt ID·number 중복 검사 호출 제거.** 상위 방어는 **파일 stem 대조**다. 서로 다른
+   두 파일이 같은 `attempt_id`를 가질 수 없고 ID가 `attempt_number`를 결정하므로, 디렉터리
+   경로로는 중복이 도달하지 않는다. 검사 자체가 공허하지 않다는 것은 보완 mutation
+   `중복 검사 함수 본문 무력화`가 **탐지**되는 것으로 확인했다 — 직접 단위 테스트가 잡는다.
+   디렉터리 경로로 실제 도달하는 형태(`a0002.json` 안의 number 1)는 `attempt_number`
+   위치에서 별도로 고정한다.
+2. **manifest가 record 내부 ID로 경로를 재구성.** 상위 방어는 **정체성 검사**다. 정체성이
+   강제되면 `attempt_id == 파일 stem`이므로 재구성한 경로와 실제 경로가 같아진다. 두 방어를
+   **함께** 제거한 보완 mutation `정체성 검사 제거 + manifest 경로 재구성`은 **탐지**되므로,
+   dangling manifest 경로가 실제로 막혀 있음이 확인된다.
+
+이전 라운드에서 낡은 패턴으로 SKIP된 4건(`running attempt를 completed hit로 재사용`,
+`callable 호출 전 running attempt 기록 제거`, `M-01 semantic invariant 검사 자체를 제거`,
+`M-02 hit 반환 전 stale running 보존`)은 SKIP을 증거로 삼지 않고 패턴을 실제 코드에 맞춘 뒤
+다시 돌려 **전부 탐지**되는 것을 확인했다.
+
+처음 라운드에서 미탐지였던 `manifest status ↔ record status 대조 제거`와
+`seed key 타입 선행 검사 제거`는 회귀 테스트의 공백이었다. 각각 `completed` 완전성 규칙이
+가리지 않는 `failed` manifest 경로와, 정수 key의 **진단 사유**를 고정하는 테스트를 추가해
+마지막 라운드에서 탐지되게 했다.

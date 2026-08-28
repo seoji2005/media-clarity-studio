@@ -36,6 +36,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 from dataclasses import dataclass
@@ -194,6 +195,9 @@ class StageOutcome:
     cache_key: str
     attempt_id: str
     attempt_status: str
+    #: project root 기준 **실제** attempt record 경로. manifest는 이 값만 기록한다
+    #: (REVIEW-019 M-01-R1) — record 내부 ID에서 경로를 다시 만들어 내지 않는다.
+    attempt_path: str
     callable_invoked: bool
     outputs: tuple[Mapping[str, Any], ...]
     verified_artifact_count: int
@@ -224,7 +228,13 @@ class JobResult:
 ATTEMPT_STATE_RULES: dict[str, dict[str, tuple[str, ...]]] = {
     "running": {
         "required": (),
-        "forbidden": ("ended_at", "wall_duration_seconds", "interrupted_at", "error_code"),
+        "forbidden": (
+            "ended_at",
+            "wall_duration_seconds",
+            "interrupted_at",
+            "error_code",
+            "error_location",
+        ),
     },
     "interrupted": {
         # 언제 죽었는지는 관측하지 못했다. ended_at을 지어내지 않고, 전이를 **관측한**
@@ -233,7 +243,8 @@ ATTEMPT_STATE_RULES: dict[str, dict[str, tuple[str, ...]]] = {
         "forbidden": ("ended_at", "wall_duration_seconds"),
     },
     "failed": {
-        "required": ("ended_at", "wall_duration_seconds"),
+        # 실패 evidence가 없는 failed record는 복구·QC 증거가 아니다 (REVIEW-019 M-01-R3).
+        "required": ("ended_at", "wall_duration_seconds", "error_code", "error_location"),
         "forbidden": ("interrupted_at",),
     },
     "completed": {
@@ -244,6 +255,12 @@ ATTEMPT_STATE_RULES: dict[str, dict[str, tuple[str, ...]]] = {
 
 #: 완료가 아닌 attempt는 출력을 가질 수 없다. 출력이 있다는 것은 완료했다는 뜻이다.
 _TERMINAL_WITHOUT_OUTPUTS = ("running", "interrupted", "failed")
+
+#: 상태가 강제하는 정확한 error code. 다른 코드가 적히면 전이 근거를 신뢰할 수 없다.
+_REQUIRED_ERROR_CODE = {"interrupted": "E_STATE_TRANSITION"}
+
+#: 계약된 attempt ID 모양. 숫자 부분은 attempt_number와 같아야 한다.
+_ATTEMPT_ID_RE = re.compile(r"^a([0-9]{4,})$")
 
 
 def check_attempt_semantics(record: Mapping[str, Any], location: str) -> list[Finding]:
@@ -314,6 +331,108 @@ def check_attempt_semantics(record: Mapping[str, Any], location: str) -> list[Fi
     if status in _TERMINAL_WITHOUT_OUTPUTS and record.get("cache_status") == "hit":
         fail(f"{location}/cache_status", f"{status} attempt가 hit로 기록됐다")
 
+    # 저장된 error code는 선언된 안정 코드 집합에 속해야 한다 (REVIEW-019 M-01-R3).
+    stored_code = record.get("error_code")
+    if stored_code is not None and stored_code not in ERROR_CODES:
+        fail(f"{location}/error_code", f"선언되지 않은 오류 코드다: {stored_code!r}")
+    expected_code = _REQUIRED_ERROR_CODE.get(status)
+    if expected_code is not None and stored_code != expected_code:
+        fail(
+            f"{location}/error_code",
+            f"{status} attempt의 error_code는 {expected_code!r}여야 한다 (발견: {stored_code!r})",
+        )
+
+    return sort_findings(findings)
+
+
+def check_attempt_identity(
+    record: Mapping[str, Any],
+    location: str,
+    *,
+    job_id: str,
+    stage_id: str,
+    file_stem: str,
+) -> list[Finding]:
+    """record 내부 정체성이 **실제 파일·job·stage**와 맞는지 검사한다.
+
+    record 안의 상태만 보면 `a0001.json` 안에 `attempt_id="a9999"`를 써 넣어도 통과한다.
+    그러면 cache hit가 성립하고 manifest가 존재하지 않는 attempt 파일을 가리킨다
+    (REVIEW-019 M-01-R1).
+    """
+
+    findings: list[Finding] = []
+
+    def fail(where: str, message: str) -> None:
+        findings.append(Finding(where, "E_CHECKPOINT_INVALID", message))
+
+    if record.get("job_id") != job_id:
+        fail(
+            f"{location}/job_id",
+            f"record의 job_id가 현재 job과 다르다 (기대 {job_id!r}, 발견 {record.get('job_id')!r})",
+        )
+    if record.get("stage_id") != stage_id:
+        fail(
+            f"{location}/stage_id",
+            f"record의 stage_id가 현재 stage와 다르다 "
+            f"(기대 {stage_id!r}, 발견 {record.get('stage_id')!r})",
+        )
+
+    attempt_id = record.get("attempt_id")
+    if attempt_id != file_stem:
+        fail(
+            f"{location}/attempt_id",
+            f"record의 attempt_id가 파일 이름과 다르다 "
+            f"(파일 {file_stem!r}, 발견 {attempt_id!r})",
+        )
+        return sort_findings(findings)
+
+    match = _ATTEMPT_ID_RE.match(attempt_id) if isinstance(attempt_id, str) else None
+    if match is None:
+        fail(f"{location}/attempt_id", "계약된 aNNNN 모양이 아니다")
+        return sort_findings(findings)
+    if int(match.group(1)) != record.get("attempt_number"):
+        fail(
+            f"{location}/attempt_number",
+            f"attempt_number({record.get('attempt_number')!r})가 "
+            f"attempt_id {attempt_id!r}의 숫자와 다르다",
+        )
+    return sort_findings(findings)
+
+
+def check_attempt_uniqueness(
+    records: Sequence[tuple[Path, Mapping[str, Any]]], relative: Callable[[Path], str]
+) -> list[Finding]:
+    """같은 stage 디렉터리에서 attempt ID·number 중복을 거부한다."""
+
+    findings: list[Finding] = []
+    seen_ids: dict[str, str] = {}
+    seen_numbers: dict[int, str] = {}
+    for path, record in records:
+        location = relative(path)
+        attempt_id = record.get("attempt_id")
+        number = record.get("attempt_number")
+        if isinstance(attempt_id, str):
+            if attempt_id in seen_ids:
+                findings.append(
+                    Finding(
+                        f"{location}/attempt_id",
+                        "E_CHECKPOINT_INVALID",
+                        f"attempt_id {attempt_id!r}가 중복이다 (먼저: {seen_ids[attempt_id]})",
+                    )
+                )
+            else:
+                seen_ids[attempt_id] = location
+        if isinstance(number, int):
+            if number in seen_numbers:
+                findings.append(
+                    Finding(
+                        f"{location}/attempt_number",
+                        "E_CHECKPOINT_INVALID",
+                        f"attempt_number {number}가 중복이다 (먼저: {seen_numbers[number]})",
+                    )
+                )
+            else:
+                seen_numbers[number] = location
     return sort_findings(findings)
 
 
@@ -371,6 +490,21 @@ def check_seed_inputs(
         return
     if not isinstance(seed_inputs, Mapping):
         raise ContractViolation("E_SCHEMA", "seed_inputs", "seed_inputs는 매핑이어야 한다")
+
+    # `sorted()`는 key 타입이 섞이면 raw TypeError를 낸다. 정렬 **전에** 모든 key의
+    # 타입과 값을 검사한다 (REVIEW-019 M-05-R1). 사유에 key 값을 복제하지 않는다.
+    for key in seed_inputs:
+        if not isinstance(key, str):
+            raise ContractViolation(
+                "E_SCHEMA",
+                "seed_inputs",
+                f"stage key는 문자열이어야 한다 ({type(key).__name__} 발견)",
+            )
+        reason = path_segment_error(key)
+        if reason is not None:
+            raise ContractViolation(
+                "E_SCHEMA", "seed_inputs", f"안전한 stage 식별자가 아닌 key다: {reason}"
+            )
 
     for stage_id in sorted(seed_inputs):
         location = f"seed_inputs/{stage_id}"
@@ -655,6 +789,153 @@ class JobRuntime:
             self.validator.validate(record, JOB_SCHEMA_FILE, location, ATTEMPT_RECORD_POINTER)
         )
 
+    def check_manifest_semantics(
+        self, manifest: Mapping[str, Any], spec: JobSpec, location: str
+    ) -> list[Finding]:
+        """기존 manifest가 현재 spec·실제 attempt graph와 모순되지 않는지 검사한다.
+
+        schema만으로는 job identity·pipeline·완료 stage 집합이 모순인 manifest가 통과하고,
+        그 위에 조용히 덮어써진다 (REVIEW-019 M-01-R2). `job_fingerprint` 자체의 불일치는
+        호출자가 `E_RESUME_FINGERPRINT`로 먼저 처리하므로 여기서는 다루지 않는다.
+        """
+
+        findings: list[Finding] = []
+
+        def fail(where: str, message: str) -> None:
+            findings.append(Finding(where, "E_CHECKPOINT_INVALID", message))
+
+        for field, expected in (
+            ("schema_version", SCHEMA_VERSION),
+            ("runtime_version", RUNTIME_VERSION),
+            ("job_id", spec.job_id),
+            ("pipeline_id", spec.pipeline_id),
+        ):
+            if manifest.get(field) != expected:
+                fail(
+                    f"{location}/{field}",
+                    f"{field}가 현재 job과 다르다 (기대 {expected!r}, 발견 {manifest.get(field)!r})",
+                )
+
+        # source_identity는 **존재 여부까지** 일치해야 한다.
+        if ("source_identity" in manifest) != (spec.source_identity is not None):
+            fail(
+                f"{location}/source_identity",
+                "source_identity의 존재 여부가 현재 job과 다르다",
+            )
+        elif spec.source_identity is not None and manifest.get("source_identity") != spec.source_identity:
+            fail(f"{location}/source_identity", "source_identity 값이 현재 job과 다르다")
+
+        declared = [
+            {"stage_id": stage.stage_id, "depends_on": list(stage.depends_on)}
+            for stage in spec.stages
+        ]
+        if manifest.get("dag") != declared:
+            fail(f"{location}/dag", "DAG topology 또는 선언 순서가 현재 job과 다르다")
+
+        dag_stage_ids = {stage.stage_id for stage in spec.stages}
+        states = manifest.get("stages")
+        if not isinstance(states, list):  # pragma: no cover - schema가 이미 거른다
+            fail(f"{location}/stages", "stages가 배열이 아니다")
+            return sort_findings(findings)
+
+        seen: dict[str, int] = {}
+        for index, state in enumerate(states):
+            where = f"{location}/stages/{index}"
+            stage_id = state.get("stage_id")
+            if stage_id not in dag_stage_ids:
+                fail(f"{where}/stage_id", f"DAG에 없는 stage다: {stage_id!r}")
+                continue
+            if stage_id in seen:
+                fail(
+                    f"{where}/stage_id",
+                    f"stage state가 중복이다: {stage_id!r} (먼저: stages/{seen[stage_id]})",
+                )
+                continue
+            seen[stage_id] = index
+            findings.extend(self._check_stage_state(state, spec, where))
+
+        if manifest.get("status") == "completed":
+            missing = sorted(dag_stage_ids - set(seen))
+            if missing:
+                fail(
+                    f"{location}/stages",
+                    f"completed manifest에 없는 stage가 있다: {', '.join(missing)}",
+                )
+            for stage_id, index in sorted(seen.items()):
+                if states[index].get("attempt_status") != "completed":
+                    fail(
+                        f"{location}/stages/{index}/attempt_status",
+                        "completed manifest의 stage가 completed attempt를 가리키지 않는다",
+                    )
+
+        return sort_findings(findings)
+
+    def _check_stage_state(
+        self, state: Mapping[str, Any], spec: JobSpec, location: str
+    ) -> list[Finding]:
+        """stage state가 **실제로 존재하는** attempt record와 일치하는지 확인한다."""
+
+        findings: list[Finding] = []
+
+        def fail(where: str, message: str) -> None:
+            findings.append(Finding(where, "E_CHECKPOINT_INVALID", message))
+
+        relative = state.get("attempt_path")
+        if relative is None:
+            fail(location, "stage state에 attempt_path가 없다")
+            return findings
+        reason = relative_path_error(relative)
+        if reason is not None:
+            fail(f"{location}/attempt_path", f"portable relative path가 아니다: {reason}")
+            return findings
+
+        path = resolve_inside_root(self.project_root, relative, f"{location}/attempt_path")
+        if not path.is_file():
+            fail(f"{location}/attempt_path", "가리키는 attempt record 파일이 없다")
+            return findings
+
+        try:
+            record = load_strict(path)
+        except JsonInputError as exc:
+            fail(f"{location}/attempt_path", f"attempt record JSON 오류: {exc}")
+            return findings
+        if not isinstance(record, dict):
+            fail(f"{location}/attempt_path", "attempt record가 객체가 아니다")
+            return findings
+
+        # 가리키는 record가 schema를 어기면 그것이 먼저다 — 코드를 E_SCHEMA로 보존한다.
+        schema_findings = self.validate_attempt(record, self.relative(path))
+        if schema_findings:
+            return list(schema_findings)
+
+        for field, state_field in (
+            ("attempt_id", "attempt_id"),
+            ("stage_id", "stage_id"),
+            ("cache_key", "cache_key"),
+        ):
+            if record.get(field) != state.get(state_field):
+                fail(
+                    f"{location}/{state_field}",
+                    f"manifest의 {state_field}가 실제 record와 다르다 "
+                    f"(manifest {state.get(state_field)!r}, record {record.get(field)!r})",
+                )
+        if record.get("job_id") != spec.job_id:
+            fail(f"{location}/attempt_path", "가리키는 record의 job_id가 현재 job과 다르다")
+        if record.get("status") != state.get("attempt_status"):
+            fail(
+                f"{location}/attempt_status",
+                f"manifest의 attempt_status가 실제 record status와 다르다 "
+                f"(manifest {state.get('attempt_status')!r}, record {record.get('status')!r})",
+            )
+        return findings
+
+    def _require_semantic(self, findings: Sequence[Finding]) -> None:
+        """semantic finding은 코드와 위치를 그대로 보존해 올린다."""
+
+        if findings:
+            first = findings[0]
+            raise ContractViolation(first.code, first.location, first.message)
+
     def _require_valid(self, findings: Sequence[Finding], what: str) -> None:
         if findings:
             first = findings[0]
@@ -679,13 +960,19 @@ class JobRuntime:
             self._require_valid(self.validate_attempt(record, location), "attempt record")
             # schema를 통과해도 의미상 완료되지 않은 record가 있다. cache lookup **전에**
             # 걸러야 거짓 hit가 생기지 않는다 (REVIEW-018 M-01).
-            semantic = check_attempt_semantics(record, location)
-            if semantic:
-                first = semantic[0]
-                raise ContractViolation(
-                    "E_CHECKPOINT_INVALID", first.location, first.message
+            self._require_semantic(check_attempt_semantics(record, location))
+            # record 내부 ID가 실제 파일·job·stage와 맞는지도 함께 본다 (REVIEW-019 M-01-R1).
+            self._require_semantic(
+                check_attempt_identity(
+                    record,
+                    location,
+                    job_id=spec.job_id,
+                    stage_id=stage_id,
+                    file_stem=path.stem,
                 )
+            )
             records.append((path, record))
+        self._require_semantic(check_attempt_uniqueness(records, self.relative))
         return records
 
     def _next_attempt_id(self, records: Sequence[tuple[Path, dict[str, Any]]]) -> tuple[str, int]:
@@ -728,22 +1015,26 @@ class JobRuntime:
         stage: StageSpec,
         cache_key: str,
         records: Sequence[tuple[Path, dict[str, Any]]],
-    ) -> tuple[str, str, dict[str, Any] | None]:
-        """`(cache_status, cache_reason, hit_record)`.
+    ) -> tuple[str, str, tuple[Path, dict[str, Any]] | None]:
+        """`(cache_status, cache_reason, (path, record))`.
 
         **completed record만** 후보다. `running` record는 어떤 경우에도 hit가 되지 않는다.
         전역 cross-job cache index는 만들지 않는다 — 같은 job의 기록만 본다.
+
+        후보는 **실제 `(path, record)` 연결을 유지한 채** 돌려준다. record만 넘기면
+        호출자가 record 내부 ID로 경로를 다시 만들게 되고, 그 ID가 조작되면 존재하지
+        않는 파일을 가리키게 된다 (REVIEW-019 M-01-R1).
         """
 
         if not stage.cacheable:
             return "bypassed", "not_cacheable", None
 
-        completed = [record for _, record in records if record["status"] == "completed"]
+        completed = [(path, record) for path, record in records if record["status"] == "completed"]
         if not completed:
             return "miss", "no_completed_checkpoint", None
-        for record in completed:
+        for path, record in completed:
             if record["cache_key"] == cache_key:
-                return "hit", "verified_checkpoint", record
+                return "hit", "verified_checkpoint", (path, record)
         return "miss", "cache_key_changed", None
 
     def _verify_checkpoint(self, record: Mapping[str, Any], location: str) -> tuple[int, int]:
@@ -792,6 +1083,11 @@ class JobRuntime:
                     "job_fingerprint",
                     "job fingerprint가 기존 job과 다르다 — 새 job ID를 사용해야 한다",
                 )
+            # fingerprint가 같아도 manifest 자체가 모순일 수 있다. 사용하거나
+            # 덮어쓰기 **전에** 거부한다 (REVIEW-019 M-01-R2).
+            self._require_semantic(
+                self.check_manifest_semantics(existing, spec, self.relative(manifest_path))
+            )
 
         # preflight를 통과한 뒤에야 디렉터리를 만든다.
         self.job_dir(spec).mkdir(parents=True, exist_ok=True)
@@ -799,6 +1095,9 @@ class JobRuntime:
         outcomes: dict[str, StageOutcome] = {}
         produced: dict[str, tuple[Mapping[str, Any], ...]] = {}
         keys: dict[str, str] = {}
+        #: 이번 실행이 새로 쓴 attempt record. 비어 있으면 새 evidence가 없다는 뜻이므로
+        #: 실패해도 기존 manifest를 건드리지 않는다 (REVIEW-019 M-01-R1/R2).
+        progress: list[str] = []
 
         try:
             for stage_id in order:
@@ -812,13 +1111,15 @@ class JobRuntime:
                 )
                 keys[stage_id] = cache_key
                 outcome = self._run_stage(
-                    spec, stage, cache_key, inputs, callables, injection
+                    spec, stage, cache_key, inputs, callables, injection, progress
                 )
                 outcomes[stage_id] = outcome
                 produced[stage_id] = outcome.outputs
                 self._write_manifest(spec, fingerprint, "running", order, outcomes)
         except ContractViolation:
-            self._write_manifest(spec, fingerprint, "failed", order, outcomes)
+            if progress:
+                # 이번 실행이 실제로 남긴 evidence가 있을 때만 실패 상태를 기록한다.
+                self._write_manifest(spec, fingerprint, "failed", order, outcomes)
             raise
 
         status = "completed"
@@ -851,6 +1152,7 @@ class JobRuntime:
         inputs: tuple[Mapping[str, Any], ...],
         callables: Mapping[str, StageCallable],
         injection: FailureInjection | None,
+        progress: list[str],
     ) -> StageOutcome:
         records = self._read_attempts(spec, stage.stage_id)
         # cache hit 여부와 **무관하게** 남아 있는 running attempt를 먼저 interrupted로
@@ -858,14 +1160,11 @@ class JobRuntime:
         # (REVIEW-018 M-02).
         if self._preserve_running_attempts(spec, stage.stage_id, records):
             records = self._read_attempts(spec, stage.stage_id)
-        cache_status, cache_reason, hit_record = self._lookup_cache(
-            spec, stage, cache_key, records
-        )
+        cache_status, cache_reason, hit = self._lookup_cache(spec, stage, cache_key, records)
 
-        if hit_record is not None:
-            location = self.relative(
-                self.attempts_dir(spec, stage.stage_id) / f"{hit_record['attempt_id']}.json"
-            )
+        if hit is not None:
+            hit_path, hit_record = hit
+            location = self.relative(hit_path)
             count, total = self._verify_checkpoint(hit_record, location)
             return StageOutcome(
                 stage_id=stage.stage_id,
@@ -874,6 +1173,7 @@ class JobRuntime:
                 cache_key=cache_key,
                 attempt_id=hit_record["attempt_id"],
                 attempt_status="completed",
+                attempt_path=location,
                 callable_invoked=False,
                 outputs=tuple(hit_record["outputs"]),
                 verified_artifact_count=count,
@@ -912,6 +1212,7 @@ class JobRuntime:
         # 4. callable을 부르기 **전에** running attempt를 원자적으로 기록한다.
         self._require_valid(self.validate_attempt(record, self.relative(attempt_path)), "attempt record")
         write_json_atomic(attempt_path, record)
+        progress.append(self.relative(attempt_path))
 
         workspace = self.work_dir(spec, stage.stage_id, attempt_id)
         workspace.mkdir(parents=True, exist_ok=True)
@@ -1039,6 +1340,7 @@ class JobRuntime:
             cache_key=cache_key,
             attempt_id=attempt_id,
             attempt_status="completed",
+            attempt_path=self.relative(attempt_path),
             callable_invoked=True,
             outputs=tuple(refs),
             verified_artifact_count=verified_count,
@@ -1116,10 +1418,9 @@ class JobRuntime:
                     "cache_reason": outcomes[stage_id].cache_reason,
                     "attempt_id": outcomes[stage_id].attempt_id,
                     "attempt_status": outcomes[stage_id].attempt_status,
-                    "attempt_path": self.relative(
-                        self.attempts_dir(spec, stage_id)
-                        / f"{outcomes[stage_id].attempt_id}.json"
-                    ),
+                    # record 내부 ID에서 경로를 다시 만들지 않는다. 실제로 읽거나 쓴
+                    # 파일 경로만 기록한다 (REVIEW-019 M-01-R1).
+                    "attempt_path": outcomes[stage_id].attempt_path,
                 }
                 for stage_id in order
                 if stage_id in outcomes

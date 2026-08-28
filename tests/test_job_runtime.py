@@ -39,7 +39,9 @@ from media_clarity.job_runtime import (
     StageSpec,
     canonical_hash,
     canonical_json_bytes,
+    check_attempt_identity,
     check_attempt_semantics,
+    check_attempt_uniqueness,
     check_seed_inputs,
     deterministic_order,
     discover_fixtures,
@@ -1676,6 +1678,612 @@ class ReviewM05SeedValidationTests(RuntimeCase):
         )
         self.assertEqual(document, "common-v1.schema.json")
         self.assertIs(node["additionalProperties"], False)
+
+
+# ---------------------------------------------------------------------------
+# REVIEW-019 M-01-R1~R3 · M-05-R1 회귀
+# ---------------------------------------------------------------------------
+
+
+class ReviewM01R1AttemptIdentityTests(RuntimeCase):
+    """REVIEW-019 M-01-R1 — record 정체성이 실제 파일·job·stage와 연결된다."""
+
+    def seeded(self) -> tuple[JobSpec, Path]:
+        spec = self.spec()
+        self.runtime.run_job(spec, {"extract": emit("hello")})
+        return spec, self.runtime.attempts_dir(spec, "extract") / "a0001.json"
+
+    def tamper(self, path: Path, **patch: Any) -> dict[str, Any]:
+        record = json.loads(path.read_text(encoding="utf-8"))
+        record.update(patch)
+        write_json_atomic(path, record)
+        return record
+
+    def test_each_identity_field_is_checked_against_the_real_file(self) -> None:
+        cases = {
+            "attempt_id": ({"attempt_id": "a9999"}, "attempt_id"),
+            "job_id": ({"job_id": "job-other"}, "job_id"),
+            "stage_id": ({"stage_id": "stage-other"}, "stage_id"),
+            "attempt_number": ({"attempt_number": 7}, "attempt_number"),
+        }
+        for name, (patch, field) in cases.items():
+            with self.subTest(field=name):
+                directory = self.root / name
+                directory.mkdir()
+                runtime = JobRuntime(directory)
+                spec = self.spec()
+                runtime.run_job(spec, {"extract": emit("hello")})
+                path = runtime.attempts_dir(spec, "extract") / "a0001.json"
+                record = json.loads(path.read_text(encoding="utf-8"))
+                record.update(patch)
+                write_json_atomic(path, record)
+
+                # schema는 여전히 통과한다 — 그래서 정체성 검사가 필요하다.
+                self.assertEqual(runtime.validate_attempt(record, "rec.json"), [])
+
+                with self.assertRaises(ContractViolation) as caught:
+                    runtime._read_attempts(spec, "extract")
+                self.assertEqual(caught.exception.code, "E_CHECKPOINT_INVALID")
+                file_path, pointer = split_record_location(caught.exception.location)
+                self.assertEqual(file_path, runtime.relative(path))
+                self.assertEqual(pointer, [field])
+
+    def test_tampered_identity_blocks_hit_callable_and_manifest_overwrite(self) -> None:
+        """조작 뒤 cache hit·callable 실행·manifest 덮어쓰기가 모두 없어야 한다."""
+
+        cases = {
+            "attempt_id": {"attempt_id": "a9999"},
+            "job_id": {"job_id": "job-other"},
+            "stage_id": {"stage_id": "stage-other"},
+            "attempt_number": {"attempt_number": 7},
+        }
+        for name, patch in cases.items():
+            with self.subTest(field=name):
+                directory = self.root / f"e2e-{name}"
+                directory.mkdir()
+                runtime = JobRuntime(directory)
+                spec = self.spec()
+                runtime.run_job(spec, {"extract": emit("hello")})
+                path = runtime.attempts_dir(spec, "extract") / "a0001.json"
+                record = json.loads(path.read_text(encoding="utf-8"))
+                record.update(patch)
+                write_json_atomic(path, record)
+
+                attempt_before = path.read_bytes()
+                manifest_before = runtime.manifest_path(spec).read_bytes()
+                calls = [0]
+                with self.assertRaises(ContractViolation) as caught:
+                    runtime.run_job(spec, {"extract": emit("hello", calls)})
+
+                self.assertEqual(caught.exception.code, "E_CHECKPOINT_INVALID")
+                self.assertEqual(calls[0], 0, "callable이 실행됐다")
+                self.assertEqual(path.read_bytes(), attempt_before, "attempt record가 바뀌었다")
+                self.assertEqual(
+                    runtime.manifest_path(spec).read_bytes(),
+                    manifest_before,
+                    "manifest를 덮어썼다",
+                )
+
+    def test_duplicate_attempt_id_and_number_are_rejected(self) -> None:
+        """중복 ID·number를 production 함수로 직접 확인한다.
+
+        **정직하게 적는다.** file stem 검사가 함께 있으면 서로 다른 두 파일이 같은
+        `attempt_id`를 가질 수 없고, ID가 `attempt_number`를 결정하므로 number 중복도
+        디렉터리 경로로는 도달하지 않는다. 따라서 이 검사는 stem 검사에 대한 **중복
+        방어**이며, 여기서는 함수 자체를 반례로 검증한다.
+        """
+
+        def record(attempt_id: str, number: int) -> dict[str, Any]:
+            return {"attempt_id": attempt_id, "attempt_number": number}
+
+        pairs = {
+            "duplicate_id": (
+                [
+                    (Path("jobs/j/stages/s/attempts/a0001.json"), record("a0001", 1)),
+                    (Path("jobs/j/stages/s/attempts/a0002.json"), record("a0001", 2)),
+                ],
+                "attempt_id",
+            ),
+            "duplicate_number": (
+                [
+                    (Path("jobs/j/stages/s/attempts/a0001.json"), record("a0001", 1)),
+                    (Path("jobs/j/stages/s/attempts/a0002.json"), record("a0002", 1)),
+                ],
+                "attempt_number",
+            ),
+        }
+        for name, (records, field) in pairs.items():
+            with self.subTest(case=name):
+                findings = check_attempt_uniqueness(records, lambda path: path.as_posix())
+                self.assertTrue(findings, f"{name}이 통과했다")
+                self.assertEqual(findings[0].code, "E_CHECKPOINT_INVALID")
+                self.assertTrue(findings[0].location.endswith(f"/{field}"), findings[0].location)
+
+    def test_id_number_mismatch_is_the_reachable_duplicate_symptom(self) -> None:
+        """디렉터리 경로로 실제 도달하는 형태 — a0002.json 안에 number 1."""
+
+        spec = self.spec()
+        self.runtime.run_job(spec, {"extract": emit("hello")})
+        clone = json.loads(
+            (self.runtime.attempts_dir(spec, "extract") / "a0001.json").read_text(encoding="utf-8")
+        )
+        clone["attempt_id"] = "a0002"
+        write_json_atomic(self.runtime.attempts_dir(spec, "extract") / "a0002.json", clone)
+
+        with self.assertRaises(ContractViolation) as caught:
+            self.runtime._read_attempts(spec, "extract")
+        self.assertEqual(caught.exception.code, "E_CHECKPOINT_INVALID")
+        _, pointer = split_record_location(caught.exception.location)
+        self.assertEqual(pointer, ["attempt_number"])
+
+    def test_manifest_records_the_real_verified_attempt_path(self) -> None:
+        spec, path = self.seeded()
+        manifest = self.manifest(spec)
+        recorded = manifest["stages"][0]["attempt_path"]
+        self.assertEqual(recorded, self.runtime.relative(path))
+        self.assertTrue((self.root / recorded).is_file())
+
+        # cache hit에서도 실제로 읽은 파일 경로를 기록한다.
+        result = self.runtime.run_job(spec, {"extract": emit("hello")})
+        self.assertEqual(result.outcome("extract").cache_status, "hit")
+        self.assertEqual(result.outcome("extract").attempt_path, self.runtime.relative(path))
+        self.assertTrue((self.root / self.manifest(spec)["stages"][0]["attempt_path"]).is_file())
+
+    def test_identity_helper_accepts_a_matching_record(self) -> None:
+        """positive를 먼저 고정한다."""
+
+        spec, path = self.seeded()
+        record = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            check_attempt_identity(
+                record, "rec.json", job_id="job-a", stage_id="extract", file_stem="a0001"
+            ),
+            [],
+        )
+        self.assertEqual(check_attempt_uniqueness([(path, record)], self.runtime.relative), [])
+
+    def test_malformed_attempt_id_shape_is_rejected(self) -> None:
+        record = {"job_id": "job-a", "stage_id": "extract", "attempt_id": "x1", "attempt_number": 1}
+        findings = check_attempt_identity(
+            record, "rec.json", job_id="job-a", stage_id="extract", file_stem="x1"
+        )
+        self.assertTrue(findings)
+        self.assertEqual(findings[0].location, "rec.json/attempt_id")
+        self.assertEqual(findings[0].code, "E_CHECKPOINT_INVALID")
+
+
+class ReviewM01R2ManifestSemanticsTests(RuntimeCase):
+    """REVIEW-019 M-01-R2 — 기존 manifest를 쓰거나 덮어쓰기 전에 semantic 검사."""
+
+    def seeded(self) -> tuple[JobSpec, Path]:
+        spec = self.two_stage()
+        self.runtime.run_job(spec, {"alpha": emit("A"), "beta": emit("B")})
+        return spec, self.runtime.manifest_path(spec)
+
+    def assert_manifest_rejected(
+        self, spec: JobSpec, path: Path, pointer_suffix: str
+    ) -> ContractViolation:
+        before = path.read_bytes()
+        calls = [0]
+        with self.assertRaises(ContractViolation) as caught:
+            self.runtime.run_job(
+                spec, {"alpha": emit("A", calls), "beta": emit("B", calls)}
+            )
+        self.assertEqual(caught.exception.code, "E_CHECKPOINT_INVALID")
+        self.assertTrue(
+            caught.exception.location.endswith(pointer_suffix),
+            f"{caught.exception.location} != …{pointer_suffix}",
+        )
+        self.assertEqual(calls[0], 0, "callable이 실행됐다")
+        self.assertEqual(path.read_bytes(), before, "손상 manifest를 덮어썼다")
+        return caught.exception
+
+    def test_valid_manifest_passes(self) -> None:
+        spec, path = self.seeded()
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            self.runtime.check_manifest_semantics(manifest, spec, self.runtime.relative(path)), []
+        )
+
+    def test_identity_mismatches_are_rejected(self) -> None:
+        cases = {
+            "job_id": ({"job_id": "job-other"}, "/job_id"),
+            "pipeline_id": ({"pipeline_id": "pipe-other"}, "/pipeline_id"),
+            "runtime_version": ({"runtime_version": "task-028/9.9.9"}, "/runtime_version"),
+            "source_identity_value": ({"source_identity": "src-other"}, "/source_identity"),
+        }
+        for name, (patch, suffix) in cases.items():
+            with self.subTest(case=name):
+                directory = self.root / name
+                directory.mkdir()
+                runtime = JobRuntime(directory)
+                spec = self.two_stage()
+                runtime.run_job(spec, {"alpha": emit("A"), "beta": emit("B")})
+                path = runtime.manifest_path(spec)
+                manifest = json.loads(path.read_text(encoding="utf-8"))
+                manifest.update(patch)
+                write_json_atomic(path, manifest)
+                # schema는 통과한다.
+                self.assertEqual(runtime.validate_manifest(manifest, "m.json"), [])
+                before = path.read_bytes()
+                with self.assertRaises(ContractViolation) as caught:
+                    runtime.run_job(spec, {"alpha": emit("A"), "beta": emit("B")})
+                self.assertEqual(caught.exception.code, "E_CHECKPOINT_INVALID")
+                self.assertTrue(caught.exception.location.endswith(suffix), caught.exception.location)
+                self.assertEqual(path.read_bytes(), before)
+
+    def test_absent_source_identity_mismatch_is_rejected(self) -> None:
+        spec, path = self.seeded()
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest.pop("source_identity")
+        write_json_atomic(path, manifest)
+        self.assert_manifest_rejected(spec, path, "/source_identity")
+
+    def test_changed_dag_in_the_manifest_is_rejected(self) -> None:
+        spec, path = self.seeded()
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["dag"] = [{"stage_id": "alpha", "depends_on": []}]
+        write_json_atomic(path, manifest)
+        self.assert_manifest_rejected(spec, path, "/dag")
+
+    def test_completed_manifest_with_empty_stages_is_rejected(self) -> None:
+        """REVIEW-019가 재현한 반례 — completed인데 stages=[]."""
+
+        spec, path = self.seeded()
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["status"] = "completed"
+        manifest["stages"] = []
+        write_json_atomic(path, manifest)
+        self.assert_manifest_rejected(spec, path, "/stages")
+
+    def test_completed_manifest_missing_a_stage_is_rejected(self) -> None:
+        spec, path = self.seeded()
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["stages"] = [manifest["stages"][0]]
+        write_json_atomic(path, manifest)
+        self.assert_manifest_rejected(spec, path, "/stages")
+
+    def test_duplicate_stage_state_is_rejected(self) -> None:
+        spec, path = self.seeded()
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["stages"] = manifest["stages"] + [copy.deepcopy(manifest["stages"][0])]
+        write_json_atomic(path, manifest)
+        self.assert_manifest_rejected(spec, path, "/stage_id")
+
+    def test_unknown_stage_state_is_rejected(self) -> None:
+        spec, path = self.seeded()
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        ghost = copy.deepcopy(manifest["stages"][0])
+        ghost["stage_id"] = "ghost"
+        manifest["stages"] = manifest["stages"] + [ghost]
+        write_json_atomic(path, manifest)
+        self.assert_manifest_rejected(spec, path, "/stage_id")
+
+    def test_dangling_attempt_path_is_rejected(self) -> None:
+        spec, path = self.seeded()
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["stages"][0]["attempt_path"] = (
+            "jobs/job-a/stages/alpha/attempts/a9999.json"
+        )
+        write_json_atomic(path, manifest)
+        error = self.assert_manifest_rejected(spec, path, "/attempt_path")
+        self.assertFalse((self.root / manifest["stages"][0]["attempt_path"]).exists())
+        self.assertIn("attempt_path", error.location)
+
+    def test_stage_state_attempt_id_mismatch_is_rejected(self) -> None:
+        spec, path = self.seeded()
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["stages"][0]["attempt_id"] = "a0002"
+        write_json_atomic(path, manifest)
+        self.assert_manifest_rejected(spec, path, "/attempt_id")
+
+    def test_stage_state_cache_key_mismatch_is_rejected(self) -> None:
+        spec, path = self.seeded()
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["stages"][0]["cache_key"] = canonical_hash({"not": "the key"})
+        write_json_atomic(path, manifest)
+        self.assert_manifest_rejected(spec, path, "/cache_key")
+
+    def test_attempt_status_mismatch_with_the_real_record_is_rejected(self) -> None:
+        spec, path = self.seeded()
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["stages"][0]["attempt_status"] = "failed"
+        write_json_atomic(path, manifest)
+        self.assert_manifest_rejected(spec, path, "/attempt_status")
+
+    def test_status_mismatch_is_caught_even_when_the_manifest_is_not_completed(self) -> None:
+        """`completed` 완전성 규칙이 가리지 않는 경로에서 status 대조를 확인한다.
+
+        manifest가 `completed`면 "모든 stage가 completed attempt를 가리켜야 한다"는
+        규칙이 먼저 걸린다. 그래서 실패한 run의 `failed` manifest로 검사한다.
+        """
+
+        spec = self.two_stage()
+
+        def failing(context: StageContext) -> Sequence[StageOutput]:
+            raise RuntimeError("beta 실패")
+
+        self.assert_violation(
+            "E_STAGE_FAILED", self.runtime.run_job, spec, {"alpha": emit("A"), "beta": failing}
+        )
+        path = self.runtime.manifest_path(spec)
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["status"], "failed")
+        self.assertEqual(manifest["stages"][0]["attempt_status"], "completed")
+
+        # 실제 record는 completed인데 manifest만 failed라고 적는다.
+        manifest["stages"][0]["attempt_status"] = "failed"
+        write_json_atomic(path, manifest)
+        self.assertEqual(self.runtime.validate_manifest(manifest, "m.json"), [])
+
+        findings = self.runtime.check_manifest_semantics(manifest, spec, "m.json")
+        self.assertTrue(findings, "status 불일치가 통과했다")
+        self.assertEqual(findings[0].code, "E_CHECKPOINT_INVALID")
+        self.assertIn("m.json/stages/0/attempt_status", [f.location for f in findings])
+
+        before = path.read_bytes()
+        with self.assertRaises(ContractViolation) as caught:
+            self.runtime.run_job(spec, {"alpha": emit("A"), "beta": emit("B")})
+        self.assertEqual(caught.exception.code, "E_CHECKPOINT_INVALID")
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_running_manifest_with_a_completed_prefix_is_accepted(self) -> None:
+        """부분 완료 prefix는 정상이다 — A 완료 뒤 B 실패 시나리오."""
+
+        spec = self.two_stage()
+
+        def failing(context: StageContext) -> Sequence[StageOutput]:
+            raise RuntimeError("beta 실패")
+
+        self.assert_violation(
+            "E_STAGE_FAILED", self.runtime.run_job, spec, {"alpha": emit("A"), "beta": failing}
+        )
+        manifest = self.manifest(spec)
+        self.assertEqual(manifest["status"], "failed")
+        self.assertEqual([state["stage_id"] for state in manifest["stages"]], ["alpha"])
+        self.assertEqual(
+            self.runtime.check_manifest_semantics(manifest, spec, "m.json"), []
+        )
+        # 그리고 그 상태에서 정상 재개된다.
+        result = self.runtime.run_job(spec, {"alpha": emit("A"), "beta": emit("B")})
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(result.outcome("alpha").cache_status, "hit")
+
+    def test_fingerprint_mismatch_still_reports_resume_fingerprint(self) -> None:
+        """J-11의 계약을 약화하지 않는다 — fingerprint 불일치가 먼저다."""
+
+        spec, path = self.seeded()
+        changed = JobSpec(
+            job_id=spec.job_id,
+            pipeline_id="pipe-other",
+            source_identity=spec.source_identity,
+            stages=spec.stages,
+        )
+        before = path.read_bytes()
+        error = self.assert_violation(
+            "E_RESUME_FINGERPRINT",
+            self.runtime.run_job,
+            changed,
+            {"alpha": emit("A"), "beta": emit("B")},
+        )
+        self.assertEqual(error.location, "job_fingerprint")
+        self.assertEqual(path.read_bytes(), before)
+
+
+class ReviewM01R3ErrorEvidenceTests(RuntimeCase):
+    """REVIEW-019 M-01-R3 — 상태별 error evidence 완결."""
+
+    def failed_record(self) -> tuple[JobSpec, Path, dict[str, Any]]:
+        spec = self.spec()
+
+        def boom(context: StageContext) -> Sequence[StageOutput]:
+            raise RuntimeError("stage 내부 실패")
+
+        self.assert_violation("E_STAGE_FAILED", self.runtime.run_job, spec, {"extract": boom})
+        path = self.runtime.attempts_dir(spec, "extract") / "a0001.json"
+        return spec, path, json.loads(path.read_text(encoding="utf-8"))
+
+    def test_runtime_written_records_of_every_status_are_positive(self) -> None:
+        """정상 runtime이 만든 네 상태가 모두 통과한다."""
+
+        _, _, failed = self.failed_record()
+        self.assertEqual(check_attempt_semantics(failed, "rec.json"), [])
+        self.assertEqual(failed["status"], "failed")
+
+        crash = self.root / "crash"
+        crash.mkdir()
+        runtime = JobRuntime(crash)
+        spec = self.spec()
+
+        def interrupt(uri: str) -> None:
+            raise InjectedInterrupt(uri)
+
+        with self.assertRaises(InjectedInterrupt):
+            runtime.run_job(
+                spec,
+                {"extract": emit("hello")},
+                injection=FailureInjection(after_promote=interrupt),
+            )
+        running = json.loads(
+            (runtime.attempts_dir(spec, "extract") / "a0001.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(running["status"], "running")
+        self.assertEqual(check_attempt_semantics(running, "rec.json"), [])
+
+        runtime.run_job(spec, {"extract": emit("hello")})
+        by_status = {r["status"]: r for _, r in runtime._read_attempts(spec, "extract")}
+        self.assertEqual(sorted(by_status), ["completed", "interrupted"])
+        for status, record in by_status.items():
+            with self.subTest(status=status):
+                self.assertEqual(check_attempt_semantics(record, "rec.json"), [])
+
+    def test_failed_without_error_code_or_location_is_rejected(self) -> None:
+        for field in ("error_code", "error_location"):
+            with self.subTest(missing=field):
+                directory = self.root / field
+                directory.mkdir()
+                runtime = JobRuntime(directory)
+                spec = self.spec()
+
+                def boom(context: StageContext) -> Sequence[StageOutput]:
+                    raise RuntimeError("실패")
+
+                with self.assertRaises(ContractViolation):
+                    runtime.run_job(spec, {"extract": boom})
+                path = runtime.attempts_dir(spec, "extract") / "a0001.json"
+                record = json.loads(path.read_text(encoding="utf-8"))
+                record.pop(field)
+                write_json_atomic(path, record)
+
+                self.assertEqual(runtime.validate_attempt(record, "rec.json"), [])
+                findings = check_attempt_semantics(record, "rec.json")
+                self.assertTrue(findings, f"{field} 누락이 통과했다")
+                self.assertEqual(findings[0].code, "E_CHECKPOINT_INVALID")
+                self.assertIn(field, findings[0].message)
+                # 누락 finding은 실제 존재하는 부모 record를 가리킨다.
+                self.assertEqual(findings[0].location, "rec.json")
+
+                with self.assertRaises(ContractViolation) as caught:
+                    runtime._read_attempts(spec, "extract")
+                self.assertEqual(caught.exception.code, "E_CHECKPOINT_INVALID")
+
+    def test_running_forbids_every_terminal_and_error_field(self) -> None:
+        base = {
+            "status": "running",
+            "outputs": [],
+            "verified_artifact_count": 0,
+            "verified_artifact_bytes": 0,
+        }
+        for field, value in (
+            ("error_code", "E_STAGE_FAILED"),
+            ("error_location", "rec.json"),
+            ("interrupted_at", "2026-08-28T00:00:00Z"),
+            ("ended_at", "2026-08-28T00:00:00Z"),
+            ("wall_duration_seconds", 0.5),
+        ):
+            with self.subTest(field=field):
+                findings = check_attempt_semantics({**base, field: value}, "rec.json")
+                self.assertTrue(findings, f"{field}가 통과했다")
+                self.assertIn(f"rec.json/{field}", [f.location for f in findings])
+
+    def test_interrupted_requires_the_contracted_transition_code(self) -> None:
+        record = {
+            "status": "interrupted",
+            "outputs": [],
+            "verified_artifact_count": 0,
+            "verified_artifact_bytes": 0,
+            "interrupted_at": "2026-08-28T00:00:00Z",
+            "error_location": "rec.json",
+            "error_code": "E_STAGE_FAILED",
+        }
+        findings = check_attempt_semantics(record, "rec.json")
+        self.assertTrue(findings)
+        self.assertIn("rec.json/error_code", [f.location for f in findings])
+        self.assertTrue(any("E_STATE_TRANSITION" in f.message for f in findings))
+
+        record["error_code"] = "E_STATE_TRANSITION"
+        self.assertEqual(check_attempt_semantics(record, "rec.json"), [])
+
+    def test_undeclared_error_code_is_rejected(self) -> None:
+        record = {
+            "status": "failed",
+            "outputs": [],
+            "verified_artifact_count": 0,
+            "verified_artifact_bytes": 0,
+            "ended_at": "2026-08-28T00:00:00Z",
+            "wall_duration_seconds": 0.5,
+            "error_code": "E_FAKE_ERROR",
+            "error_location": "rec.json",
+        }
+        findings = check_attempt_semantics(record, "rec.json")
+        self.assertTrue(findings)
+        self.assertIn("rec.json/error_code", [f.location for f in findings])
+        self.assertTrue(any("선언되지 않은" in f.message for f in findings))
+
+    def test_state_rules_declare_error_fields_for_every_status(self) -> None:
+        self.assertIn("error_code", ATTEMPT_STATE_RULES["failed"]["required"])
+        self.assertIn("error_location", ATTEMPT_STATE_RULES["failed"]["required"])
+        self.assertIn("error_location", ATTEMPT_STATE_RULES["running"]["forbidden"])
+        self.assertIn("error_code", ATTEMPT_STATE_RULES["running"]["forbidden"])
+        self.assertIn("error_code", ATTEMPT_STATE_RULES["completed"]["forbidden"])
+
+
+class ReviewM05R1SeedKeyTests(RuntimeCase):
+    """REVIEW-019 M-05-R1 — seed key 타입·값을 정렬 전에 검사한다."""
+
+    def entries(self) -> list[str]:
+        return sorted(path.name for path in self.root.iterdir())
+
+    def test_mixed_and_invalid_keys_are_stable_schema_errors(self) -> None:
+        cases = {
+            "mixed": {"extract": [], 1: []},
+            "integer_only": {1: []},
+            "empty_string": {"": []},
+            "invalid_identifier": {"stage:one": []},
+            "traversal": {"..": []},
+        }
+        for name, seed_inputs in cases.items():
+            with self.subTest(case=name):
+                before = self.entries()
+                with self.assertRaises(ContractViolation) as caught:
+                    self.runtime.run_job(
+                        self.spec(), {"extract": emit("hello")}, seed_inputs=seed_inputs
+                    )
+                self.assertEqual(caught.exception.code, "E_SCHEMA")
+                self.assertEqual(caught.exception.location, "seed_inputs")
+                self.assertEqual(self.entries(), before, "거부했는데 filesystem이 바뀌었다")
+
+    def test_no_raw_type_error_escapes(self) -> None:
+        for seed_inputs in ({"extract": [], 1: []}, {1: [], 2: []}, {None: []}):
+            with self.subTest(keys=str(list(seed_inputs))):
+                try:
+                    self.runtime.run_job(
+                        self.spec(), {"extract": emit("hello")}, seed_inputs=seed_inputs
+                    )
+                except ContractViolation:
+                    pass
+                except (TypeError, KeyError) as exc:  # pragma: no cover - 회귀 시에만
+                    self.fail(f"raw {type(exc).__name__}가 밖으로 나왔다: {exc}")
+
+    def test_non_string_key_is_diagnosed_as_a_type_problem(self) -> None:
+        """정수 key를 '빈 식별자'로 진단하면 원인을 잘못 알려 준다.
+
+        타입 검사를 빼도 `path_segment_error`가 결국 거부하지만, 그때의 사유는
+        타입 문제가 아니다. 진단 품질도 계약이므로 여기서 고정한다.
+        """
+
+        with self.assertRaises(ContractViolation) as caught:
+            self.runtime.run_job(
+                self.spec(), {"extract": emit("hello")}, seed_inputs={1: []}
+            )
+        self.assertEqual(caught.exception.code, "E_SCHEMA")
+        self.assertEqual(caught.exception.location, "seed_inputs")
+        self.assertIn("문자열", caught.exception.detail)
+        self.assertIn("int", caught.exception.detail)
+
+    def test_key_value_is_not_reproduced_in_the_message(self) -> None:
+        secret = "SECRET-STAGE-NAME/with/path"
+        with self.assertRaises(ContractViolation) as caught:
+            self.runtime.run_job(
+                self.spec(), {"extract": emit("hello")}, seed_inputs={secret: []}
+            )
+        self.assertNotIn(secret, str(caught.exception))
+        self.assertNotIn("SECRET-STAGE-NAME", str(caught.exception))
+
+    def test_unknown_but_valid_stage_key_still_resolves_to_its_own_location(self) -> None:
+        before = self.entries()
+        error = self.assert_violation(
+            "E_SCHEMA",
+            self.runtime.run_job,
+            self.spec(),
+            {"extract": emit("hello")},
+            seed_inputs={"ghost": []},
+        )
+        self.assertEqual(error.location, "seed_inputs/ghost")
+        self.assertEqual(self.entries(), before)
+
+    def test_valid_keys_are_accepted(self) -> None:
+        check_seed_inputs({"extract": []}, ("extract",), self.runtime.validator, self.runtime.store)
 
 
 if __name__ == "__main__":
