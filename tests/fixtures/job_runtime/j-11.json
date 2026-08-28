@@ -1,0 +1,11 @@
+{
+ "case_id": "J-11",
+ "expect": {
+  "code": "E_RESUME_FINGERPRINT",
+  "fingerprint_differs": true,
+  "location": "job_fingerprint",
+  "manifest_unchanged": true
+ },
+ "scenario": "j11_job_fingerprint",
+ "title": "job fingerprint가 바뀐 resume은 기존 job에 이어 쓰지 않고 거부한다"
+}

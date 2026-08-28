@@ -6,7 +6,10 @@
 | **Owner** | Claude Code 구현 세션 |
 | **Reviewer** | Lean Root Orchestrator — 구현 세션과 분리된 고정 HEAD Gate H 검토 |
 | **Phase** | Phase 1a / shared storage·orchestrator foundation |
-| **Status** | `Not started` |
+| **Status** | `In review` |
+| **구현 상태** | **`Implemented — awaiting fixed HEAD review`** — 구현 세션 자기 승인 없음 |
+| **구현 기준 main** | `b55476086ca55a2bb806fb237239be604ed7efb8` |
+| **구현 브랜치** | `claude/task-028-resumable-runtime` |
 | **계약 상태** | **Approved — PR #34 병합 완료** |
 | **계약 기준 main** | `d000284d71e18788a89c8be4ca3c45c26db35b5a` |
 | **계약 승인 HEAD** | `3ebb407ff14498a8d6cc23303b9bf5773d4b2de0` |
@@ -330,3 +333,154 @@ mutation 감사 최소 항목:
   대규모 refactor하거나 기존 smoke 의미를 바꾸지 않는다.
 - TASK-006의 validator를 재사용할 때 이름만 공유하고 의미가 갈라지는 복제 구현을 만들지 않는다.
 - 미정 U-XX나 모델·corpus·Context Bundle 세부를 이 TASK에서 결정하지 않는다.
+
+---
+
+## 12. 구현 기록 (Claude Code 구현 세션)
+
+**상태: `Implemented — awaiting fixed HEAD review`.** 아래는 구현 세션의 주장이며 검증이 아니다.
+판정은 Lean Root가 고정 HEAD에서 직접 재현한다 (`AGENTS.md` R10 / §3.5).
+구현 세션은 자기 변경을 승인하지 않았고 병합·Ready 전환을 하지 않았다.
+
+### 12.1 산출물
+
+| 파일 | 내용 |
+|---|---|
+| `schemas/job-v1.schema.json` | `Job/v1` manifest(root)와 `$defs/AttemptRecord`. Draft 2020-12, 안정 `$id`, `schema_version` `1.0.0`, 닫힌 production 객체. `ArtifactRef/v1`은 `common-v1.schema.json`의 상대 `$ref`로 재사용 |
+| `src/media_clarity/schema_core.py` | **공용** schema 부분집합 검사기. TASK-006 `eval_contracts`에서 추출했고 `job_runtime`이 같은 구현을 쓴다 |
+| `src/media_clarity/artifact_store.py` | content-addressed store — streaming SHA-256, no-overwrite 원자 승격, dedupe, 손상 거부, 경로 안전성 |
+| `src/media_clarity/job_runtime.py` | canonical JSON fingerprint, DAG preflight, cache/resume, attempt 상태 기계, J-01~J-16 fixture runner |
+| `tests/test_artifact_store.py` · `tests/test_job_runtime.py` | 계약 unit·mutation test |
+| `tests/fixtures/job_runtime/j-01.json` … `j-16.json` | J-01~J-16 |
+| `scripts/smoke_task_028.py` | 임시 project root end-to-end (FFmpeg·네트워크 없음) |
+| `Makefile` | `fixtures-task-028` · `test-task-028` · `smoke-task-028` · `verify-task-028` |
+
+### 12.2 확정한 안정 오류 코드 (§3.6이 요구한 기록)
+
+| 코드 | 범주 | 언제 |
+|---|---|---|
+| `E_JSON` | schema/JSON | duplicate key · `NaN`/`Infinity` · 파싱 실패 |
+| `E_SCHEMA` | schema/JSON | manifest·attempt record·fixture가 schema를 어김 |
+| `E_UNSAFE_PATH` | unsafe path | POSIX 절대 · Windows drive/UNC · `..` · 빈 segment · Windows 비호환 segment · symlink를 통한 root 탈출 |
+| `E_ARTIFACT_COLLISION` | artifact | 최종 CAS 경로에 **다른** 바이트가 있음 (손상 또는 hash collision) |
+| `E_ARTIFACT_MISSING` | artifact | 기록된 artifact 파일이 없음 |
+| `E_ARTIFACT_CORRUPT` | artifact | 파일은 있으나 hash·size가 기록과 다름 |
+| `E_ARTIFACT_PROMOTE` | artifact | 원자적 no-overwrite 승격을 제공할 수 없음 (덮어쓰기로 대체하지 않음) |
+| `E_INPUT_CHANGED` | artifact | 입력 파일이 hashing/copy 중 변경됨 (descriptor stat 불일치) |
+| `E_RESUME_FINGERPRINT` | resume | job fingerprint가 기존 job과 다름 — 새 job ID 필요 |
+| `E_STATE_TRANSITION` | 상태 | 재시작으로 `running` → `interrupted` 전이가 일어남 (attempt record에 기록) |
+| `E_DAG_CYCLE` | DAG | 의존 cycle 또는 자기 자신 의존 |
+| `E_DAG_DEPENDENCY` | DAG | 존재하지 않는 dependency 또는 빈 DAG |
+| `E_DAG_DUPLICATE_STAGE` | DAG | 중복 stage ID |
+| `E_STAGE_FAILED` | stage 실행 | stage callable이 실패했거나 등록되지 않음 |
+| `E_CHECKPOINT_INVALID` | 상태 | manifest·attempt record를 읽을 수 없거나 `completed`가 아닌 attempt를 hit로 쓰려 함 |
+
+위치는 실제 입력에서 해석되는 JSON Pointer(`job_fingerprint`, `dag/0/depends_on/0`,
+`outputs/0` 등)이거나 계약된 filesystem 위치(project root 기준 relative path)다.
+메시지 문구가 아니라 **코드와 위치가 테스트 계약**이다.
+
+### 12.3 job fingerprint와 stage cache key의 구분
+
+§3.5는 두 가지를 동시에 요구한다.
+
+1. "job fingerprint가 다르면 기존 job 재개를 거부한다"
+2. "A의 fingerprint가 바뀌면 A와 downstream은 miss다. 독립 branch stage는 자기 fingerprint가
+   그대로면 재사용할 수 있다"
+
+stage의 config/model/context/implementation이 job fingerprint에 들어가면 (2)를 시도하는 순간
+(1)이 resume을 거부해 버려 둘이 양립하지 않는다. 따라서 다음처럼 나눴다.
+
+- **job fingerprint** = pipeline ID + runtime/schema version + source identity + DAG topology
+- **stage cache key** = 위 §3.3의 최소 입력 전부 + **직접 dependency의 cache key**
+
+이 구분으로 J-03·J-11·J-16이 모두 동시에 성립한다. **계약과 모순되는 해석은 발견하지 못했다.**
+`tests/test_job_runtime.py`의 `JobFingerprintTests`가 이 경계를 고정한다.
+
+### 12.4 명시적 한계 (과장하지 않는다)
+
+- **Draft 2020-12 전체 구현이 아니다.** `schema_core.SUPPORTED_KEYWORDS` 부분집합만 검사하고,
+  그 밖의 keyword가 schema에 나타나면 데이터 오류가 아니라 `SchemaContractError`로 중단한다.
+- **Windows 11/NTFS에서 실행하지 않았다.** Windows 비호환 경로 segment(`:`·예약 장치명·trailing
+  dot/space)를 **거부하는 규칙**을 만들고 그 규칙을 Linux에서 테스트했을 뿐이다. Windows에서
+  검증했다고 주장하지 않는다 (§6).
+- **멀티프로세스 공격자에 대한 완전한 보안을 주장하지 않는다.** 이번 TASK는 local synchronous
+  runtime이며 경로 검사는 사고와 설정 실수를 막는 수준이다. TOCTOU 경합은 범위 밖이다.
+- 원자적 no-overwrite 승격은 `os.link`에 의존한다. hard link를 지원하지 않는 filesystem에서는
+  **덮어쓰는 fallback 없이** `E_ARTIFACT_PROMOTE`로 실패한다. 그런 filesystem에서 실행하지 않았다.
+- 중단 시나리오는 실제 프로세스 강제 종료가 아니라 결정적 failure-injection hook으로 재현했다.
+  hook은 §3.4의 완료 순서에 정확히 대응하는 네 지점이다 — chunk 읽기 직후(`on_chunk`),
+  CAS 승격 직후(`after_promote`), 출력 승격 완료 직후(`after_stage_outputs`),
+  completed 전이 직전(`before_completed_write`). **production 기본값에서는 어떤 hook도
+  실행되지 않는다** (`FailureInjection`을 명시적으로 넘기지 않으면 전부 `None`).
+- 실제 ASR·번역·OCR·metric 알고리즘, 모델·GPU, worker supervision, 멀티프로세스 scheduler,
+  외부 corpus, Context Bundle 구조는 구현하지 않았다.
+- **미정값을 채우지 않았다.** U-07·U-12·U-13·U-15·U-16·U-18·U-19·U-22·U-26·U-27은 그대로다.
+  U-16이 미정이므로 자동 삭제·GC·eviction·quota가 없다.
+
+### 12.5 TASK-006 공용 helper 추출
+
+TASK-006 validator와 keyword 해석을 복제하지 않기 위해(§3.6) JSON 로딩·`SchemaSet`·
+`SchemaValidator`·timestamp/portable path 의미 검사를 `schema_core.py`로 옮기고,
+`eval_contracts`는 그 이름을 그대로 재수출한다. `SchemaValidator.validate()`에 선택적
+`pointer` 인자만 추가했다 (`job-v1.schema.json#/$defs/AttemptRecord` 검사용).
+
+추출 전후 **H-01~H-14 판정·오류 코드·위치·메시지·출력 순서가 완전히 동일**한 것을
+저장소 밖에서 dump 비교로 확인했고, `tests/test_eval_contracts.py`의
+`SharedSchemaCoreTests`가 "두 모듈이 같은 객체를 쓴다"는 사실을 고정한다.
+
+### 12.6 실행한 검증
+
+```bash
+make verify-task-028      # J-01~J-16 fixture + store/runtime test + smoke + 기존 전체 verify
+make verify-task-006      # H-01~H-14 + TASK-006 계약 test + 기존 전체 verify
+make verify               # static + 전체 unit + 실제 FFmpeg smoke
+make verify-task-028 PYTHON=python3.12
+make verify-task-006 PYTHON=python3.12
+git diff --check
+git status --short
+```
+
+### 12.7 mutation 감사 (저장소 밖 임시 사본)
+
+`artifact_store.py`·`job_runtime.py`의 검사를 **하나씩 무력화**해 회귀 테스트가 실제로
+실패하는지 확인했다. 저장소 파일은 바꾸지 않았다.
+
+**34개 mutation 중 34개 탐지.**
+
+| 묶음 | mutation | 결과 |
+|---|---|---|
+| cache key | config·implementation·dependency·model·context·chunking·source fingerprint 각각 제거 (7종) | 전부 탐지 |
+| cache key | 직접 dependency cache key 제거 (downstream invalidation 무력화) | 탐지 |
+| cache key | 선택 항목의 부재를 canonical 값에서 생략 | 탐지 |
+| checkpoint | completed 기록을 artifact 재검증보다 먼저 수행 | 탐지 |
+| checkpoint | cache hit 전 artifact hash 재검증 제거 | 탐지 |
+| checkpoint | running attempt를 completed hit로 재사용 | 탐지 |
+| checkpoint | running attempt를 보존하지 않고 같은 ID 재사용 | 탐지 |
+| checkpoint | callable 호출 전 running attempt 기록 제거 | 탐지 |
+| resume | job fingerprint 비교 제거 | 탐지 |
+| CAS | no-overwrite 승격을 `os.replace` overwrite로 변경 | 탐지 |
+| CAS | 기존 object hash 재검증 제거 (무조건 dedupe hit) | 탐지 |
+| CAS | 승격된 최종 바이트 재검증 제거 | 탐지 |
+| CAS | `verify_ref`의 hash·size·존재 확인 각각 제거 (3종) | 전부 탐지 |
+| path | unsafe path 검사 제거 / root containment 제거 / Windows 비호환 segment 제거 / Windows 예약 장치명 제거 | 전부 탐지 |
+| 입력 | descriptor stat 복사 전후 비교 제거 | 탐지 |
+| 민감정보 | attempt record에 source absolute path 기록 / 실패 메시지에 원문 포함 | 전부 탐지 |
+| DAG | 중복 stage ID·없는 dependency·cycle 검사 각각 제거 (3종) | 전부 탐지 |
+| JSON | canonical JSON의 NaN/Infinity 금지 해제 / key 정렬 해제 | 전부 탐지 |
+| 순서 | topological 순서의 결정성 제거 | 탐지 |
+
+**정직하게 적는 두 가지.**
+
+1. **`DAG cycle 검사 제거`는 assertion 실패가 아니라 무한 루프로 나타난다.** 감사 driver에
+   per-run timeout을 두어 "정지하지 않음"을 실패로 센다. 실제 코드에는 cycle 검사가 있으므로
+   `deterministic_order`는 항상 종료한다.
+2. **처음 두 라운드에서 3건이 미탐지였다.** 숨기지 않고 그 3건을 관측 가능하게 만드는 검사를
+   추가해 마지막 라운드에서 전부 탐지되게 했다.
+   - `선택 항목의 부재 생략` → `stage_cache_key_document()`를 노출해 canonical 문서의
+     **필드 집합 자체**를 `CACHE_KEY_FIELDS`로 고정하고, key가 문서를 거르지 않고 그대로
+     해싱한 값인지 **값이 빈 stage로도** 확인한다.
+   - `승격된 최종 바이트 재검증 제거` → `after_promote` hook으로 승격 직후 파일을 손상시켜
+     재검증이 실제로 동작하는지 확인한다.
+   - `completed 기록을 재검증보다 먼저 수행` → `before_completed_write` hook으로 completed
+     전이 직전에 중단시킨다. 순서가 뒤바뀐 구현이면 이 시점에 이미 completed record가 남아
+     다음 실행이 hit가 되므로 구분된다.

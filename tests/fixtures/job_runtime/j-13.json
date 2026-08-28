@@ -1,0 +1,21 @@
+{
+ "case_id": "J-13",
+ "expect": {
+  "codes": {
+   "../outside": "E_UNSAFE_PATH",
+   "//server/share": "E_UNSAFE_PATH",
+   "/etc/passwd": "E_UNSAFE_PATH",
+   "C:/Windows/system32": "E_UNSAFE_PATH",
+   "jobs/../../outside": "E_UNSAFE_PATH",
+   "jobs//empty": "E_UNSAFE_PATH",
+   "jobs/CON": "E_UNSAFE_PATH",
+   "jobs/trailing.": "E_UNSAFE_PATH",
+   "jobs/with:colon": "E_UNSAFE_PATH",
+   "jobs\\windows": "E_UNSAFE_PATH"
+  },
+  "filesystem_unchanged": true,
+  "symlink_escape_code": "E_UNSAFE_PATH"
+ },
+ "scenario": "j13_unsafe_path",
+ "title": "절대·drive·UNC·traversal·root 탈출 경로를 preflight에서 거부하고 filesystem을 바꾸지 않는다"
+}

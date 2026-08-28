@@ -1,0 +1,23 @@
+{
+ "case_id": "J-10",
+ "expect": {
+  "after_ids": [
+   "a0001",
+   "a0002"
+  ],
+  "after_statuses": [
+   "completed",
+   "interrupted"
+  ],
+  "before_ids": [
+   "a0001"
+  ],
+  "before_statuses": [
+   "running"
+  ],
+  "new_attempt_id": "a0002",
+  "reused_old_id": false
+ },
+ "scenario": "j10_running_attempt",
+ "title": "이전 running attempt를 interrupted로 보존하고 새 attempt ID를 만든다"
+}

@@ -1,0 +1,24 @@
+{
+ "case_id": "J-15",
+ "expect": {
+  "cycle": {
+   "code": "E_DAG_CYCLE",
+   "location": "dag/0"
+  },
+  "dangling": {
+   "code": "E_DAG_DEPENDENCY",
+   "location": "dag/0/depends_on/0"
+  },
+  "duplicate": {
+   "code": "E_DAG_DUPLICATE_STAGE",
+   "location": "dag/1/stage_id"
+  },
+  "filesystem_unchanged": true,
+  "self_dependency": {
+   "code": "E_DAG_CYCLE",
+   "location": "dag/0/depends_on/0"
+  }
+ },
+ "scenario": "j15_dag_preflight",
+ "title": "DAG cycle·없는 dependency·중복 stage ID를 실행 전에 거부한다"
+}

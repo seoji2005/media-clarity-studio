@@ -1,0 +1,22 @@
+{
+ "case_id": "J-08",
+ "expect": {
+  "crash_statuses": [
+   "running"
+  ],
+  "interrupted": true,
+  "orphan_object_present": true,
+  "preserved_attempt_ids": [
+   "a0001",
+   "a0002"
+  ],
+  "resume_cache_status": "miss",
+  "resume_calls": 1,
+  "resume_statuses": [
+   "completed",
+   "interrupted"
+  ]
+ },
+ "scenario": "j08_interrupt_before_checkpoint",
+ "title": "artifact 승격 후 checkpoint 전 중단에서 orphan을 완료 stage로 가장하지 않는다"
+}

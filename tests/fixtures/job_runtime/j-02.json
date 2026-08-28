@@ -1,0 +1,13 @@
+{
+ "case_id": "J-02",
+ "expect": {
+  "cache_reason": "verified_checkpoint",
+  "cache_status": "hit",
+  "callable_invoked": false,
+  "first_calls": 1,
+  "second_calls": 0,
+  "verified_artifact_count": 1
+ },
+ "scenario": "j02_verified_hit",
+ "title": "같은 입력·fingerprint 재실행 → callable을 호출하지 않고 검증된 cache hit를 쓴다"
+}

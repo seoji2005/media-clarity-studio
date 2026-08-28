@@ -73,9 +73,14 @@ schema 파일이 다르면 **schema 파일이 정답**입니다.
 | `EvalEvent/v1` (`events.jsonl`) | [`schemas/eval-event-v1.schema.json`](../schemas/eval-event-v1.schema.json) |
 | `PerSourceMetricRecord/v1` (`per_source.jsonl`) | [`schemas/per-source-metric-record-v1.schema.json`](../schemas/per-source-metric-record-v1.schema.json) |
 | `HumanReviewRecord/v1` (`human_review.jsonl`) | [`schemas/human-review-record-v1.schema.json`](../schemas/human-review-record-v1.schema.json) |
+| `Job/v1` (`jobs/<job_id>/manifest.json`, attempt record) | [`schemas/job-v1.schema.json`](../schemas/job-v1.schema.json) |
 
 > `RegionMask/v1`(§2.4)은 Phase 2 시각 도메인 계약이며 TASK-006 범위에 포함되지 않았습니다.
 > schema 파일은 아직 없습니다.
+
+> schema 부분집합 검사기는 `src/media_clarity/schema_core.py` 하나입니다 (TASK-028).
+> `eval_contracts`와 `job_runtime`이 같은 구현을 쓰며, keyword 해석을 복제하지 않습니다.
+> Draft 2020-12 전체 구현이 아니라 `SUPPORTED_KEYWORDS` 부분집합만 검사합니다.
 
 ### 2.1 `ArtifactRef/v1` — 산출물 참조
 
@@ -805,6 +810,29 @@ Job/v1:
 - 긴 작업은 중단·재개 가능하다 (사용자 PC는 껐다 켜집니다)
 - 자원 정책은 **벤더 중립 추상화** 뒤에 둔다 (U-03)
 
+**구현 경계 (TASK-028)**
+
+기계 검증 형태는 [`schemas/job-v1.schema.json`](../schemas/job-v1.schema.json)이고, 구현은
+`src/media_clarity/job_runtime.py`의 **local synchronous** runtime입니다. 위 의사코드와
+schema 파일이 다르면 schema 파일이 정답입니다.
+
+- stage cache key는 canonical JSON 바이트의 SHA-256이며 runtime/schema version, pipeline·stage
+  ID, implementation version, 정렬된 입력 content hash, config·dependency·source·chunking·
+  model·context fingerprint, random seed, 재현성 등급, **직접 dependency의 cache key**를 담습니다.
+  선택 항목은 **부재 자체가 canonical 값**입니다.
+- **job fingerprint는 stage cache key와 다릅니다.** job fingerprint에는 pipeline ID,
+  runtime/schema version, source identity, DAG topology만 들어갑니다. 개별 stage의
+  config/model/context/implementation 변경은 job resume을 막지 않고 해당 stage와 downstream을
+  cache miss로 만듭니다. 이 구분이 없으면 "job fingerprint가 다르면 resume 거부"와
+  "A만 miss이고 독립 branch는 재사용"이 동시에 성립할 수 없습니다.
+- cache hit는 completed checkpoint와 **모든 출력 artifact의 존재·hash·size를 다시 확인한 뒤에만**
+  성립합니다. `running` attempt는 어떤 경우에도 hit가 되지 않습니다.
+- attempt는 callable 호출 **전에** `running`으로 기록하고, artifact를 승격·재검증한 **뒤에야**
+  `completed`로 전이합니다. 남은 `running` record는 지우지 않고 `interrupted`로 보존하며 새
+  attempt ID로 다시 실행합니다.
+- worker process supervision, 비동기 scheduler, 멀티프로세스 동시 실행은 이 구현의 범위 밖입니다.
+  중단 시나리오는 결정적 failure-injection hook으로만 재현하며 production 기본값에서는 비활성입니다.
+
 ---
 
 ### 7.8 `storage` — 저장과 파일 정리 *(횡단 기반, 공유)*
@@ -814,10 +842,13 @@ Job/v1:
 ├── project.json
 ├── inputs/                   # 원본 참조 (기본: 복사하지 않고 참조 + 해시)
 ├── references/               # ReferenceBundle (평가용 정답)
+├── artifacts/
+│   └── sha256/<prefix>/<digest>   # content-addressed store (TASK-028)
 ├── jobs/
 │   └── <job_id>/
 │       ├── manifest.json     # 설정·버전·시드·입력 해시·재현성 등급
-│       ├── stages/           # 단계별 중간 산출물 (A4)
+│       ├── stages/           # 단계별 attempt record와 작업 공간 (A4)
+│       │   └── <stage_id>/attempts/<attempt_id>.json
 │       └── logs/
 ├── outputs/
 │   ├── subtitles/
@@ -833,6 +864,17 @@ Job/v1:
 - 출력은 항상 새 파일로 씁니다. 같은 이름이 있으면 덮어쓰지 않고 알립니다.
 - 삭제는 사용자의 명시적 행동으로만 일어납니다.
 - 보관 정책은 미정입니다 (U-16).
+
+**content-addressed store (TASK-028, `src/media_clarity/artifact_store.py`)**
+
+- SHA-256을 chunked streaming으로 계산합니다. 입력 전체를 RAM에 올리지 않습니다.
+- 검증된 임시 파일만 **원자적 no-overwrite**로 최종 경로에 승격합니다. 안전한 원자 승격을
+  제공할 수 없는 filesystem에서는 덮어쓰는 fallback 대신 안정 오류로 실패합니다.
+- 최종 경로가 이미 있으면 기존 바이트를 다시 hash·size 검증합니다. 같으면 dedupe hit,
+  다르면 손상·collision으로 실패하며 기존 파일을 수정하지 않습니다.
+- `ArtifactRef.uri`는 project root 기준 portable relative path이며 외부 절대 경로를 담지 않습니다.
+- **자동 삭제·GC·eviction이 없습니다** (U-16 미정). 실패한 임시 파일은 증거로 남고 완료
+  artifact나 cache hit로 보이지 않습니다.
 
 ---
 
