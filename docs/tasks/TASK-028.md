@@ -214,7 +214,7 @@ GPU VRAM·CPU/RAM sampler는 이 TASK 범위가 아니다. 필드는 후속 계�
 각 시나리오는 production API를 실제로 호출해야 한다. fixture의 expected 값을 그대로 읽어
 통과시키는 runner를 만들지 않는다.
 
-## 5. 수정 가능 범위
+## 5. 산출물 및 수정 가능 범위
 
 - `schemas/job-v1.schema.json`
 - 공용 schema-validation helper에 필요한 최소 `src/media_clarity/` 파일
