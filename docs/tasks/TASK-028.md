@@ -6,7 +6,8 @@
 | **Owner** | Claude Code 구현 세션 |
 | **Reviewer** | Lean Root Orchestrator — 구현 세션과 분리된 고정 HEAD Gate H 검토 |
 | **Phase** | Phase 1a / shared storage·orchestrator foundation |
-| **Status** | `Not started — contract proposed` |
+| **Status** | `Not started` |
+| **계약 상태** | Proposed — 사람 제품 오너 검토·병합 전 |
 | **기준 main** | `d000284d71e18788a89c8be4ca3c45c26db35b5a` |
 | **위험 등급** | **Gate H** — 파일 형식·원자적 쓰기·캐시·중단 후 재개 |
 | **선행** | TASK-006 Done, TASK-022 Done |
