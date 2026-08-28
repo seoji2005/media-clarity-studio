@@ -802,6 +802,10 @@ class JobRuntime:
         schema만으로는 job identity·pipeline·완료 stage 집합이 모순인 manifest가 통과하고,
         그 위에 조용히 덮어써진다 (REVIEW-019 M-01-R2). `job_fingerprint` 자체의 불일치는
         호출자가 `E_RESUME_FINGERPRINT`로 먼저 처리하므로 여기서는 다루지 않는다.
+
+        `stages`는 manifest status와 무관하게 **completed prefix**다. stage ID 순서는
+        `_check_execution_prefix()`가, 각 state가 실제 completed attempt를 가리키는지는
+        `_check_stage_state()`가 고정한다 (REVIEW-021 M-01-R2-R3).
         """
 
         findings: list[Finding] = []
@@ -862,14 +866,6 @@ class JobRuntime:
             findings.extend(self._check_stage_state(state, spec, where))
 
         findings.extend(self._check_execution_prefix(manifest, spec, recorded, location))
-
-        if manifest.get("status") == "completed":
-            for stage_id, index in sorted(seen.items()):
-                if states[index].get("attempt_status") != "completed":
-                    fail(
-                        f"{location}/stages/{index}/attempt_status",
-                        "completed manifest의 stage가 completed attempt를 가리키지 않는다",
-                    )
 
         return sort_findings(findings)
 
@@ -1018,6 +1014,22 @@ class JobRuntime:
                 f"{location}/attempt_status",
                 f"manifest의 attempt_status가 실제 record status와 다르다 "
                 f"(manifest {state.get('attempt_status')!r}, record {record.get('status')!r})",
+            )
+
+        # manifest status와 **무관하게** stage state는 completed attempt만 가리킬 수 있다
+        # (REVIEW-021 M-01-R2-R3). `_write_manifest()`는 성공한 stage outcome만 stages에
+        # 넣으므로 failed·interrupted·running을 가리키는 state는 이 runtime이 만들 수 없는
+        # checkpoint다. 그런 manifest를 받아들이면 실패 evidence가 정상 prefix로 둔갑해
+        # stage가 다시 실행되고 손상 manifest가 completed로 덮어써진다.
+        #
+        # 판정 기준은 **실제 record**다. 바로 위 일치 검사가 state의 `attempt_status`를
+        # record에 묶으므로, 두 검사가 함께 "state와 record가 모두 completed"를 강제한다.
+        # 어느 한쪽만 남기면 반대쪽 조작이 통과하므로 둘 다 필요하다.
+        if record.get("status") != "completed":
+            fail(
+                f"{location}/attempt_status",
+                "stage state가 가리키는 attempt record가 completed가 아니다 "
+                f"(record {record.get('status')!r}) — stages는 completed prefix여야 한다",
             )
         return findings
 

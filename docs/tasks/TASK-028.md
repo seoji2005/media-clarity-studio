@@ -11,6 +11,7 @@
 | **1차 Gate H 검토** | `REVIEW-018` (PR #37, 리뷰 commit `a08981795739901b9fa14733ff3e0a9afc614e8a`) — 고정 HEAD `9c60ccb67d5475ce1c794852ccadfd82594383a3`, 판정 **변경 요청** (필수 수정 5건). 반영은 §12.8 |
 | **2차 Gate H 재검토** | `REVIEW-019` (PR #38, 리뷰 commit `c57e22b507a97d1b7f63bc8ab530bb7935efaa2c`) — 고정 HEAD `26139810bb4f3d8c1033d7802254c4144c370eac`, 판정 **변경 요청** (REVIEW-018 5건 해소 · 추가 필수 수정 4건). 반영은 §12.10 |
 | **3차 Gate H 재검토** | `REVIEW-020` (PR #39, 리뷰 commit `801a804b467ea61378203f96f4680fc3d78996ff`) — 고정 HEAD `45459b0331113ea18319cdf6072e24e64b6c3da4`, 판정 **변경 요청** (REVIEW-018·019 직접 반례 해소 · 추가 필수 수정 2건). 반영은 §12.12 |
+| **4차 Gate H 재검토** | `REVIEW-021` (PR #40, 리뷰 commit `c35f5b7201697469508fa49264d76a5542cc0d2b`) — 고정 HEAD `f0c5e86c3a23f8b358464f7117d63c46149b9403`, 판정 **변경 요청** (REVIEW-020 직접 반례 해소 · 추가 필수 수정 1건). 반영은 §12.14 |
 | **구현 기준 main** | `b55476086ca55a2bb806fb237239be604ed7efb8` |
 | **구현 브랜치** | `claude/task-028-resumable-runtime` |
 | **계약 상태** | **Approved — PR #34 병합 완료** |
@@ -682,3 +683,121 @@ M-01-R2-R1·R2의 새 검사 7종을 더해 저장소 밖 임시 사본에서 �
 
 **추가로 확인한 중복 방어.** `_check_stage_state()`의 state↔record `attempt_id` 직접 비교는
 canonical 경로 결박과 정체성 검사가 함께 있으면 도달하지 않는다. 진단을 좁혀 주므로 유지했다.
+
+### 12.14 REVIEW-021 변경 요청 반영 (5차 커밋)
+
+`REVIEW-021` (PR #40, 리뷰 commit `c35f5b7…`)이 고정 HEAD `f0c5e86…`에서 **변경 요청**으로
+지목한 M-01-R2-R3을 제한 범위로 반영했다. REVIEW-018·019·020·021 원문과 PR #37·#38·#39·#40,
+`main`은 수정하지 않았다. 반례를 먼저 production API로 **재현한 뒤** 고쳤다.
+
+REVIEW-021은 REVIEW-020의 두 반례가 모두 해소됐음을 확인했고, canonical path 문자열 동일성과
+deterministic prefix 결박 판단도 유지 승인했다.
+
+| ID | 반영 위치 |
+|---|---|
+| **M-01-R2-R3** | `job_runtime.py` `_check_stage_state()`에 completed prefix 규칙 추가. manifest status와 **무관하게** stage state가 가리키는 **실제 attempt record**가 `status=completed`여야 한다. 기존 state↔record `attempt_status` 일치 검사가 state 값을 record에 묶으므로, 두 검사가 함께 "state와 record가 모두 completed"를 강제한다. 코드 `E_CHECKPOINT_INVALID`, 위치 `.../stages/<index>/attempt_status`. `check_manifest_semantics()`에 있던 **completed manifest 전용** attempt_status 검사는 이 규칙에 완전히 포함되므로 제거했다 — 좁은 규칙을 넓은 규칙으로 바꾼 것이며 약화가 아니다 |
+
+**왜 status와 무관해야 하는가.** `_write_manifest()`는 `outcomes`에서 stage 목록을 만들고,
+`outcomes`에는 성공한 stage만 들어간다 (`StageOutcome.attempt_status`는 cache hit·성공 두
+경로에서만 `completed`로 설정된다). 그러므로 실패·중단·실행 중 attempt를 가리키는 stage state는
+manifest가 `failed`여도 이 runtime이 만들 수 없는 checkpoint다. 받아들이면 실패 evidence가
+정상 prefix로 둔갑해 stage가 다시 실행되고, 손상 manifest가 `completed`로 덮어써진다.
+
+**두 검사를 굳이 나눈 이유 (중복 방어를 만들지 않기 위해).** "state가 completed"와
+"record가 completed"를 둘 다 직접 검사하면 세 검사가 서로를 가려 **어느 하나를 제거해도 회귀
+테스트가 실패하지 않는다.** 실제로 그 형태를 먼저 만들어 mutation 감사에서 미탐지 4건을
+관측했고, 그래서 판정 기준을 **실제 record 하나**로 좁혔다. 지금은 일치 검사를 지우면
+`state=failed` + `record=completed` 조작이 통과하고, completed 규칙을 지우면 REVIEW-021 반례가
+통과한다. 두 검사 모두 단독으로 mutation 탐지된다.
+
+**실패 evidence를 정상화하지 않는다.** 거부는 기존 attempt record를 삭제하지도, `completed`로
+고치지도 않는다. `run_job()`은 `check_manifest_semantics()`를 stage loop와 `job_dir` 생성
+**이전에** 호출하므로 callable 0회이고 manifest·attempt는 byte 불변이다.
+
+**schema 변경 없음.** `StageState.attempt_status` enum은 그대로 넓게 유지하고 현재 runtime의
+completed-prefix 계약을 semantic validator에서만 강제한다. 이번 반영은 `job_runtime.py`와
+`tests/test_job_runtime.py`만 바꾼다. `schemas/job-v1.schema.json`, `artifact_store.py`,
+`common-v1.schema.json`, TASK-006 schema·fixture, TASK-022 구현, J-01~J-16 fixture,
+`schema_core.py`, `Makefile`, `.gitignore`, `docs/ARCHITECTURE.md`는 **blob 무변경**이다.
+
+### 12.15 REVIEW-021 반영 뒤 회귀와 mutation 감사
+
+**새 회귀 테스트 12건** — `tests/test_job_runtime.py::ReviewM01R2R3CompletedPrefixTests`.
+전체 test 수는 343 → 355, `test_job_runtime.py`는 137 → 149다.
+
+| 종류 | 테스트 |
+|---|---|
+| 반례 | `failed`·`interrupted`·`running` attempt를 stage state로 넣은 manifest 3건, `ATTEMPT_STATE_RULES`의 비완료 상태 전수 1건, state만 `completed`라고 주장한 record 1건, 실패 evidence 보존 1건 |
+| 정상 사례 | `failed + stages=[]`, `failed + [alpha completed]`, `running + completed prefix`, `completed + 전체 completed order`, 정상 prefix에서 alpha hit 후 beta만 실행, production이 쓰는 manifest는 언제나 completed prefix |
+
+각 반례는 실제 callable 실패로 valid `failed` attempt를 먼저 만들고, schema 검증이 통과하는
+것을 확인한 뒤 semantic 검증과 `run_job()`이 `E_CHECKPOINT_INVALID @ .../stages/0/attempt_status`로
+거부하는지, callable 0회이고 manifest·attempt record가 byte 불변인지 확인한다.
+
+**저장소 밖 임시 사본 mutation 감사 — 15개 중 15개 탐지. 미탐지 0건, 감사 불가(SKIP) 0건.**
+
+| 묶음 | mutation | 결과 |
+|---|---|---|
+| M-01-R2-R3 | completed prefix 규칙 제거 / 규칙을 존재 여부로만 약화 / 규칙을 completed manifest에만 적용(REVIEW-021 이전 동작) (3종) | 전부 탐지 |
+| 기존 manifest semantic | semantic 검사 호출 자체 / job·pipeline identity / DAG topology / stage state 중복 / dangling attempt_path / execution prefix 호출 / canonical path 결박 / state↔record status 일치 (8종) | 전부 탐지 |
+| 기존 attempt | 가리킨 record의 정체성 검사 / semantic 검사 (2종) | 전부 탐지 |
+| 기존 실패 경로 | `progress` 가드 제거(무조건 덮어쓰기) | 탐지 |
+| 보완 | completed 규칙 + state↔record 일치 검사 **동시** 제거 | 탐지 |
+
+**감사 목록에서 사라진 항목 하나를 밝힌다.** §12.11·§12.13의
+`completed manifest의 stage가 completed attempt를 가리키는지 검사 제거`는 그 코드가 더 넓은
+규칙으로 교체돼 더 이상 존재하지 않는다. 같은 조작(완료 manifest가 비완료 attempt를 가리킴)은
+이제 `completed prefix 규칙 제거` mutation이 대신 덮으며 **탐지**된다.
+
+**§12.11에 기록한 REVIEW-019의 중복 방어 2건은 그대로다.**
+`attempt ID·number 중복 검사 호출 제거`는 파일 stem 대조가, `manifest가 record 내부 ID로
+경로를 재구성`은 정체성 검사가 상위 방어다. 이번 변경은 두 항목에 영향을 주지 않는다.
+
+### 12.16 REVIEW-018~021 반례 전수 재실행
+
+새 HEAD에서 저장소 밖 script가 **production API만** 호출해 11개 기존 반례와 REVIEW-021의 3개
+변형을 다시 실행했다.
+
+| 리뷰 | 반례 | 관측된 코드 · 위치 |
+|---|---|---|
+| 018 | M-01 완료 evidence 모순 | `E_CHECKPOINT_INVALID @ …/a0001.json/verified_artifact_count`, callable 0회 |
+| 018 | M-02 stale running 보존 | hit 경로에서도 `interrupted` + `E_STATE_TRANSITION` + `interrupted_at`, `ended_at` 생성 안 함 |
+| 018 | M-03 path 모양 source identity | `E_UNSAFE_PATH @ source_identity`, job tree 미생성, 값 미노출 |
+| 018 | M-04 실패 evidence | failed record에 `E_STAGE_FAILED` + location + `temp_paths` |
+| 018 | M-05 seed artifact 누락 | `E_ARTIFACT_MISSING @ artifacts/sha256/…`, job tree 미생성 |
+| 019 | M-01-R1 record 정체성 | `E_CHECKPOINT_INVALID @ …/a0001.json/job_id`, callable 0회 |
+| 019 | M-01-R2 manifest 완결성 | `E_CHECKPOINT_INVALID @ …/manifest.json/stages`, callable 0회 |
+| 019 | M-01-R3 error evidence 없는 failed | `E_CHECKPOINT_INVALID @ …/a0001.json`, callable 0회 |
+| 019 | M-05-R1 non-string seed key | `E_SCHEMA @ seed_inputs`, job tree 미생성 |
+| 020 | M-01-R2-R1 relocated record | `E_CHECKPOINT_INVALID @ …/stages/0/attempt_path`, canonical 보존 |
+| 020 | M-01-R2-R2 downstream-only manifest | `E_CHECKPOINT_INVALID @ …/stages/0/stage_id`, callable 0회 |
+| **021** | **M-01-R2-R3 failed / interrupted / running** | **`E_CHECKPOINT_INVALID @ …/stages/0/attempt_status`, callable 0회, manifest·attempt byte 불변, 실패 evidence 상태 유지** |
+
+이전 고정 HEAD `f0c5e86…`에서 같은 script를 돌리면 REVIEW-021의 세 변형은 모두
+`schema_findings=[] · semantic_findings=[] · calls=1 · run_status=completed ·
+manifest_unchanged=false`로 통과한다. 결함과 수정이 같은 입력에서 구분된다.
+
+### 12.17 REVIEW-021 반영 뒤 실행한 검증
+
+```bash
+make verify-task-028      # exit 0 — J 16/16, store 36, runtime 149, 전체 355, TASK-028 smoke PASS, FFmpeg smoke PASS
+make verify-task-006      # exit 0 — H 14/14, 계약 162, 전체 355, FFmpeg smoke PASS
+make verify               # exit 0 — 전체 355, FFmpeg smoke PASS
+make verify-task-028 PYTHON=python3.12   # exit 0 — J 16/16, 전체 355, smoke PASS
+make verify-task-006 PYTHON=python3.12   # exit 0 — H 14/14, 계약 162, 전체 355, smoke PASS
+git diff --check
+git status --short
+```
+
+`ffmpeg`는 이 실행 환경에 처음부터 설치돼 있지 않아 컨테이너에 설치한 뒤 실행했다.
+저장소에는 의존성·CI·외부 데이터를 추가하지 않았다.
+
+### 12.18 남은 미검증 경계 (REVIEW-021 §8과 동일)
+
+- Windows 11/NTFS 실제 실행
+- hard-link 미지원 filesystem의 실제 동작
+- 실제 프로세스 강제 종료와 OS crash durability
+- 멀티프로세스/TOCTOU 경합
+- JSON Schema Draft 2020-12 전체 구현과 외부 meta-validator
+
+이번 반영은 Linux 단일 프로세스 기본 경로에서 재현·수정·재검증했다.

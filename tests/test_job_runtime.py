@@ -2647,5 +2647,313 @@ class ReviewM01R2R2ExecutionPrefixTests(RuntimeCase):
         )
 
 
+class ReviewM01R2R3CompletedPrefixTests(RuntimeCase):
+    """REVIEW-021 M-01-R2-R3 — manifest의 stage 목록은 **completed** prefix다.
+
+    `_write_manifest()`는 성공한 stage outcome만 `stages`에 넣는다. 따라서 실패·중단·실행
+    중인 attempt를 가리키는 stage state는 이 runtime이 만들 수 없는 checkpoint이고,
+    manifest status가 `completed`가 아니어도 받아들이면 안 된다.
+    """
+
+    def failing(self, context: StageContext) -> Sequence[StageOutput]:
+        raise RuntimeError("extract 실패")
+
+    def fresh(self, name: str) -> JobRuntime:
+        directory = self.root / name
+        directory.mkdir()
+        return JobRuntime(directory)
+
+    def failed_one_stage(self, runtime: JobRuntime) -> tuple[JobSpec, Path, Path]:
+        """실제 callable 실패로 valid `failed` attempt와 `failed` manifest를 만든다."""
+
+        spec = self.spec()
+        self.assert_violation(
+            "E_STAGE_FAILED", runtime.run_job, spec, {"extract": self.failing}
+        )
+        manifest_path = runtime.manifest_path(spec)
+        attempt_path = runtime.attempts_dir(spec, "extract") / "a0001.json"
+        self.assertEqual(load_strict(attempt_path)["status"], "failed")
+        manifest = load_strict(manifest_path)
+        self.assertEqual(manifest["status"], "failed")
+        self.assertEqual(manifest["stages"], [], "실패 stage가 manifest prefix에 들어갔다")
+        return spec, manifest_path, attempt_path
+
+    def retype_record(
+        self, runtime: JobRuntime, spec: JobSpec, path: Path, status: str
+    ) -> dict[str, Any]:
+        """failed record를 schema·semantic이 유효한 다른 상태로 바꿔 쓴다."""
+
+        record = load_strict(path)
+        if status == "interrupted":
+            record["error_code"] = "E_STATE_TRANSITION"
+            record["error_location"] = runtime.canonical_attempt_path(spec, "extract", "a0001")
+            record["interrupted_at"] = record["started_at"]
+            record.pop("ended_at", None)
+            record.pop("wall_duration_seconds", None)
+        elif status == "running":
+            for field in (
+                "error_code",
+                "error_location",
+                "interrupted_at",
+                "ended_at",
+                "wall_duration_seconds",
+            ):
+                record.pop(field, None)
+            record["temp_paths"] = []
+            record["callable_invoked"] = False
+        record["status"] = status
+        write_json_atomic(path, record)
+        location = runtime.relative(path)
+        self.assertEqual(
+            runtime.validate_attempt(record, location), [], f"{status} record가 schema를 어겼다"
+        )
+        self.assertEqual(
+            check_attempt_semantics(record, location),
+            [],
+            f"{status} record가 semantic invariant를 어겼다",
+        )
+        return record
+
+    def point_manifest_at(
+        self,
+        runtime: JobRuntime,
+        spec: JobSpec,
+        manifest_path: Path,
+        record: dict[str, Any],
+        attempt_status: str,
+    ) -> dict[str, Any]:
+        """failed manifest의 첫 stage state로 그 attempt를 넣는다 (schema-valid)."""
+
+        manifest = load_strict(manifest_path)
+        manifest["stages"] = [
+            {
+                "stage_id": "extract",
+                "cache_key": record["cache_key"],
+                "cache_status": record["cache_status"],
+                "cache_reason": record["cache_reason"],
+                "attempt_id": record["attempt_id"],
+                "attempt_status": attempt_status,
+                "attempt_path": runtime.canonical_attempt_path(
+                    spec, "extract", record["attempt_id"]
+                ),
+            }
+        ]
+        write_json_atomic(manifest_path, manifest)
+        self.assertEqual(
+            runtime.validate_manifest(manifest, "m.json"), [], "schema가 먼저 걸렀다"
+        )
+        return manifest
+
+    def assert_rejected_without_touching_evidence(
+        self, runtime: JobRuntime, spec: JobSpec, manifest_path: Path, attempt_path: Path
+    ) -> ContractViolation:
+        manifest_before = manifest_path.read_bytes()
+        attempt_before = attempt_path.read_bytes()
+        calls = [0]
+        with self.assertRaises(ContractViolation) as caught:
+            runtime.run_job(spec, {"extract": emit("A", calls)})
+        self.assertEqual(caught.exception.code, "E_CHECKPOINT_INVALID")
+        self.assertTrue(
+            caught.exception.location.endswith("/stages/0/attempt_status"),
+            caught.exception.location,
+        )
+        self.assertEqual(calls[0], 0, "callable이 실행됐다")
+        self.assertEqual(manifest_path.read_bytes(), manifest_before, "manifest가 바뀌었다")
+        self.assertEqual(attempt_path.read_bytes(), attempt_before, "attempt record가 바뀌었다")
+        return caught.exception
+
+    # -- 반례 -------------------------------------------------------------
+
+    def test_failed_attempt_as_a_stage_state_is_rejected(self) -> None:
+        """REVIEW-021이 재현한 반례 — failed manifest가 failed attempt를 prefix로 주장한다."""
+
+        spec, manifest_path, attempt_path = self.failed_one_stage(self.runtime)
+        record = load_strict(attempt_path)
+        manifest = self.point_manifest_at(self.runtime, spec, manifest_path, record, "failed")
+
+        findings = self.runtime.check_manifest_semantics(manifest, spec, "m.json")
+        self.assertTrue(findings, "failed attempt를 가리키는 stage state가 통과했다")
+        self.assertEqual(findings[0].code, "E_CHECKPOINT_INVALID")
+        self.assertIn("m.json/stages/0/attempt_status", [f.location for f in findings])
+
+        self.assert_rejected_without_touching_evidence(
+            self.runtime, spec, manifest_path, attempt_path
+        )
+
+    def test_interrupted_attempt_as_a_stage_state_is_rejected(self) -> None:
+        spec, manifest_path, attempt_path = self.failed_one_stage(self.runtime)
+        record = self.retype_record(self.runtime, spec, attempt_path, "interrupted")
+        self.point_manifest_at(self.runtime, spec, manifest_path, record, "interrupted")
+        self.assert_rejected_without_touching_evidence(
+            self.runtime, spec, manifest_path, attempt_path
+        )
+
+    def test_running_attempt_as_a_stage_state_is_rejected(self) -> None:
+        spec, manifest_path, attempt_path = self.failed_one_stage(self.runtime)
+        record = self.retype_record(self.runtime, spec, attempt_path, "running")
+        self.point_manifest_at(self.runtime, spec, manifest_path, record, "running")
+        # stale running 보존(M-02)보다 checkpoint 거부가 먼저다 — record도 그대로 남는다.
+        self.assert_rejected_without_touching_evidence(
+            self.runtime, spec, manifest_path, attempt_path
+        )
+
+    def test_every_non_completed_status_is_rejected_at_attempt_status(self) -> None:
+        """`ATTEMPT_STATE_RULES`의 비완료 상태 전부를 한 번씩 고정한다."""
+
+        statuses = sorted(status for status in ATTEMPT_STATE_RULES if status != "completed")
+        self.assertEqual(statuses, ["failed", "interrupted", "running"])
+        for status in statuses:
+            with self.subTest(status=status):
+                runtime = self.fresh(f"case-{status}")
+                spec, manifest_path, attempt_path = self.failed_one_stage(runtime)
+                record = load_strict(attempt_path)
+                if status != "failed":
+                    record = self.retype_record(runtime, spec, attempt_path, status)
+                manifest = self.point_manifest_at(
+                    runtime, spec, manifest_path, record, status
+                )
+                findings = runtime.check_manifest_semantics(manifest, spec, "m.json")
+                self.assertTrue(findings, f"{status} state가 통과했다")
+                self.assertEqual(findings[0].code, "E_CHECKPOINT_INVALID")
+                self.assertIn(
+                    "m.json/stages/0/attempt_status", [f.location for f in findings]
+                )
+                self.assert_rejected_without_touching_evidence(
+                    runtime, spec, manifest_path, attempt_path
+                )
+
+    def test_state_claiming_completed_over_a_non_completed_record_is_rejected(self) -> None:
+        """state가 completed라고 적어도 **실제 record**가 completed여야 한다."""
+
+        spec, manifest_path, attempt_path = self.failed_one_stage(self.runtime)
+        record = load_strict(attempt_path)
+        manifest = self.point_manifest_at(
+            self.runtime, spec, manifest_path, record, "completed"
+        )
+        findings = self.runtime.check_manifest_semantics(manifest, spec, "m.json")
+        self.assertTrue(findings, "failed record를 completed로 주장한 state가 통과했다")
+        self.assertEqual({f.location for f in findings}, {"m.json/stages/0/attempt_status"})
+        self.assertTrue(
+            any("record" in finding.message for finding in findings),
+            [f.message for f in findings],
+        )
+        self.assert_rejected_without_touching_evidence(
+            self.runtime, spec, manifest_path, attempt_path
+        )
+
+    def test_failure_evidence_is_neither_deleted_nor_normalized(self) -> None:
+        """거부는 실패 evidence를 지우거나 completed로 정상화하지 않는다."""
+
+        spec, manifest_path, attempt_path = self.failed_one_stage(self.runtime)
+        record = load_strict(attempt_path)
+        self.point_manifest_at(self.runtime, spec, manifest_path, record, "failed")
+        self.assert_rejected_without_touching_evidence(
+            self.runtime, spec, manifest_path, attempt_path
+        )
+
+        self.assertTrue(attempt_path.is_file(), "실패 attempt record가 사라졌다")
+        self.assertEqual(load_strict(attempt_path)["status"], "failed")
+        self.assertEqual(
+            sorted(
+                path.name
+                for path in self.runtime.attempts_dir(spec, "extract").glob("*.json")
+            ),
+            ["a0001.json"],
+            "거부인데 새 attempt를 만들었다",
+        )
+        self.assertEqual(load_strict(manifest_path)["status"], "failed")
+
+    # -- 정상 사례 보존 ----------------------------------------------------
+
+    def test_failed_manifest_with_no_stages_is_allowed(self) -> None:
+        spec, manifest_path, _ = self.failed_one_stage(self.runtime)
+        manifest = load_strict(manifest_path)
+        self.assertEqual(manifest["stages"], [])
+        self.assertEqual(self.runtime.check_manifest_semantics(manifest, spec, "m.json"), [])
+
+    def test_failed_manifest_with_a_completed_alpha_is_allowed(self) -> None:
+        spec = self.two_stage()
+
+        def failing(context: StageContext) -> Sequence[StageOutput]:
+            raise RuntimeError("beta 실패")
+
+        self.assert_violation(
+            "E_STAGE_FAILED", self.runtime.run_job, spec, {"alpha": emit("A"), "beta": failing}
+        )
+        manifest = self.manifest(spec)
+        self.assertEqual(manifest["status"], "failed")
+        self.assertEqual(
+            [(s["stage_id"], s["attempt_status"]) for s in manifest["stages"]],
+            [("alpha", "completed")],
+        )
+        self.assertEqual(self.runtime.check_manifest_semantics(manifest, spec, "m.json"), [])
+
+    def test_running_manifest_with_a_completed_prefix_is_allowed(self) -> None:
+        spec = self.two_stage()
+
+        def failing(context: StageContext) -> Sequence[StageOutput]:
+            raise RuntimeError("beta 실패")
+
+        self.assert_violation(
+            "E_STAGE_FAILED", self.runtime.run_job, spec, {"alpha": emit("A"), "beta": failing}
+        )
+        manifest = dict(self.manifest(spec), status="running")
+        self.assertEqual(self.runtime.check_manifest_semantics(manifest, spec, "m.json"), [])
+
+    def test_completed_manifest_with_the_full_completed_order_is_allowed(self) -> None:
+        spec = self.two_stage()
+        self.runtime.run_job(spec, {"alpha": emit("A"), "beta": emit("B")})
+        manifest = self.manifest(spec)
+        self.assertEqual(manifest["status"], "completed")
+        self.assertEqual(
+            [(s["stage_id"], s["attempt_status"]) for s in manifest["stages"]],
+            [("alpha", "completed"), ("beta", "completed")],
+        )
+        self.assertEqual(self.runtime.check_manifest_semantics(manifest, spec, "m.json"), [])
+
+    def test_normal_prefix_hits_alpha_and_only_runs_beta(self) -> None:
+        """정상 prefix에서 alpha는 cache hit이고 beta만 실행된다."""
+
+        spec = self.two_stage()
+
+        def failing(context: StageContext) -> Sequence[StageOutput]:
+            raise RuntimeError("beta 실패")
+
+        alpha, beta = [0], [0]
+        self.assert_violation(
+            "E_STAGE_FAILED",
+            self.runtime.run_job,
+            spec,
+            {"alpha": emit("A", alpha), "beta": failing},
+        )
+        result = self.runtime.run_job(
+            spec, {"alpha": emit("A", alpha), "beta": emit("B", beta)}
+        )
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(result.outcome("alpha").cache_status, "hit")
+        self.assertEqual(result.outcome("beta").cache_status, "miss")
+        self.assertEqual(alpha[0], 1, "완료된 alpha를 다시 실행했다")
+        self.assertEqual(beta[0], 1)
+
+    def test_runtime_written_manifests_only_ever_hold_completed_states(self) -> None:
+        """production이 실제로 쓰는 manifest는 언제나 completed prefix다."""
+
+        spec = self.two_stage()
+
+        def failing(context: StageContext) -> Sequence[StageOutput]:
+            raise RuntimeError("beta 실패")
+
+        self.assert_violation(
+            "E_STAGE_FAILED", self.runtime.run_job, spec, {"alpha": emit("A"), "beta": failing}
+        )
+        observed = {self.manifest(spec)["status"]}
+        statuses = {state["attempt_status"] for state in self.manifest(spec)["stages"]}
+        self.runtime.run_job(spec, {"alpha": emit("A"), "beta": emit("B")})
+        observed.add(self.manifest(spec)["status"])
+        statuses |= {state["attempt_status"] for state in self.manifest(spec)["stages"]}
+        self.assertEqual(observed, {"failed", "completed"})
+        self.assertEqual(statuses, {"completed"})
+
+
 if __name__ == "__main__":
     unittest.main()
