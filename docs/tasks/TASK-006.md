@@ -3,20 +3,22 @@
 ## 상태
 
 - **위험 등급:** Gate H — 데이터 구조·파일 형식·재개 계약
-- **상태:** **Implemented — awaiting fixed HEAD rereview**
+- **상태:** **Done — PR #28 merged**
 - **계약 기준선:** `main@400622760643d5216c9e86046d3e4c5a3370dcac`
 - **구현 기준선:** `main@5a6b25d870514433c579be6858de8c23fbd33dfc` (PR #27 병합 후)
 - **구현 브랜치:** `claude/task-006-eval-contracts`
 - **1차 Gate H 검토:** `REVIEW-014` (PR #29 `lean-root-review/task-006-gate-h`) — 고정 HEAD `d72325737d1088104a11d05228b84bd47616fee0`, 판정 **변경 요청** (차단 0 · 중대 4 · 경미 1). 반영은 §11.5
 - **2차 Gate H 제한 재검토:** `REVIEW-015` (PR #30, 리뷰 commit `d8d1abd82a1ead14b1ae3e0fac58006eff8fc1b8`) — 고정 HEAD `cd94abf0c23c9e9023abbfed1c3999eda9c7efa0`, 판정 **변경 요청** (차단 0 · 중대 2 · 경미 1). 반영은 §11.6
-- **3차 Gate H 제한 재검토:** `REVIEW-016` (PR #31, 리뷰 commit `9b2406da12825447e3dbde3c44f77397777ae262`) — 고정 HEAD `c35bd2b56272b505749d407986f16f4513a0e81d`, 판정 **변경 요청** (차단 0 · 중대 2 · 경미 1). 반영은 §11.7
+- **3차 Gate H 제한 재검토:** [`REVIEW-016`](../reviews/REVIEW-016.md) (PR #31, 리뷰 commit `9b2406da12825447e3dbde3c44f77397777ae262`) — 고정 HEAD `c35bd2b56272b505749d407986f16f4513a0e81d`, 판정 **변경 요청** (차단 0 · 중대 2 · 경미 1). 반영은 §11.7
+- **4차 Gate H 제한 재검토:** [`REVIEW-017`](../reviews/REVIEW-017.md) (PR #32, 리뷰 commit `85e7a74467f26841e68d83bbfb4f6f30c6a49d09`) — 고정 HEAD `1e94cf8aa7ede86974e1553754b960f57941da83`, 판정 **승인** (기술 지적 0건 · 비차단 절차 일탈 1건). 완료 증거는 §11.8
+- **병합:** 사람 제품 오너가 PR #28의 고정 HEAD를 승인했고, merge commit `bd00f604565cac09b91b07286437032486933a08`로 일반 merge
 - **선행:** [TASK-005](TASK-005.md) Done
 - **구현 Owner:** Claude Code 구현 세션
 - **검증·리뷰:** Lean Root Orchestrator, 구현 세션과 분리된 고정 HEAD 검토
 - **통합:** 사람 제품 오너의 명시적 승인 뒤에만 수행
 
-> **구현 세션은 자기 변경을 승인하지 않았고 `Done`으로 전이하지 않았습니다** (`AGENTS.md` R8 / §3.1).
-> `Done`은 Lean Root의 고정 HEAD Gate H 검토와 사람 제품 오너의 병합 뒤에만 도달합니다 (§10).
+> 구현 세션은 자기 변경을 승인하지 않았습니다 (`AGENTS.md` R8 / §3.1).
+> Lean Root의 고정 HEAD Gate H 승인과 사람 제품 오너의 병합이 완료되어 이 TASK는 `Done`입니다 (§10·§11.8).
 
 ## 1. 목표
 
@@ -428,3 +430,27 @@ H-01~H-14 fixture는 blob 무변경이고 `Makefile`·`docs/ARCHITECTURE.md`·TA
 "manifest hypotheses에 없는 가설"이라는 **틀린 메시지**가 나오므로 그쪽이 load-bearing이다.
 두 방어를 모두 제거하면 회귀 테스트가 탐지한다. lookup 구성 쪽은 이후 다른 소비자가 같은
 lookup을 쓰더라도 첫 정의를 조용히 채택하지 못하게 하는 방어로 유지했다.
+
+### 11.8 REVIEW-017 승인과 PR #28 병합
+
+[REVIEW-017](../reviews/REVIEW-017.md)은 고정 HEAD
+`1e94cf8aa7ede86974e1553754b960f57941da83`에서 **승인 — Gate H, 기술 지적 0건,
+비차단 절차 일탈 1건**으로 판정했다. REVIEW-014·015·016의 변경 요청은 각 이전 고정 HEAD에
+대한 역사 기록이며 이 최종 승인으로 덮어쓰지 않는다.
+
+사람 제품 오너가 PR #28과 위 고정 HEAD를 명시적으로 승인했다. Lean Root는 승인 직전에
+HEAD·base·Draft 상태·mergeability를 다시 확인하고, Ready 전환 뒤 `expected_head_sha`를
+고정한 일반 merge를 수행했다.
+
+| 증거 | 값 |
+|---|---|
+| 승인 구현 HEAD | `1e94cf8aa7ede86974e1553754b960f57941da83` |
+| 승인 구현 tree | `35e2cd6321e4911f4ba9d82b7b55bdd6d10bf504` |
+| PR | #28 — merged |
+| `main` merge commit | `bd00f604565cac09b91b07286437032486933a08` |
+| 승인 HEAD → merge commit 비교 | ahead 1 · behind 0 · 변경 파일 0 |
+| Gate H 검증 | H-01~H-14 14/14 · 계약 157 · 전체 165 · Python 3.12 · 실제 FFmpeg smoke PASS |
+
+따라서 승인된 코드·schema·fixture tree가 `main`에 그대로 반영됐고 §10 완료 조건을 충족한다.
+이 `Done`은 TASK-006 범위인 평가 계약의 완료를 뜻한다. 실제 ASR·번역·지표 알고리즘,
+파일시스템 수준 run writer, 외부 JSON Schema 구현체 호환성은 구현·검증됐다고 주장하지 않는다.
