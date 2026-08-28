@@ -7,8 +7,10 @@
 | **Reviewer** | Lean Root Orchestrator — 구현 세션과 분리된 고정 HEAD Gate H 검토 |
 | **Phase** | Phase 1a / shared storage·orchestrator foundation |
 | **Status** | `Not started` |
-| **계약 상태** | Proposed — 사람 제품 오너 검토·병합 전 |
-| **기준 main** | `d000284d71e18788a89c8be4ca3c45c26db35b5a` |
+| **계약 상태** | **Approved — PR #34 병합 완료** |
+| **계약 기준 main** | `d000284d71e18788a89c8be4ca3c45c26db35b5a` |
+| **계약 승인 HEAD** | `3ebb407ff14498a8d6cc23303b9bf5773d4b2de0` |
+| **계약 merge commit** | `0056ca01225cd662b9d3f3c5de079a380b893378` |
 | **위험 등급** | **Gate H** — 파일 형식·원자적 쓰기·캐시·중단 후 재개 |
 | **선행** | TASK-006 Done, TASK-022 Done |
 | **차단 질문** | 없음. U-16 보관 정책은 미정이므로 자동 삭제·GC를 구현하지 않는다 |
@@ -321,7 +323,7 @@ mutation 감사 최소 항목:
 
 ## 11. 인계 메모
 
-- 이 TASK 계약이 `main`에 병합되기 전에는 Claude Code가 구현을 시작하지 않는다.
+- 계약은 PR #34로 `main`에 병합됐다. Claude Code는 최신 `main`에서 전용 구현 branch를 만들고 Draft PR까지만 준비한다.
 - 코드는 Claude Code가 작성하고 Lean Root가 고정 HEAD에서 직접 재현한다.
 - 작성자는 자기 변경을 승인하지 않는다.
 - TASK-022의 원자적 partial/no-overwrite 구현은 참고할 수 있지만, 해당 파일을 공용 runtime으로

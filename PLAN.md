@@ -2,7 +2,7 @@
 
 `media-clarity-studio`의 로드맵입니다.
 
-마지막 갱신: 2026-08-28 (TASK-028 shared runtime foundation 계약 제안)
+마지막 갱신: 2026-08-28 (TASK-028 shared runtime foundation 계약 승인·병합)
 상태: **제안됨 (Proposed) 유지** — PR #5 병합은 계획 기준선 작업을 완료했지만,
 제안됨 ADR·실행 순서·미해결 U-XX를 자동 승인하거나 해결하지 않습니다
 
@@ -153,7 +153,7 @@ ingest → audio → asr ──▶ 원문 transcript      (채점 대상 아님,
 - 열화 레시피 구현 — **시간 변경 레시피는 `TimeMapping` 필수 반환**
 - 지표 계산기 + 계산 규약(EVALS §4) 구현
 - 통계 처리: 군집 부트스트랩, 신뢰구간, 최소 실질 효과 (EVALS §7)
-- **공용 실행 기반:** content-addressed artifact, stage fingerprint/cache, checkpoint, 중단 후 재개 (TASK-028 제안)
+- **공용 실행 기반:** content-addressed artifact, stage fingerprint/cache, checkpoint, 중단 후 재개 (TASK-028 계약 승인·구현 전)
 
 ### 1b. 최소 자막 파이프라인
 
@@ -167,12 +167,12 @@ ingest → audio → asr ──▶ 원문 transcript      (채점 대상 아님,
 - 겹치는 발화, 긴 무음, 다국어 전환, 저품질 오디오 각각에 대해
   **가설 → 변경 → dev 세트로 측정 → 신뢰구간·최소 효과 확인 → 채택/폐기**
 
-### 1d. Phase 1a 첫 실행 순서 **(제안 — 검토 중, 아직 확정되지 않았습니다)**
+### 1d. Phase 1a 첫 실행 순서 **(전체 후속 순서는 제안 유지; TASK-028 계약은 승인됨)**
 
-> **상태: 제안됨 유지.** TASK-012는 완료되고 PR #5는 병합됐지만,
-> 그 사실만으로 제안됨 ADR과 이 실행 순서를 자동 승인하지 않습니다.
-> 사람 제품 오너의 별도 승인 전에는 아래 그래프를 **승인된 계획으로 인용하지 마십시오.**
-> TASK-003·TASK-005·TASK-006과 U-06 선택은 완료됐고 U-31도 해소됐습니다. 다음 제안 작업은 TASK-028 공용 artifact/cache/resume 기반입니다.
+> **상태: 전체 후속 순서는 제안됨 유지.** TASK-012 완료와 PR #5 병합만으로 제안됨 ADR과
+> 모든 후속 노드를 자동 승인하지 않습니다. 다만 사람 제품 오너가 PR #34의 고정 HEAD를 승인해
+> **TASK-028 계약은 한정 승인·병합됐습니다.** TASK-003·TASK-005·TASK-006과 U-06 선택은 완료됐고
+> U-31도 해소됐습니다. 현재 다음 작업은 TASK-028 구현입니다.
 >
 > **승인된 한정 예외:** 2026-08-22 사람 제품 오너는 Gate S 합성 기술 게이트 승인에 따라
 > 외부 코퍼스·모델·네트워크가 없는 synthetic media plumbing slice를 별도로 허용했습니다.
@@ -197,7 +197,7 @@ TASK-005  평가 하네스 설계 명세 — 완료 (PR #25)
 TASK-006  ReferenceBundle/v1·평가 실행 계약과 schema/validator/fixture — 완료 (PR #28)
    │
    ▼
-TASK-028  content-addressed artifact/cache/resume runtime — 계약 제안
+TASK-028  content-addressed artifact/cache/resume runtime — 계약 승인·구현 전
    │
    ▼
 후속 ASR·평가 구현 TASK — 범위·번호 미정
@@ -210,7 +210,7 @@ TASK-028  content-addressed artifact/cache/resume runtime — 계약 제안
 | **(사람) U-06 선택** | 제품 오너 결정 | TASK-003 결과 | **완료 — TASK-026 / PR #23** |
 | **TASK-005** | 평가 하네스 설계 명세 (기존 의미 유지) | TASK-003 · U-06 선택 | **Done — PR #25** |
 | **TASK-006** | `ReferenceBundle/v1`·평가 실행 계약과 schema/validator/fixture (기존 의미 유지) | **TASK-005** | **Done — PR #28** |
-| **TASK-028** | 공용 storage·orchestrator 실행 기반 | TASK-006 완료 | **계약 제안 — 구현 전** |
+| **TASK-028** | 공용 storage·orchestrator 실행 기반 | TASK-006 완료 | **계약 승인·병합 — 구현 전** |
 | 후속 ASR·평가 구현 | 별도 TASK 계약 | TASK-028 완료 | **대기 — 범위·번호 미정** |
 
 **왜 이렇게 보수적으로 두는가**
@@ -223,9 +223,10 @@ TASK-028  content-addressed artifact/cache/resume runtime — 계약 제안
 
 > **각 TASK는 착수 전에 자기 TASK 파일을 먼저 만듭니다** (`AGENTS.md` §6.2).
 > **TASK-003·005·006은 예약된 번호이며 의미를 바꾸지 않았습니다.**
-> **TASK-028 구현은 계약 병합과 별도 Claude Code 구현 PR 전에는 시작하지 않습니다.** 후속 ASR·평가 구현도 별도 TASK 계약과 사람 제품 오너 승인 전에는 시작하지 않습니다. 위의 PR #16 합성 plumbing은
+> **TASK-028 계약은 PR #34로 병합됐습니다.** 구현은 최신 `main`에서 별도 Claude Code Draft PR로 시작합니다.
+> 후속 ASR·평가 구현은 별도 TASK 계약과 사람 제품 오너 승인 전에는 시작하지 않습니다. 위의 PR #16 합성 plumbing은
 > 사람 오너가 승인한 좁은 예외이며 일반 ASR·번역·외부 코퍼스 구현 착수를 뜻하지 않습니다.
-> **이 순서 자체가 사람 오너의 승인 대상입니다.** 승인 전에는 "제안"입니다.
+> **PR #34 승인은 TASK-028 계약에 한정됩니다.** 나머지 실행 순서와 후속 노드는 계속 제안 상태입니다.
 
 완료 조건:
 
