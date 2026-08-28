@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.media-clarity-studio.invalid/eval-report-v1.schema.json",
+  "title": "EvalReport/v1",
+  "description": "ARCHITECTURE.md §7.6 · EVAL_HARNESS.md §9. source/target를 합친 종합 점수 필드는 의도적으로 없다(ADR-0015, T-3). document_kind=final은 run_status=completed일 때만 허용하며 validator가 E_FINAL_STATUS로 강제한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "document_kind",
+    "run_id",
+    "run_status",
+    "split",
+    "created_at",
+    "sample_usage",
+    "metrics_by_axis",
+    "metrics",
+    "diagnostics",
+    "artifact_refs"
+  ],
+  "properties": {
+    "schema_version": { "$ref": "common-v1.schema.json#/$defs/schema_version" },
+    "document_kind": {
+      "description": "final은 report.json, partial은 report.partial.json이다. partial이 final을 가장하지 않는다.",
+      "enum": ["final", "partial"]
+    },
+    "run_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "run_status": { "$ref": "common-v1.schema.json#/$defs/run_status" },
+    "split": { "$ref": "common-v1.schema.json#/$defs/split" },
+    "created_at": { "$ref": "common-v1.schema.json#/$defs/timestamp" },
+    "sample_usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["used_sample_ids", "missing_sample_ids", "excluded_sample_ids"],
+      "properties": {
+        "used_sample_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+        },
+        "missing_sample_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+        },
+        "excluded_sample_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+        }
+      }
+    },
+    "metrics_by_axis": {
+      "description": "축별로 다른 칸에 담는다. 두 칸을 가중 평균·합계로 만드는 필드는 두지 않는다.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "target"],
+      "properties": {
+        "source": { "$ref": "#/$defs/metric_map" },
+        "target": { "$ref": "#/$defs/metric_map" }
+      }
+    },
+    "metrics": {
+      "description": "축이 없는 지표(시각 도메인 등)만 담는다.",
+      "$ref": "#/$defs/metric_map"
+    },
+    "diagnostics": {
+      "description": "실패 진단. partial에서도 보존하며 삭제하지 않는다.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["diagnostic_id", "severity", "metric_id", "message"],
+        "properties": {
+          "diagnostic_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+          "severity": { "enum": ["info", "warning", "error"] },
+          "metric_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+          "message": { "type": "string", "minLength": 1 },
+          "sample_id": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+        }
+      }
+    },
+    "artifact_refs": {
+      "type": "array",
+      "items": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" }
+    },
+    "paired_observation": {
+      "description": "EVAL_HARNESS §8. U-07·U-26·U-27이 미정인 동안 promotion 결론을 만들지 않는다. 허용 값에 promote가 없는 것은 의도적이다.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseline_hypothesis_id", "candidate_hypothesis_id", "n_pairs", "observation"],
+      "properties": {
+        "baseline_hypothesis_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+        "candidate_hypothesis_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+        "n_pairs": { "type": "integer", "minimum": 0 },
+        "observation": {
+          "enum": [
+            "observed_improvement",
+            "no_clear_change",
+            "observed_regression",
+            "blocked_by_open_thresholds",
+            "conflict_with_human_review"
+          ]
+        },
+        "deltas": { "$ref": "#/$defs/metric_map" }
+      }
+    },
+    "guardrails": {
+      "description": "번역 guardrail은 품질 점수로 합산하지 않고 사람 검토 표본 신호로만 쓴다(EVAL_HARNESS §6.2).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["guardrail_id", "axis", "count", "flagged_sample_ids"],
+        "properties": {
+          "guardrail_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+          "axis": { "$ref": "common-v1.schema.json#/$defs/metric_axis" },
+          "count": { "type": "integer", "minimum": 0 },
+          "flagged_sample_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "$defs": {
+    "metric_map": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[A-Za-z0-9][A-Za-z0-9._:-]*$": {
+          "$ref": "common-v1.schema.json#/$defs/MetricResult"
+        }
+      }
+    }
+  }
+}

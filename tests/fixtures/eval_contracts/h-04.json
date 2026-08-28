@@ -1,0 +1,318 @@
+{
+  "case_id": "H-04",
+  "title": "hypothesis/reference axis 불일치 — E_AXIS_MISMATCH (낮은 점수로 보고하지 않음)",
+  "expected": {
+    "valid": false,
+    "error_codes": [
+      "E_AXIS_MISMATCH"
+    ]
+  },
+  "documents": {
+    "reference_bundles": [
+      {
+        "schema_version": "1.0.0",
+        "bundle_id": "bundle-001",
+        "source_media": {
+          "schema_version": "1.0.0",
+          "artifact_id": "art-source-media",
+          "kind": "video",
+          "uri": "input/sample-001.mkv",
+          "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "byte_size": 4096,
+          "media_type": "video/x-matroska",
+          "produced_by": {
+            "stage_id": "ingest",
+            "job_id": "job-001"
+          },
+          "created_at": "2026-08-26T00:00:00Z",
+          "parent_refs": [],
+          "is_estimate": false
+        },
+        "source_timebase": {
+          "schema_version": "1.0.0",
+          "timebase_id": "tb-source",
+          "domain": "source",
+          "origin_artifact": "art-source-media",
+          "unit": "seconds",
+          "rate_num": 30000,
+          "rate_den": 1001,
+          "start_offset_seconds": 0,
+          "is_variable_rate": false,
+          "frame_index_base": 0
+        },
+        "provenance": {
+          "origin": "synthetic fixture (외부 코퍼스 아님)",
+          "license_id": "project-internal-fixture",
+          "consent_status": "not_applicable",
+          "curated_by": "TASK-006",
+          "curated_at": "2026-08-26T00:00:00Z"
+        },
+        "completeness": {
+          "has_source_axis_reference": true,
+          "has_target_axis_reference": false,
+          "has_speaker_streams": true,
+          "has_speech_mask": true,
+          "has_language_spans": true,
+          "has_visual_reference": false
+        },
+        "known_limitations": [
+          "합성 fixture이며 실제 음성 분포를 대표하지 않는다"
+        ],
+        "speaker_streams": [
+          {
+            "speaker_id": "spk-01",
+            "is_complete": true,
+            "utterances": [
+              {
+                "utterance_id": "utt-01",
+                "start_seconds": 0.5,
+                "end_seconds": 2.5,
+                "text": "first source utterance",
+                "language": "en"
+              }
+            ]
+          },
+          {
+            "speaker_id": "spk-02",
+            "is_complete": true,
+            "utterances": [
+              {
+                "utterance_id": "utt-02",
+                "start_seconds": 2.0,
+                "end_seconds": 4.0,
+                "text": "overlapping source utterance",
+                "language": "en"
+              }
+            ]
+          }
+        ],
+        "reference_cues": [
+          {
+            "cue_id": "cue-src-01",
+            "start_seconds": 0.5,
+            "end_seconds": 2.5,
+            "lines": [
+              "first source utterance"
+            ],
+            "reference_axis": "source",
+            "language": "en",
+            "speaker_id": "spk-01"
+          }
+        ],
+        "speech_mask": {
+          "timebase_ref": "tb-source",
+          "segments": [
+            {
+              "start_seconds": 0.0,
+              "end_seconds": 0.5,
+              "kind": "silence"
+            },
+            {
+              "start_seconds": 0.5,
+              "end_seconds": 4.0,
+              "kind": "speech"
+            },
+            {
+              "start_seconds": 4.0,
+              "end_seconds": 6.0,
+              "kind": "silence"
+            }
+          ],
+          "overlap_spans": [
+            {
+              "start_seconds": 2.0,
+              "end_seconds": 2.5,
+              "speaker_ids": [
+                "spk-01",
+                "spk-02"
+              ]
+            }
+          ]
+        },
+        "language_spans": [
+          {
+            "start_seconds": 0.5,
+            "end_seconds": 4.0,
+            "language": "en",
+            "speaker_id": "spk-01",
+            "switch_kind": "inter_sentential"
+          }
+        ]
+      }
+    ],
+    "eval_run_manifest": {
+      "schema_version": "1.0.0",
+      "run_id": "run-h04",
+      "created_at": "2026-08-26T00:10:00Z",
+      "split": "dev",
+      "seeds": [
+        17
+      ],
+      "reproducibility_tier": "T2",
+      "dataset": {
+        "dataset_id": "ds-fixture-001",
+        "dataset_hash": "sha256:4141414141414141414141414141414141414141414141414141414141414141",
+        "sample_ids": [
+          "smp-001",
+          "smp-002"
+        ],
+        "source_ids": [
+          "src-001",
+          "src-002"
+        ],
+        "speaker_ids": [
+          "spk-01",
+          "spk-02"
+        ]
+      },
+      "split_evidence": {
+        "dev_source_ids": [
+          "src-001",
+          "src-002"
+        ],
+        "test_source_ids": [
+          "src-101"
+        ],
+        "dev_speaker_ids": [
+          "spk-01",
+          "spk-02"
+        ],
+        "test_speaker_ids": [
+          "spk-91"
+        ]
+      },
+      "reference_bundles": [
+        {
+          "bundle_id": "bundle-001",
+          "content_hash": "sha256:5151515151515151515151515151515151515151515151515151515151515151",
+          "available_axes": [
+            "source"
+          ]
+        }
+      ],
+      "hypotheses": [
+        {
+          "hypothesis_id": "hyp-source",
+          "content_hash": "sha256:3131313131313131313131313131313131313131313131313131313131313131",
+          "reference_axis": "source",
+          "role": "primary",
+          "supports_overlap_streams": true,
+          "sample_ids": [
+            "smp-001",
+            "smp-002"
+          ]
+        },
+        {
+          "hypothesis_id": "hyp-target",
+          "content_hash": "sha256:3232323232323232323232323232323232323232323232323232323232323232",
+          "reference_axis": "target",
+          "target_language": "ko",
+          "role": "primary",
+          "sample_ids": [
+            "smp-001",
+            "smp-002"
+          ]
+        }
+      ],
+      "metric_plan": [
+        {
+          "metric_id": "cer",
+          "axis": "source",
+          "required": true,
+          "implementation_version": "cer/1.0.0",
+          "normalization_version": "norm-v1/0.1.0-draft",
+          "needs_reference_axis": "source"
+        },
+        {
+          "metric_id": "timing.start_error_median",
+          "axis": "source",
+          "required": true,
+          "implementation_version": "timing/1.0.0",
+          "needs_reference_axis": "source"
+        },
+        {
+          "metric_id": "silence.hallucination_chars_per_min",
+          "axis": "source",
+          "required": true,
+          "implementation_version": "silence/1.0.0",
+          "needs_reference_axis": "source"
+        },
+        {
+          "metric_id": "chrf2",
+          "axis": "target",
+          "required": false,
+          "implementation_version": "chrf2/1.0.0",
+          "normalization_version": "norm-v1/0.1.0-draft",
+          "needs_reference_axis": "target"
+        }
+      ],
+      "config_hash": "sha256:6161616161616161616161616161616161616161616161616161616161616161",
+      "fingerprints": {
+        "dataset": "sha256:2121212121212121212121212121212121212121212121212121212121212121",
+        "reference": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "hypothesis": "sha256:2323232323232323232323232323232323232323232323232323232323232323",
+        "metric_plan": "sha256:2424242424242424242424242424242424242424242424242424242424242424",
+        "config": "sha256:2525252525252525252525252525252525252525252525252525252525252525"
+      },
+      "artifacts": {
+        "output_root": "evals/dev/run-h04",
+        "manifest_path": "evals/dev/run-h04/manifest.json",
+        "report_partial_path": "evals/dev/run-h04/report.partial.json",
+        "report_path": "evals/dev/run-h04/report.json",
+        "report_md_path": "evals/dev/run-h04/report.md",
+        "per_source_path": "evals/dev/run-h04/per_source.jsonl",
+        "events_path": "evals/dev/run-h04/events.jsonl",
+        "human_review_path": "evals/dev/run-h04/human_review.jsonl"
+      }
+    },
+    "eval_report": {
+      "schema_version": "1.0.0",
+      "document_kind": "final",
+      "run_id": "run-h04",
+      "run_status": "completed",
+      "split": "dev",
+      "created_at": "2026-08-26T00:20:00Z",
+      "sample_usage": {
+        "used_sample_ids": [
+          "smp-001",
+          "smp-002"
+        ],
+        "missing_sample_ids": [],
+        "excluded_sample_ids": []
+      },
+      "metrics_by_axis": {
+        "source": {
+          "cer": {
+            "schema_version": "1.0.0",
+            "metric_id": "cer",
+            "status": "computed",
+            "value": 0.15
+          },
+          "timing.start_error_median": {
+            "schema_version": "1.0.0",
+            "metric_id": "timing.start_error_median",
+            "status": "computed",
+            "value": 0.07
+          },
+          "silence.hallucination_chars_per_min": {
+            "schema_version": "1.0.0",
+            "metric_id": "silence.hallucination_chars_per_min",
+            "status": "computed",
+            "value": 0.0
+          }
+        },
+        "target": {
+          "chrf2": {
+            "schema_version": "1.0.0",
+            "metric_id": "chrf2",
+            "status": "unsupported",
+            "reason": "no target-axis reference"
+          }
+        }
+      },
+      "metrics": {},
+      "diagnostics": [],
+      "artifact_refs": []
+    }
+  }
+}

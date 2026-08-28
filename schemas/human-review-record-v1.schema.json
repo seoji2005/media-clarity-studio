@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.media-clarity-studio.invalid/human-review-record-v1.schema.json",
+  "title": "HumanReviewRecord/v1",
+  "description": "human_review.jsonl 한 줄. blind paired 판정과 MQM Core 축소 범주(EVAL_HARNESS.md §7). 실제 미디어와 자격증명을 담지 않는다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "sample_id",
+    "reviewer_id",
+    "blind_order_seed",
+    "preference",
+    "reviewer_source_language_proficiency"
+  ],
+  "properties": {
+    "schema_version": { "$ref": "common-v1.schema.json#/$defs/schema_version" },
+    "run_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "sample_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "reviewer_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "blind_order_seed": { "type": "integer" },
+    "preference": { "enum": ["A", "B", "tie", "cannot_judge"] },
+    "reviewer_source_language_proficiency": {
+      "description": "none이면 한국어 reference 기반 검토임을 표시하고 source 직접 평가 집단과 합산하지 않는다.",
+      "enum": ["none", "partial", "fluent"]
+    },
+    "trigger": {
+      "description": "이 표본이 사람 검토로 올라온 이유. guardrail 신호는 점수로 합산되지 않는다.",
+      "enum": ["random_stratified", "guardrail_flagged", "milestone_paired"]
+    },
+    "guardrail_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["category", "severity"],
+        "properties": {
+          "category": {
+            "enum": [
+              "accuracy_mistranslation",
+              "omission",
+              "addition",
+              "untranslated",
+              "terminology_proper_name_number",
+              "linguistic_convention",
+              "subtitle_presentation"
+            ]
+          },
+          "severity": { "enum": ["critical", "major", "minor"] },
+          "span": { "$ref": "common-v1.schema.json#/$defs/time_range" }
+        }
+      }
+    }
+  }
+}

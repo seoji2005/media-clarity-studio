@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.media-clarity-studio.invalid/eval-event-v1.schema.json",
+  "title": "EvalEvent/v1",
+  "description": "events.jsonl 한 줄. append-only이며 각 줄이 독립적으로 schema version·run_id·sequence를 가진다(EVAL_HARNESS.md §9).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "sequence", "emitted_at", "event_type"],
+  "properties": {
+    "schema_version": { "$ref": "common-v1.schema.json#/$defs/schema_version" },
+    "run_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "emitted_at": { "$ref": "common-v1.schema.json#/$defs/timestamp" },
+    "event_type": {
+      "enum": [
+        "run_status_changed",
+        "metric_failed",
+        "metric_unsupported",
+        "shard_completed",
+        "resume_rejected",
+        "guardrail_flagged"
+      ]
+    },
+    "run_status": { "$ref": "common-v1.schema.json#/$defs/run_status" },
+    "metric_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "sample_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "shard_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "content_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+    "error_code": {
+      "description": "eval_contracts의 안정 오류 코드. 메시지 문구가 아니라 코드가 계약이다.",
+      "type": "string",
+      "pattern": "^E_[A-Z_]+$"
+    },
+    "message": { "type": "string", "minLength": 1 }
+  }
+}
