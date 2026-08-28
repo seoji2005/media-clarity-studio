@@ -1434,5 +1434,340 @@ class ReviewR031ResumeLocationTests(unittest.TestCase):
         self.assertEqual({f.code for f in first}, {"E_RESUME_FINGERPRINT"})
 
 
+def rewrite_bundle_ids(documents: dict[str, Any], replacements: dict[str, str]) -> None:
+    """번들 안의 ID 문자열을 **정의와 참조 모두** 한꺼번에 바꾼다.
+
+    정의 ID만 바꾸면 dangling reference 검사가 먼저 걸려서 정작 확인하려는
+    정의 유일성 검사에 도달하지 못한다.
+    """
+
+    raw = json.dumps(documents["reference_bundles"][0])
+    for old, new in replacements.items():
+        raw = raw.replace(old, new)
+    documents["reference_bundles"][0] = json.loads(raw)
+
+
+class ReviewM01R2DefinitionIdentityTests(unittest.TestCase):
+    """REVIEW-016 M-01-R2 — timebase 역할 domain과 정의 ID의 유일성."""
+
+    def test_correct_bundle_is_accepted(self) -> None:
+        """positive를 먼저 고정한다 — H-06은 source/degraded 정의가 모두 있다."""
+
+        documents = documents_of("H-06")
+        bundle = documents["reference_bundles"][0]
+        self.assertEqual(bundle["source_timebase"]["domain"], "source")
+        self.assertEqual(bundle["degraded_timebase"]["domain"], "degraded")
+        self.assertNotEqual(
+            bundle["source_timebase"]["timebase_id"],
+            bundle["degraded_timebase"]["timebase_id"],
+        )
+        self.assertNotEqual(
+            bundle["source_media"]["artifact_id"], bundle["degraded_media"]["artifact_id"]
+        )
+        self.assertEqual(codes_for(documents), ())
+
+    def test_degraded_counterpart_absent_stays_valid(self) -> None:
+        """source 정의만 있는 번들은 이 검사가 새로 거부하지 않는다."""
+
+        documents = documents_of("H-01")
+        bundle = documents["reference_bundles"][0]
+        self.assertNotIn("degraded_timebase", bundle)
+        self.assertEqual(bundle["source_timebase"]["domain"], "source")
+        self.assertEqual(codes_for(documents), ())
+
+    def test_domain_swap_is_rejected(self) -> None:
+        """역할별 연결만 검사하면 통과하던 입력 — 두 domain만 서로 바꾼 문서."""
+
+        documents = documents_of("H-06")
+        bundle = documents["reference_bundles"][0]
+        bundle["source_timebase"]["domain"] = "degraded"
+        bundle["degraded_timebase"]["domain"] = "source"
+        for key, wrong in (("source_timebase", "degraded"), ("degraded_timebase", "source")):
+            with self.subTest(key=key):
+                location = f"reference_bundles/0/{key}/domain"
+                assert_rejected(self, documents, "E_REFERENCE_ID", location)
+                self.assertEqual(assert_location_resolves(self, documents, location), wrong)
+
+    def test_single_domain_error_is_rejected(self) -> None:
+        """한쪽만 틀려도 거부한다 (두 개를 동시에 바꿔야만 걸리는 검사가 아니다)."""
+
+        documents = documents_of("H-06")
+        documents["reference_bundles"][0]["degraded_timebase"]["domain"] = "source"
+        assert_rejected(
+            self,
+            documents,
+            "E_REFERENCE_ID",
+            "reference_bundles/0/degraded_timebase/domain",
+        )
+
+    def test_collapsed_timebase_definition_id_is_rejected(self) -> None:
+        """두 시간축 정의를 같은 ID 하나로 합친 문서는 구분이 불가능하다."""
+
+        documents = documents_of("H-06")
+        rewrite_bundle_ids(documents, {"tb-source": "tb-shared", "tb-degraded": "tb-shared"})
+        location = "reference_bundles/0/degraded_timebase/timebase_id"
+        assert_rejected(self, documents, "E_REFERENCE_ID", location)
+        self.assertEqual(assert_location_resolves(self, documents, location), "tb-shared")
+
+    def test_collapsed_artifact_definition_id_is_rejected(self) -> None:
+        """서로 다른 media 정의가 같은 artifact_id를 쓰면 모호하다."""
+
+        documents = documents_of("H-06")
+        rewrite_bundle_ids(
+            documents,
+            {"art-source-media": "artifact-shared", "art-degraded-media": "artifact-shared"},
+        )
+        location = "reference_bundles/0/degraded_media/artifact_id"
+        assert_rejected(self, documents, "E_REFERENCE_ID", location)
+        self.assertEqual(
+            assert_location_resolves(self, documents, location), "artifact-shared"
+        )
+
+    def test_identical_definition_is_not_treated_as_ambiguous(self) -> None:
+        """정의가 완전히 같으면 중복일 뿐 모호하지 않다 — 검사 범위를 명시한다."""
+
+        documents = documents_of("H-06")
+        bundle = documents["reference_bundles"][0]
+        bundle["clean_video"] = copy.deepcopy(bundle["source_media"])
+        self.assertEqual(codes_for(documents), ())
+
+    def test_reference_reusing_a_definition_id_is_not_a_duplicate(self) -> None:
+        """정의 ID와 참조 ID를 구분한다 — 정상 연결을 중복으로 오인하지 않는다."""
+
+        documents = documents_of("H-06")
+        bundle = documents["reference_bundles"][0]
+        self.assertEqual(
+            bundle["source_timebase"]["origin_artifact"], bundle["source_media"]["artifact_id"]
+        )
+        bundle["source_media"]["timebase_ref"] = bundle["source_timebase"]["timebase_id"]
+        bundle["degraded_media"]["timebase_ref"] = bundle["degraded_timebase"]["timebase_id"]
+        self.assertEqual(codes_for(documents), ())
+
+    def test_definition_findings_are_deterministic(self) -> None:
+        documents = documents_of("H-06")
+        bundle = documents["reference_bundles"][0]
+        bundle["source_timebase"]["domain"] = "degraded"
+        bundle["degraded_timebase"]["domain"] = "source"
+        first = findings_for(documents)
+        second = findings_for(copy.deepcopy(documents))
+        self.assertEqual(first, second)
+        self.assertEqual(list(first), sort_findings(first))
+        for finding in first:
+            assert_location_resolves(self, documents, finding.location)
+
+
+class ReviewM04R2HypothesisIdUniquenessTests(unittest.TestCase):
+    """REVIEW-016 M-04-R2 — hypothesis_id 유일성은 그래프 해석보다 먼저다."""
+
+    def test_unique_hypothesis_ids_are_accepted(self) -> None:
+        documents = valid_paired_documents()
+        ids = [h["hypothesis_id"] for h in documents["eval_run_manifest"]["hypotheses"]]
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertEqual(codes_for(documents), ())
+
+    def test_duplicate_baseline_id_with_different_content_is_rejected(self) -> None:
+        """같은 ID를 가진 **내용이 다른** 두 번째 가설."""
+
+        documents = valid_paired_documents()
+        hypotheses = documents["eval_run_manifest"]["hypotheses"]
+        hypotheses.append(
+            {
+                "hypothesis_id": "hyp-baseline",
+                "content_hash": "sha256:" + "cc" * 32,
+                "reference_axis": "target",
+                "target_language": "ko",
+                "role": "baseline",
+                "sample_ids": ["smp-001"],
+            }
+        )
+        location = f"eval_run_manifest/hypotheses/{len(hypotheses) - 1}/hypothesis_id"
+        assert_rejected(self, documents, "E_DOCUMENT_LINK", location)
+        self.assertEqual(assert_location_resolves(self, documents, location), "hyp-baseline")
+
+    def test_duplicate_candidate_id_is_rejected(self) -> None:
+        documents = valid_paired_documents()
+        hypotheses = documents["eval_run_manifest"]["hypotheses"]
+        hypotheses.append(
+            {
+                "hypothesis_id": "hyp-candidate",
+                "content_hash": "sha256:" + "dd" * 32,
+                "reference_axis": "target",
+                "target_language": "ko",
+                "role": "candidate",
+                "sample_ids": ["smp-001"],
+            }
+        )
+        location = f"eval_run_manifest/hypotheses/{len(hypotheses) - 1}/hypothesis_id"
+        assert_rejected(self, documents, "E_DOCUMENT_LINK", location)
+        self.assertEqual(assert_location_resolves(self, documents, location), "hyp-candidate")
+
+    def test_duplicate_is_detected_when_the_order_is_reversed(self) -> None:
+        """목록 순서를 바꿔도 중복은 검출된다 — 첫 객체만 고르지 않는다."""
+
+        documents = valid_paired_documents()
+        hypotheses = documents["eval_run_manifest"]["hypotheses"]
+        original = hypothesis_index(documents, "hyp-baseline")
+        hypotheses.insert(
+            original,
+            {
+                "hypothesis_id": "hyp-baseline",
+                "content_hash": "sha256:" + "cc" * 32,
+                "reference_axis": "target",
+                "target_language": "ko",
+                "role": "baseline",
+                "sample_ids": ["smp-001"],
+            },
+        )
+        location = f"eval_run_manifest/hypotheses/{original + 1}/hypothesis_id"
+        assert_rejected(self, documents, "E_DOCUMENT_LINK", location)
+        self.assertEqual(assert_location_resolves(self, documents, location), "hyp-baseline")
+        # 앞에 놓인 쪽을 조용히 채택하면 표본 판정이 뒤집힌다. 중복만 보고해야 한다.
+        self.assertEqual(codes_for(documents), ("E_DOCUMENT_LINK",))
+
+    def test_ambiguous_id_is_not_resolved_into_a_paired_object(self) -> None:
+        """모호한 ID에서 표본 판정을 만들어내지 않는다 — 중복만 보고한다."""
+
+        documents = valid_paired_documents()
+        documents["eval_run_manifest"]["hypotheses"].append(
+            {
+                "hypothesis_id": "hyp-baseline",
+                "content_hash": "sha256:" + "cc" * 32,
+                "reference_axis": "target",
+                "target_language": "ko",
+                "role": "baseline",
+                "sample_ids": ["smp-001"],
+            }
+        )
+        self.assertEqual(codes_for(documents), ("E_DOCUMENT_LINK",))
+
+    def test_duplicate_unrelated_to_paired_comparison_is_still_rejected(self) -> None:
+        """paired comparison이 없어도 ID 유일성은 manifest 전체에 적용된다."""
+
+        documents = documents_of("H-01")
+        hypotheses = documents["eval_run_manifest"]["hypotheses"]
+        self.assertNotIn("paired_comparison", documents["eval_run_manifest"])
+        hypotheses.append(copy.deepcopy(hypotheses[0]))
+        location = f"eval_run_manifest/hypotheses/{len(hypotheses) - 1}/hypothesis_id"
+        assert_rejected(self, documents, "E_DOCUMENT_LINK", location)
+
+    def test_duplicate_findings_are_deterministic(self) -> None:
+        documents = valid_paired_documents()
+        hypotheses = documents["eval_run_manifest"]["hypotheses"]
+        for role in ("baseline", "candidate"):
+            hypotheses.append(
+                {
+                    "hypothesis_id": f"hyp-{role}",
+                    "content_hash": "sha256:" + "ee" * 32,
+                    "reference_axis": "target",
+                    "target_language": "ko",
+                    "role": role,
+                    "sample_ids": ["smp-001"],
+                }
+            )
+        first = findings_for(documents)
+        second = findings_for(copy.deepcopy(documents))
+        self.assertEqual(first, second)
+        self.assertEqual(list(first), sort_findings(first))
+        self.assertEqual({f.code for f in first}, {"E_DOCUMENT_LINK"})
+        self.assertEqual(len(first), 2, "중복 하나만 보고하고 멈추면 안 된다")
+        for finding in first:
+            assert_location_resolves(self, documents, finding.location)
+
+    def test_review_015_paired_counterexamples_still_fail(self) -> None:
+        """REVIEW-015의 핵심 반례가 유일성 검사 도입 뒤에도 그대로 거부된다."""
+
+        subset = valid_paired_documents()
+        manifest = subset["eval_run_manifest"]
+        only_one = manifest["dataset"]["sample_ids"][:1]
+        manifest["paired_comparison"]["baseline_sample_ids"] = list(only_one)
+        manifest["paired_comparison"]["candidate_sample_ids"] = list(only_one)
+        for role in ("baseline", "candidate"):
+            manifest["hypotheses"][hypothesis_index(subset, f"hyp-{role}")]["sample_ids"] = list(
+                only_one
+            )
+        assert_rejected(
+            self,
+            subset,
+            "E_PAIRED_SAMPLE_SET",
+            "eval_run_manifest/paired_comparison/baseline_sample_ids",
+        )
+
+        missing = valid_paired_documents()
+        index = hypothesis_index(missing, "hyp-baseline")
+        missing["eval_run_manifest"]["hypotheses"][index].pop("sample_ids")
+        assert_rejected(
+            self, missing, "E_PAIRED_SAMPLE_SET", f"eval_run_manifest/hypotheses/{index}"
+        )
+
+        self.assertEqual(codes_for(documents_of("H-14")), ("E_PAIRED_SAMPLE_SET",))
+
+
+class ReviewR03R2RequiredFieldLocationTests(unittest.TestCase):
+    """REVIEW-016 R-03-R2 — 필수 필드 누락 위치가 입력에서 해석된다.
+
+    없는 leaf를 가리키는 pointer는 입력에 적용되지 않는다. 실제로 존재하는 부모
+    객체를 가리키고, 누락된 필드 이름은 메시지에 담는다.
+    """
+
+    def test_missing_resume_implementation_version_location_resolves(self) -> None:
+        documents = documents_of("H-11")
+        entry = previous_versions_of(documents)[0]
+        entry.pop("implementation_version")
+        location = "eval_run_manifest/resume/previous_metric_versions/0"
+        assert_rejected(self, documents, "E_SCHEMA", location)
+        resolved = assert_location_resolves(self, documents, location)
+        self.assertIs(resolved, entry)
+        self.assertNotIn("implementation_version", resolved)
+
+    def test_missing_field_name_is_reported_in_the_message(self) -> None:
+        documents = documents_of("H-11")
+        previous_versions_of(documents)[0].pop("implementation_version")
+        messages = [
+            f.message
+            for f in findings_for(documents)
+            if f.location == "eval_run_manifest/resume/previous_metric_versions/0"
+        ]
+        self.assertTrue(messages)
+        self.assertTrue(
+            any("implementation_version" in message for message in messages),
+            f"누락 필드 이름이 메시지에 없다: {messages}",
+        )
+
+    def test_every_missing_required_field_location_resolves(self) -> None:
+        cases = (
+            ("eval_run_manifest", ("eval_run_manifest",), "config_hash"),
+            ("dataset", ("eval_run_manifest", "dataset"), "dataset_hash"),
+            (
+                "fingerprints",
+                ("eval_run_manifest", "fingerprints"),
+                "config",
+            ),
+            ("bundle", ("reference_bundles", 0), "provenance"),
+            (
+                "source_timebase",
+                ("reference_bundles", 0, "source_timebase"),
+                "origin_artifact",
+            ),
+        )
+        for name, path, field in cases:
+            with self.subTest(node=name):
+                documents = documents_of("H-01")
+                node: Any = documents
+                for token in path:
+                    node = node[token]
+                node.pop(field)
+                findings = findings_for(documents)
+                self.assertTrue(findings, f"{name}/{field} 누락이 통과했다")
+                schema_findings = [f for f in findings if f.code == "E_SCHEMA"]
+                self.assertTrue(schema_findings)
+                for finding in schema_findings:
+                    resolved = assert_location_resolves(self, documents, finding.location)
+                    self.assertIsInstance(resolved, (dict, list))
+
+    def test_present_documents_report_no_required_field_finding(self) -> None:
+        self.assertEqual(codes_for(documents_of("H-01")), ())
+        self.assertEqual(codes_for(documents_of("H-11")), ())
+
+
 if __name__ == "__main__":
     unittest.main()

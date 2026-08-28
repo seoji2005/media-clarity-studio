@@ -455,7 +455,9 @@ class SchemaValidator:
         pattern_properties = schema.get("patternProperties") or {}
         for name in schema.get("required") or []:
             if name not in instance:
-                self._fail(findings, f"{location}/{name}", "필수 필드 누락")
+                # 없는 leaf를 가리키면 JSON Pointer로 해석되지 않는다. 실제로 존재하는
+                # 부모 객체를 가리키고 누락 필드 이름은 메시지에 담는다 (REVIEW-016 R-03-R2).
+                self._fail(findings, location, f"필수 필드 누락: {name}")
 
         additional = schema.get("additionalProperties")
         for key in instance:
@@ -835,6 +837,8 @@ def _check_bundle_reference_ids(bundle: Mapping[str, Any], location: str) -> lis
         if isinstance(node, dict):
             require_timebase(node.get("timebase_ref"), f"{location}/{key}/timebase_ref")
 
+    findings.extend(_check_definition_identity(bundle, location))
+
     # 역할별 정확 연결 — 존재하는 **다른** timebase를 가리키면 membership 검사는 통과하지만
     # source/degraded 시간축이 조용히 뒤바뀐다 (REVIEW-015 M-01-R1).
     for media_key, timebase_key in (
@@ -891,6 +895,86 @@ def _check_bundle_reference_ids(bundle: Mapping[str, Any], location: str) -> lis
     if isinstance(mask, dict):
         require_timebase(mask.get("timebase_ref"), f"{location}/speech_mask/timebase_ref")
 
+    return findings
+
+
+#: timebase **정의** 슬롯과 그 역할이 요구하는 domain. 참조(ArtifactRef.timebase_ref,
+#: TimeMapping.from/to 등)는 정의가 아니므로 여기에 넣지 않는다.
+_TIMEBASE_DEFINITIONS = (("source_timebase", "source"), ("degraded_timebase", "degraded"))
+
+#: artifact **정의** 슬롯. `origin_artifact`·`parent_refs` 같은 참조는 정의가 아니다.
+_ARTIFACT_DEFINITIONS = ("source_media", "degraded_media", "clean_video")
+
+
+def _check_definition_identity(bundle: Mapping[str, Any], location: str) -> list[Finding]:
+    """timebase 역할 domain과 정의 ID의 유일성 (REVIEW-016 M-01-R2).
+
+    역할별 `timebase_ref` 연결만으로는 다음이 통과한다.
+
+    - 두 timebase의 `domain`만 서로 바꾼 입력
+    - 두 timebase 정의를 같은 ID 하나로 합친 입력
+    - 서로 다른 media 정의가 같은 `artifact_id`를 쓰는 입력
+
+    **정의 ID와 참조 ID를 구분한다.** `ArtifactRef.timebase_ref`나
+    `Timebase.origin_artifact`가 정의와 같은 ID를 쓰는 것은 정상 연결이며 중복 정의가 아니다.
+    """
+
+    findings: list[Finding] = []
+
+    # 1. 역할이 요구하는 domain
+    for key, expected_domain in _TIMEBASE_DEFINITIONS:
+        timebase = bundle.get(key)
+        if not isinstance(timebase, dict):
+            continue
+        actual = timebase.get("domain")
+        if actual != expected_domain:
+            findings.append(
+                Finding(
+                    f"{location}/{key}/domain",
+                    "E_REFERENCE_ID",
+                    f"{key}.domain은 {expected_domain!r}여야 한다 (발견: {actual!r})",
+                )
+            )
+
+    # 2. source/degraded timebase 정의의 ID는 서로 달라야 한다.
+    source_timebase = bundle.get("source_timebase")
+    degraded_timebase = bundle.get("degraded_timebase")
+    if isinstance(source_timebase, dict) and isinstance(degraded_timebase, dict):
+        source_id = source_timebase.get("timebase_id")
+        degraded_id = degraded_timebase.get("timebase_id")
+        if isinstance(source_id, str) and source_id == degraded_id:
+            findings.append(
+                Finding(
+                    f"{location}/degraded_timebase/timebase_id",
+                    "E_REFERENCE_ID",
+                    f"source_timebase와 degraded_timebase가 같은 timebase_id {source_id!r}를 "
+                    "쓴다 — 두 시간축을 구분할 수 없다",
+                )
+            )
+
+    # 3. 같은 artifact_id를 쓰는 서로 **다른** 정의는 모호하다.
+    #    정의가 완전히 같으면 중복일 뿐 모호하지 않으므로 거부하지 않는다.
+    seen_artifacts: dict[str, tuple[str, Mapping[str, Any]]] = {}
+    for key in _ARTIFACT_DEFINITIONS:
+        node = bundle.get(key)
+        if not isinstance(node, dict):
+            continue
+        artifact_id = node.get("artifact_id")
+        if not isinstance(artifact_id, str):
+            continue
+        previous = seen_artifacts.get(artifact_id)
+        if previous is not None and previous[1] != node:
+            findings.append(
+                Finding(
+                    f"{location}/{key}/artifact_id",
+                    "E_REFERENCE_ID",
+                    f"artifact_id {artifact_id!r}를 서로 다른 정의가 함께 쓴다 "
+                    f"(먼저 정의된 위치: {previous[0]})",
+                )
+            )
+            continue
+        if previous is None:
+            seen_artifacts[artifact_id] = (key, node)
     return findings
 
 
@@ -1112,7 +1196,12 @@ def check_manifest(manifest: Any, location: str) -> list[Finding]:
                 )
             )
 
-    findings.extend(_check_paired_comparison(manifest, location))
+    # hypothesis graph를 해석하기 **전에** ID 유일성을 확정한다 (REVIEW-016 M-04-R2).
+    duplicate_findings, ambiguous_hypothesis_ids = _check_hypothesis_id_uniqueness(
+        manifest, location
+    )
+    findings.extend(duplicate_findings)
+    findings.extend(_check_paired_comparison(manifest, location, ambiguous_hypothesis_ids))
     findings.extend(_check_resume(manifest, location))
     findings.extend(_check_artifact_paths(manifest, location))
     return findings
@@ -1164,7 +1253,47 @@ def _check_split_evidence_covers_dataset(
     return findings
 
 
-def _check_paired_comparison(manifest: Mapping[str, Any], location: str) -> list[Finding]:
+def _check_hypothesis_id_uniqueness(
+    manifest: Mapping[str, Any], location: str
+) -> tuple[list[Finding], frozenset[str]]:
+    """`hypothesis_id`는 manifest 전체에서 유일해야 한다 (REVIEW-016 M-04-R2).
+
+    중복을 조용히 `setdefault`로 첫 객체만 고르면 paired reference가 어느 정의를
+    가리키는지 모호해지고, 목록 순서만 바꿔도 검증 대상이 달라진다.
+
+    반환값의 두 번째 원소는 **모호해진 ID 집합**이다. 호출자는 이 ID에 대해
+    객체 해석을 하지 않는다.
+    """
+
+    findings: list[Finding] = []
+    seen: dict[str, int] = {}
+    duplicated: set[str] = set()
+    for index, entry in enumerate(manifest.get("hypotheses") or []):
+        if not isinstance(entry, dict):
+            continue
+        hypothesis_id = entry.get("hypothesis_id")
+        if not isinstance(hypothesis_id, str):
+            continue
+        if hypothesis_id in seen:
+            duplicated.add(hypothesis_id)
+            findings.append(
+                Finding(
+                    f"{location}/hypotheses/{index}/hypothesis_id",
+                    "E_DOCUMENT_LINK",
+                    f"hypothesis_id {hypothesis_id!r}가 중복이다 "
+                    f"(먼저 정의된 위치: hypotheses/{seen[hypothesis_id]})",
+                )
+            )
+            continue
+        seen[hypothesis_id] = index
+    return findings, frozenset(duplicated)
+
+
+def _check_paired_comparison(
+    manifest: Mapping[str, Any],
+    location: str,
+    ambiguous_hypothesis_ids: frozenset[str] = frozenset(),
+) -> list[Finding]:
     """paired comparison이 실제 hypothesis·dataset과 연결되는지 (REVIEW-014 M-04)."""
 
     findings: list[Finding] = []
@@ -1173,12 +1302,19 @@ def _check_paired_comparison(manifest: Mapping[str, Any], location: str) -> list
         return findings
     paired_location = f"{location}/paired_comparison"
 
+    # 유일한 ID만 객체로 해석한다. 중복 ID는 uniqueness 검사가 이미 보고했다.
     hypothesis_index: dict[str, int] = {}
     hypotheses: dict[str, Mapping[str, Any]] = {}
     for index, entry in enumerate(manifest.get("hypotheses") or []):
-        if isinstance(entry, dict) and isinstance(entry.get("hypothesis_id"), str):
-            hypotheses.setdefault(entry["hypothesis_id"], entry)
-            hypothesis_index.setdefault(entry["hypothesis_id"], index)
+        if not isinstance(entry, dict):
+            continue
+        hypothesis_id = entry.get("hypothesis_id")
+        if not isinstance(hypothesis_id, str) or hypothesis_id in ambiguous_hypothesis_ids:
+            continue
+        if hypothesis_id in hypotheses:  # pragma: no cover - uniqueness 검사가 먼저 걸러낸다
+            continue
+        hypotheses[hypothesis_id] = entry
+        hypothesis_index[hypothesis_id] = index
     dataset = manifest.get("dataset")
     dataset_samples = (
         set(dataset.get("sample_ids") or []) if isinstance(dataset, dict) else set()
@@ -1226,6 +1362,11 @@ def _check_paired_comparison(manifest: Mapping[str, Any], location: str) -> list
         sample_location = f"{paired_location}/{role}_sample_ids"
 
         compare_with_dataset(samples, sample_location, f"{role} paired 표본 집합")
+
+        if hypothesis_id in ambiguous_hypothesis_ids:
+            # 어느 정의를 가리키는지 결정할 수 없다. 중복은 uniqueness 검사가 보고했으므로
+            # 임의의 객체를 골라 검사하지 않는다 (REVIEW-016 M-04-R2).
+            continue
 
         hypothesis = hypotheses.get(hypothesis_id)
         if hypothesis is None:

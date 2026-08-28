@@ -9,6 +9,7 @@
 - **구현 브랜치:** `claude/task-006-eval-contracts`
 - **1차 Gate H 검토:** `REVIEW-014` (PR #29 `lean-root-review/task-006-gate-h`) — 고정 HEAD `d72325737d1088104a11d05228b84bd47616fee0`, 판정 **변경 요청** (차단 0 · 중대 4 · 경미 1). 반영은 §11.5
 - **2차 Gate H 제한 재검토:** `REVIEW-015` (PR #30, 리뷰 commit `d8d1abd82a1ead14b1ae3e0fac58006eff8fc1b8`) — 고정 HEAD `cd94abf0c23c9e9023abbfed1c3999eda9c7efa0`, 판정 **변경 요청** (차단 0 · 중대 2 · 경미 1). 반영은 §11.6
+- **3차 Gate H 제한 재검토:** `REVIEW-016` (PR #31, 리뷰 commit `9b2406da12825447e3dbde3c44f77397777ae262`) — 고정 HEAD `c35bd2b56272b505749d407986f16f4513a0e81d`, 판정 **변경 요청** (차단 0 · 중대 2 · 경미 1). 반영은 §11.7
 - **선행:** [TASK-005](TASK-005.md) Done
 - **구현 Owner:** Claude Code 구현 세션
 - **검증·리뷰:** Lean Root Orchestrator, 구현 세션과 분리된 고정 HEAD 검토
@@ -384,3 +385,46 @@ fixture도 변경하지 않았다 — H-01~H-14의 의미는 그대로다.
 dataset 동일성 검사와 **중복**이다. 두 집합이 모두 dataset과 같으면 서로도 같으므로, 이 줄만
 제거해도 탐지는 유지된다. 다만 `.../baseline_sample_ids`에 별도 진단을 남겨 수정 지점을 좁혀
 주므로 유지했다.
+
+### 11.7 REVIEW-016 제한 재검토 반영 (4차 커밋)
+
+`REVIEW-016` (PR #31, 리뷰 commit `9b2406da…`)이 고정 HEAD `c35bd2b…`에서 **변경 요청**으로
+지목한 M-01-R2·M-04-R2·R-03-R2를 제한 범위로 반영했다. REVIEW-014·015·016 원문과
+PR #29·#30·#31, `main`은 수정하지 않았다.
+
+| ID | 반영 위치 |
+|---|---|
+| **M-01-R2** | `eval_contracts.py`: `_check_definition_identity()` 신설 — (1) `source_timebase.domain`은 `source`, `degraded_timebase.domain`은 `degraded`여야 한다, (2) 두 timebase **정의**의 `timebase_id`는 서로 달라야 한다, (3) 서로 **다른** media 정의가 같은 `artifact_id`를 쓰면 모호하다. `_check_bundle_reference_ids()`에서 호출한다. 코드 `E_REFERENCE_ID` |
+| **M-04-R2** | `_check_hypothesis_id_uniqueness()` 신설 — `hypothesis_id` 중복을 **graph 해석 이전에** 각 중복 index마다 보고하고, 모호해진 ID 집합을 반환한다. `check_manifest()`가 이를 먼저 실행하고 `_check_paired_comparison()`에 넘긴다. `setdefault` 기반 "첫 정의 채택"을 제거해 목록 순서가 판정을 바꾸지 못하게 했다. 코드 `E_DOCUMENT_LINK` |
+| **R-03-R2** | `SchemaValidator._check_object()`의 `required` 누락 finding이 **없는 leaf** `.../<name>` 대신 실제로 존재하는 **부모 객체**를 가리키고, 누락 필드 이름은 메시지에 담는다. 이로써 `resume.previous_metric_versions/0`의 `implementation_version` 누락을 포함해 모든 필수 필드 누락 위치가 입력에 JSON Pointer로 해석된다. 코드 `E_SCHEMA` |
+
+**정의 ID와 참조 ID를 구분했다.** `ArtifactRef.timebase_ref`나 `Timebase.origin_artifact`가
+정의와 같은 ID를 쓰는 것은 정상 연결이며 중복 정의가 아니다. 유일성 검사는 정의 슬롯
+(`source_timebase`·`degraded_timebase`·`source_media`·`degraded_media`·`clean_video`)에만
+적용한다. `clean_video`의 **역할 규칙은 추가하지 않았다** — REVIEW-016이 범위 밖으로 두었다.
+
+**의도적으로 좁힌 범위.** 같은 `artifact_id`를 쓰는 정의가 **완전히 동일**하면 중복일 뿐
+모호하지 않으므로 거부하지 않는다. 테스트가 이 경계를 고정한다.
+
+**schema·fixture 변경 없음.** 이번 반영은 validator와 테스트만 바꾼다. 7개 schema 파일과
+H-01~H-14 fixture는 blob 무변경이고 `Makefile`·`docs/ARCHITECTURE.md`·TASK-022 코드도
+건드리지 않았다 — H-01~H-14의 의미는 그대로다.
+
+**positive를 먼저 고정했다.** 세 검사 모두 정상 문서(H-06 정상 번들, degraded counterpart가
+없는 H-01, 유일한 baseline/candidate paired 문서)가 finding 0으로 통과하는 것을 먼저 확인한
+뒤 조건을 하나씩 mutation한다. REVIEW-015의 진부분집합·`sample_ids` 누락·H-14 반례도 다시 실행한다.
+
+**위치 주장의 정확한 범위.** R-03-R2는 `required` 누락 finding이 부모 객체를 가리키도록
+고친 것이다. 회귀 테스트는 resume·manifest·dataset·fingerprints·reference bundle·timebase의
+필수 필드 누락에서 위치가 해석되는 것을 확인했다. **모든 코드 경로의 모든 finding**을 전수
+확인했다는 주장은 하지 않는다 — 확인한 것은 위 경로들이다.
+
+**mutation 감사 (저장소 밖 임시 사본).** 새 검사를 하나씩 무력화해 회귀 테스트가 탐지하는지
+확인했다. 13개 mutation 중 **12개 탐지**. 탐지되지 않은 1개는 아래에 그대로 적는다.
+
+**알려진 중복 방어 (숨기지 않는다).** 모호한 `hypothesis_id`를 객체로 해석하지 않는 방어가
+두 곳에 있다 — lookup 구성 루프와 역할 루프. 감사 결과 **lookup 구성 쪽만 제거하면 관측
+가능한 동작이 바뀌지 않는다**(역할 루프 방어가 먼저 걸린다). 반대로 역할 루프 쪽만 제거하면
+"manifest hypotheses에 없는 가설"이라는 **틀린 메시지**가 나오므로 그쪽이 load-bearing이다.
+두 방어를 모두 제거하면 회귀 테스트가 탐지한다. lookup 구성 쪽은 이후 다른 소비자가 같은
+lookup을 쓰더라도 첫 정의를 조용히 채택하지 못하게 하는 방어로 유지했다.
