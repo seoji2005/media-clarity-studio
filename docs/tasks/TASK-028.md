@@ -7,7 +7,8 @@
 | **Reviewer** | Lean Root Orchestrator — 구현 세션과 분리된 고정 HEAD Gate H 검토 |
 | **Phase** | Phase 1a / shared storage·orchestrator foundation |
 | **Status** | `In review` |
-| **구현 상태** | **`Implemented — awaiting fixed HEAD review`** — 구현 세션 자기 승인 없음 |
+| **구현 상태** | **`Implemented — awaiting fixed HEAD rereview`** — 구현 세션 자기 승인 없음 |
+| **1차 Gate H 검토** | `REVIEW-018` (PR #37, 리뷰 commit `a08981795739901b9fa14733ff3e0a9afc614e8a`) — 고정 HEAD `9c60ccb67d5475ce1c794852ccadfd82594383a3`, 판정 **변경 요청** (필수 수정 5건). 반영은 §12.8 |
 | **구현 기준 main** | `b55476086ca55a2bb806fb237239be604ed7efb8` |
 | **구현 브랜치** | `claude/task-028-resumable-runtime` |
 | **계약 상태** | **Approved — PR #34 병합 완료** |
@@ -338,7 +339,7 @@ mutation 감사 최소 항목:
 
 ## 12. 구현 기록 (Claude Code 구현 세션)
 
-**상태: `Implemented — awaiting fixed HEAD review`.** 아래는 구현 세션의 주장이며 검증이 아니다.
+**상태: `Implemented — awaiting fixed HEAD rereview`.** 아래는 구현 세션의 주장이며 검증이 아니다.
 판정은 Lean Root가 고정 HEAD에서 직접 재현한다 (`AGENTS.md` R10 / §3.5).
 구현 세션은 자기 변경을 승인하지 않았고 병합·Ready 전환을 하지 않았다.
 
@@ -484,3 +485,52 @@ git status --short
    - `completed 기록을 재검증보다 먼저 수행` → `before_completed_write` hook으로 completed
      전이 직전에 중단시킨다. 순서가 뒤바뀐 구현이면 이 시점에 이미 completed record가 남아
      다음 실행이 hit가 되므로 구분된다.
+
+### 12.8 REVIEW-018 변경 요청 반영 (2차 커밋)
+
+`REVIEW-018` (PR #37, 리뷰 commit `a089817…`)이 고정 HEAD `9c60ccb…`에서 **변경 요청**으로
+지목한 M-01~M-05를 제한 범위로 반영했다. REVIEW-018 원문과 PR #37, `main`은 수정하지 않았다.
+다섯 반례를 먼저 production API로 **재현한 뒤** 고쳤다.
+
+| ID | 반영 위치 |
+|---|---|
+| **M-01** | `job_runtime.py`: `ATTEMPT_STATE_RULES` 표와 `check_attempt_semantics()` 신설. `_read_attempts()`가 schema 검사 뒤, **cache lookup 전에** 호출한다. `completed`는 `outputs`가 비어 있을 수 없고 `verified_artifact_count == len(outputs)`·`verified_artifact_bytes == sum(byte_size)`가 성립해야 하며 `ended_at`·`wall_duration_seconds`가 있어야 한다. 완료가 아닌 상태는 출력·검증 집계를 가질 수 없다. 코드 `E_CHECKPOINT_INVALID`, 위치는 실제 record 파일 + JSON Pointer |
+| **M-02** | `_run_stage()`가 `_lookup_cache()` **이전에** `_preserve_running_attempts()`를 호출한다. hit 여부와 무관하게 stale running이 `interrupted`로 전이된다. 전이 record는 `error_code=E_STATE_TRANSITION`·`error_location`·`interrupted_at`을 가진다 |
+| **M-03** | `artifact_store.opaque_identity_error()` 신설, `preflight()`가 filesystem mutation 전에 호출한다. POSIX 절대·Windows drive·UNC·traversal·backslash·`~`·경로 구분자를 `E_UNSAFE_PATH` @ `source_identity`로 거부한다. **사유 문자열에 값 자체를 담지 않는다** |
+| **M-04** | `ContractViolation`에 `temp_paths`를 실었다. `add_file()`은 실패 시 `surviving_temp_paths()`로 **실제 남아 있는** 임시 경로만 예외에 붙이고, `_fail_attempt()`가 안정 `error_code`·`error_location`·`temp_paths`를 failed record에 기록한다 |
+| **M-05** | `check_seed_inputs()` 신설, `preflight()`에서 호출한다. 모든 seed entry를 `common-v1.schema.json#/$defs/ArtifactRef`로 검사하고 `verify_ref()`로 존재·hash·size까지 mutation 전에 확인한다. 위치는 `seed_inputs/<stage>/<index>` 이하로 실제 입력에서 해석된다 |
+
+**zero-output stage는 계약에 없다.** J-01~J-16과 smoke의 모든 stage가 출력을 하나 이상
+만들므로 `outputs=[]`인 `completed` record를 거부하는 것이 현재 stage 계약과 일치한다.
+계약을 임의로 확장하지 않았다.
+
+**`ended_at`을 지어내지 않는다.** interrupted attempt가 **언제 죽었는지는 관측하지 못했다.**
+그래서 `ended_at`·`wall_duration_seconds`를 만들어 내지 않고, 전이를 **관측한** 시각을
+`interrupted_at`이라는 별도 필드로 남긴다. 측정하지 않은 값을 쓰지 않는다는 §3.7과 같은 원칙이다.
+
+**schema 변경은 한 곳뿐이다.** `job-v1.schema.json`에 `interrupted_at`을 추가하고 `ended_at`의
+description을 명확히 했다. `common-v1.schema.json`과 TASK-006 schema 7개, H-01~H-14 fixture,
+TASK-022 구현은 **blob 무변경**이다. J-01~J-16 fixture도 변경하지 않았다 — 16건의 관측값이
+그대로 유지된다.
+
+### 12.9 REVIEW-018 반영 뒤 mutation 감사
+
+M-01~M-05의 새 검사 16종을 더해 저장소 밖 임시 사본에서 다시 감사했다.
+
+**50개 mutation 중 50개 탐지. 미탐지 0건, 감사 불가(SKIP) 0건.**
+
+| 묶음 | mutation | 결과 |
+|---|---|---|
+| M-01 | semantic invariant 호출 제거 / completed 빈 outputs 허용 / `verified_artifact_count` 일치 검사 제거 / `verified_artifact_bytes` 일치 검사 제거 / 상태별 필수·금지 필드 검사 제거 / 완료가 아닌 상태의 outputs 금지 제거 (6종) | 전부 탐지 |
+| M-02 | hit 반환 전 보존을 miss 경로로 되돌림 / interrupted record의 code·location·관측 시각 제거 (2종) | 전부 탐지 |
+| M-03 | `source_identity` 검사 제거 / 거부 사유에 값 자체를 포함(경로 누출) (2종) | 전부 탐지 |
+| M-04 | 예외에 보존 temp 경로 미탑재 / failed record에 code·location 미기록 / surviving 필터 제거 (3종) | 전부 탐지 |
+| M-05 | seed 선행 검증 제거 / seed schema 검사만 제거 / seed artifact 존재·hash·size 확인 제거 (3종) | 전부 탐지 |
+| 기존 §12.7의 34종 | cache key·checkpoint·CAS·path·입력 변경·민감정보·DAG·JSON·순서 | 전부 탐지 유지 |
+
+**중복 방어로 미탐지된 항목은 없다.** 이전 라운드에서 패턴이 낡아 SKIP된 2건
+(`승격된 최종 바이트 재검증 제거`, `surviving 필터 제거`)은 SKIP을 증거로 삼지 않고
+패턴을 실제 코드에 맞춘 뒤 다시 돌려 두 건 모두 탐지되는 것을 확인했다.
+
+§12.7의 주석은 그대로 유효하다 — `DAG cycle 검사 제거`는 assertion 실패가 아니라 무한
+루프로 나타나며, per-run timeout이 "정지하지 않음"을 실패로 센다.

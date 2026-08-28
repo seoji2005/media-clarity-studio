@@ -22,7 +22,9 @@ from media_clarity.artifact_store import (
 )
 from media_clarity.schema_core import JsonInputError, SchemaSet, load_strict, loads_strict
 from media_clarity.job_runtime import (
+    ARTIFACT_REF_POINTER,
     ATTEMPT_RECORD_POINTER,
+    ATTEMPT_STATE_RULES,
     CACHE_KEY_FIELDS,
     EXPECTED_CASE_IDS,
     JOB_SCHEMA_FILE,
@@ -37,6 +39,8 @@ from media_clarity.job_runtime import (
     StageSpec,
     canonical_hash,
     canonical_json_bytes,
+    check_attempt_semantics,
+    check_seed_inputs,
     deterministic_order,
     discover_fixtures,
     evaluate_fixture,
@@ -46,6 +50,7 @@ from media_clarity.job_runtime import (
     preflight,
     stage_cache_key,
     stage_cache_key_document,
+    write_json_atomic,
 )
 
 
@@ -1094,6 +1099,583 @@ class FixtureCoverageTests(unittest.TestCase):
             )
             with self.assertRaises(ContractViolation):
                 load_fixture(target)
+
+# ---------------------------------------------------------------------------
+# REVIEW-018 M-01~M-05 회귀
+# ---------------------------------------------------------------------------
+
+
+def split_record_location(location: str) -> tuple[str, list[str]]:
+    """`jobs/.../a0001.json/outputs/0` → (파일 경로, JSON Pointer token 목록)."""
+
+    parts = location.split("/")
+    for index, token in enumerate(parts):
+        if token.endswith(".json"):
+            return "/".join(parts[: index + 1]), parts[index + 1 :]
+    raise AssertionError(f"record 파일을 가리키지 않는 위치: {location}")
+
+
+class ReviewM01AttemptSemanticsTests(RuntimeCase):
+    """REVIEW-018 M-01 — schema를 통과한 record의 의미 불변식."""
+
+    def completed_record(self, spec: JobSpec) -> tuple[Path, dict[str, Any]]:
+        self.runtime.run_job(spec, {"extract": emit("hello")})
+        path = self.runtime.attempts_dir(spec, "extract") / "a0001.json"
+        return path, json.loads(path.read_text(encoding="utf-8"))
+
+    def test_state_rule_table_covers_every_schema_status(self) -> None:
+        schemas = job_schema_set()
+        statuses = schemas.documents[JOB_SCHEMA_FILE]["$defs"]["attempt_status"]["enum"]
+        self.assertEqual(sorted(ATTEMPT_STATE_RULES), sorted(statuses))
+
+    def test_valid_records_of_every_status_pass(self) -> None:
+        """positive를 먼저 고정한다 — 실제로 runtime이 쓴 record들이다."""
+
+        spec = self.spec()
+        _, completed = self.completed_record(spec)
+        self.assertEqual(check_attempt_semantics(completed, "rec.json"), [])
+
+        crash_spec = self.spec()
+        running = dict(completed)
+        running.update(
+            status="running", outputs=[], verified_artifact_count=0, verified_artifact_bytes=0
+        )
+        running.pop("ended_at", None)
+        running.pop("wall_duration_seconds", None)
+        self.assertEqual(check_attempt_semantics(running, "rec.json"), [])
+        self.assertIsNotNone(crash_spec)
+
+        interrupted = dict(running)
+        interrupted.update(
+            status="interrupted",
+            error_code="E_STATE_TRANSITION",
+            error_location="rec.json",
+            interrupted_at="2026-08-28T00:00:00Z",
+        )
+        self.assertEqual(check_attempt_semantics(interrupted, "rec.json"), [])
+
+        failed = dict(running)
+        failed.update(
+            status="failed",
+            ended_at="2026-08-28T00:00:00Z",
+            wall_duration_seconds=0.5,
+            error_code="E_STAGE_FAILED",
+            error_location="rec.json",
+        )
+        self.assertEqual(check_attempt_semantics(failed, "rec.json"), [])
+
+    def test_empty_completed_record_cannot_become_a_cache_hit(self) -> None:
+        """schema-valid 빈 completed record가 callable을 건너뛰지 못한다."""
+
+        spec = self.spec()
+        path, record = self.completed_record(spec)
+        record["outputs"] = []
+        record["verified_artifact_count"] = 0
+        record["verified_artifact_bytes"] = 0
+        write_json_atomic(path, record)
+
+        # schema만으로는 통과한다 — 그래서 semantic invariant가 필요하다.
+        self.assertEqual(self.runtime.validate_attempt(record, "rec.json"), [])
+
+        calls = [0]
+        error = self.assert_violation(
+            "E_CHECKPOINT_INVALID",
+            self.runtime.run_job,
+            spec,
+            {"extract": emit("hello", calls)},
+        )
+        self.assertEqual(calls[0], 0, "손상된 checkpoint로 callable을 건너뛰었다")
+        file_path, pointer = split_record_location(error.location)
+        self.assertEqual(file_path, self.runtime.relative(path))
+        self.assertEqual(pointer, ["outputs"])
+        self.assertEqual(json.loads(path.read_text(encoding="utf-8")), record, "evidence가 바뀌었다")
+
+    def test_inconsistent_completion_evidence_is_rejected(self) -> None:
+        cases = {
+            "verified_artifact_count": ({"verified_artifact_count": 5}, ["verified_artifact_count"]),
+            "verified_artifact_bytes": ({"verified_artifact_bytes": 999}, ["verified_artifact_bytes"]),
+        }
+        for name, (patch, pointer) in cases.items():
+            with self.subTest(field=name):
+                directory = self.root / name
+                directory.mkdir()
+                runtime = JobRuntime(directory)
+                spec = self.spec()
+                runtime.run_job(spec, {"extract": emit("hello")})
+                path = runtime.attempts_dir(spec, "extract") / "a0001.json"
+                record = json.loads(path.read_text(encoding="utf-8"))
+                record.update(patch)
+                write_json_atomic(path, record)
+                calls = [0]
+                with self.assertRaises(ContractViolation) as caught:
+                    runtime.run_job(spec, {"extract": emit("hello", calls)})
+                self.assertEqual(caught.exception.code, "E_CHECKPOINT_INVALID")
+                self.assertEqual(calls[0], 0)
+                _, actual_pointer = split_record_location(caught.exception.location)
+                self.assertEqual(actual_pointer, pointer)
+
+    def test_missing_and_forbidden_fields_are_rejected_per_status(self) -> None:
+        base = {
+            "status": "completed",
+            "outputs": [{"byte_size": 5}],
+            "verified_artifact_count": 1,
+            "verified_artifact_bytes": 5,
+            "ended_at": "2026-08-28T00:00:00Z",
+            "wall_duration_seconds": 0.5,
+        }
+        cases = {
+            "completed_without_ended_at": ({"ended_at": None}, "ended_at"),
+            "completed_without_duration": ({"wall_duration_seconds": None}, "wall_duration_seconds"),
+            "completed_with_error_code": ({"error_code": "E_STAGE_FAILED"}, "error_code"),
+            "completed_with_interrupted_at": (
+                {"interrupted_at": "2026-08-28T00:00:00Z"},
+                "interrupted_at",
+            ),
+        }
+        for name, (patch, field) in cases.items():
+            with self.subTest(case=name):
+                record = dict(base)
+                for key, value in patch.items():
+                    if value is None:
+                        record.pop(key, None)
+                    else:
+                        record[key] = value
+                findings = check_attempt_semantics(record, "rec.json")
+                self.assertTrue(findings, f"{name}이 통과했다")
+                self.assertTrue(all(f.code == "E_CHECKPOINT_INVALID" for f in findings))
+                self.assertTrue(
+                    any(field in f.message or f.location.endswith(field) for f in findings),
+                    f"{field}를 지적하지 않았다: {findings}",
+                )
+
+    def test_non_completed_states_cannot_carry_completion_evidence(self) -> None:
+        for status in ("running", "interrupted", "failed"):
+            with self.subTest(status=status):
+                record = {
+                    "status": status,
+                    "outputs": [{"byte_size": 5}],
+                    "verified_artifact_count": 1,
+                    "verified_artifact_bytes": 5,
+                    "ended_at": "2026-08-28T00:00:00Z",
+                    "wall_duration_seconds": 0.5,
+                    "error_code": "E_STAGE_FAILED",
+                    "error_location": "rec.json",
+                    "interrupted_at": "2026-08-28T00:00:00Z",
+                }
+                findings = check_attempt_semantics(record, "rec.json")
+                self.assertTrue(findings)
+                self.assertIn(
+                    "rec.json/outputs", [f.location for f in findings], f"{status}: {findings}"
+                )
+
+    def test_findings_are_deterministic(self) -> None:
+        record = {
+            "status": "completed",
+            "outputs": [],
+            "verified_artifact_count": 3,
+            "verified_artifact_bytes": 7,
+        }
+        first = check_attempt_semantics(record, "rec.json")
+        self.assertEqual(first, check_attempt_semantics(dict(record), "rec.json"))
+        self.assertEqual(list(first), sorted(first))
+        self.assertTrue(len(first) >= 4)
+
+
+class ReviewM02StaleRunningTests(RuntimeCase):
+    """REVIEW-018 M-02 — cache hit 경로도 stale running을 보존한다."""
+
+    def build_stale(self, spec: JobSpec) -> tuple[Path, dict[str, Any]]:
+        """completed(old key) 옆에 더 최신 running attempt를 만든다."""
+
+        self.runtime.run_job(spec, {"extract": emit("hello")})
+        completed_path = self.runtime.attempts_dir(spec, "extract") / "a0001.json"
+        completed = json.loads(completed_path.read_text(encoding="utf-8"))
+        stale = dict(completed)
+        stale.update(
+            attempt_id="a0002",
+            attempt_number=2,
+            status="running",
+            outputs=[],
+            verified_artifact_count=0,
+            verified_artifact_bytes=0,
+            cache_status="miss",
+            cache_reason="cache_key_changed",
+            cache_key=canonical_hash({"other": "key"}),
+        )
+        stale.pop("ended_at", None)
+        stale.pop("wall_duration_seconds", None)
+        stale_path = self.runtime.attempts_dir(spec, "extract") / "a0002.json"
+        write_json_atomic(stale_path, stale)
+        return completed_path, stale
+
+    def test_hit_still_preserves_the_newer_running_attempt(self) -> None:
+        spec = self.spec()
+        completed_path, _ = self.build_stale(spec)
+        completed_before = completed_path.read_bytes()
+
+        calls = [0]
+        outcome = self.runtime.run_job(spec, {"extract": emit("hello", calls)}).outcome("extract")
+
+        self.assertEqual(outcome.cache_status, "hit")
+        self.assertEqual(calls[0], 0)
+        states = {record["attempt_id"]: record["status"] for record in self.attempts(spec, "extract")}
+        self.assertEqual(states, {"a0001": "completed", "a0002": "interrupted"})
+        self.assertEqual(completed_path.read_bytes(), completed_before, "완료 record가 바뀌었다")
+
+    def test_preserved_record_carries_stable_code_location_and_observation(self) -> None:
+        spec = self.spec()
+        self.build_stale(spec)
+        self.runtime.run_job(spec, {"extract": emit("hello")})
+
+        record = next(r for r in self.attempts(spec, "extract") if r["attempt_id"] == "a0002")
+        self.assertEqual(record["status"], "interrupted")
+        self.assertEqual(record["error_code"], "E_STATE_TRANSITION")
+        self.assertEqual(
+            record["error_location"],
+            self.runtime.relative(self.runtime.attempts_dir(spec, "extract") / "a0002.json"),
+        )
+        # 죽은 시각은 관측하지 못했으므로 ended_at을 지어내지 않는다.
+        self.assertNotIn("ended_at", record)
+        self.assertNotIn("wall_duration_seconds", record)
+        self.assertIn("interrupted_at", record)
+        self.assertRegex(record["interrupted_at"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+
+    def test_attempt_ids_are_never_reused_after_preservation(self) -> None:
+        spec = self.spec()
+        self.build_stale(spec)
+        self.runtime.run_job(spec, {"extract": emit("hello")})
+
+        changed = JobSpec(
+            job_id=spec.job_id,
+            pipeline_id=spec.pipeline_id,
+            source_identity=spec.source_identity,
+            stages=(
+                StageSpec(
+                    **{**spec.stages[0].__dict__, "config_hash": canonical_hash({"config": "z"})}
+                ),
+            ),
+        )
+        outcome = self.runtime.run_job(changed, {"extract": emit("hello")}).outcome("extract")
+        self.assertEqual(outcome.attempt_id, "a0003")
+        self.assertEqual(
+            sorted(r["attempt_id"] for r in self.attempts(changed, "extract")),
+            ["a0001", "a0002", "a0003"],
+        )
+
+    def test_miss_path_still_preserves_running_attempts(self) -> None:
+        """M-02 수정이 기존 miss 경로 보존을 약화하지 않는다."""
+
+        spec = self.spec()
+
+        def interrupt(uri: str) -> None:
+            raise InjectedInterrupt(uri)
+
+        with self.assertRaises(InjectedInterrupt):
+            self.runtime.run_job(
+                spec,
+                {"extract": emit("hello")},
+                injection=FailureInjection(after_promote=interrupt),
+            )
+        self.runtime.run_job(spec, {"extract": emit("hello")})
+        states = {r["attempt_id"]: r["status"] for r in self.attempts(spec, "extract")}
+        self.assertEqual(states, {"a0001": "interrupted", "a0002": "completed"})
+
+
+class ReviewM03SourceIdentityTests(RuntimeCase):
+    """REVIEW-018 M-03 — source_identity가 외부 경로를 manifest에 복제하지 못한다."""
+
+    def path_like_values(self) -> dict[str, str]:
+        return {
+            "posix_absolute": "/var/media/PRIVATE-INPUT.mkv",
+            "windows_drive": "C:/Users/someone/PRIVATE-INPUT.mkv",
+            "unc": "//fileserver/share/PRIVATE-INPUT.mkv",
+            "traversal": "../../etc/passwd",
+            "backslash": "C:\\Users\\someone\\PRIVATE.mkv",
+            "home": "~/Movies/PRIVATE-INPUT.mkv",
+            "separator": "media/PRIVATE-INPUT.mkv",
+        }
+
+    def test_path_like_source_identity_is_rejected_before_any_write(self) -> None:
+        for name, value in self.path_like_values().items():
+            with self.subTest(case=name):
+                directory = self.root / name
+                directory.mkdir()
+                runtime = JobRuntime(directory)
+                spec = JobSpec(
+                    job_id="job-a",
+                    pipeline_id="pipe-a",
+                    source_identity=value,
+                    stages=(StageSpec(stage_id="extract", implementation_version="e/1.0.0"),),
+                )
+                error = self.assert_violation(
+                    "E_UNSAFE_PATH", runtime.run_job, spec, {"extract": emit("hello")}
+                )
+                self.assertEqual(error.location, "source_identity")
+                self.assertEqual(sorted(p.name for p in directory.iterdir()), [])
+
+    def test_rejection_never_reproduces_the_value(self) -> None:
+        secret = "/var/media/DO-NOT-LOG-THIS-NAME.mkv"
+        spec = JobSpec(
+            job_id="job-a",
+            pipeline_id="pipe-a",
+            source_identity=secret,
+            stages=(StageSpec(stage_id="extract", implementation_version="e/1.0.0"),),
+        )
+        error = self.assert_violation(
+            "E_UNSAFE_PATH", self.runtime.run_job, spec, {"extract": emit("hello")}
+        )
+        self.assertNotIn(secret, str(error))
+        self.assertNotIn("DO-NOT-LOG-THIS-NAME", str(error))
+        self.assertNotIn("/var/media", str(error))
+
+    def test_opaque_identity_is_accepted_and_recorded(self) -> None:
+        spec = self.spec()
+        self.runtime.run_job(spec, {"extract": emit("hello")})
+        manifest = self.manifest(spec)
+        self.assertEqual(manifest["source_identity"], "src-1")
+
+    def test_absent_source_identity_stays_optional(self) -> None:
+        spec = JobSpec(
+            job_id="job-a",
+            pipeline_id="pipe-a",
+            stages=(StageSpec(stage_id="extract", implementation_version="e/1.0.0"),),
+        )
+        self.runtime.run_job(spec, {"extract": emit("hello")})
+        self.assertNotIn("source_identity", self.manifest(spec))
+
+
+class ReviewM04FailureEvidenceTests(RuntimeCase):
+    """REVIEW-018 M-04 — 실패 evidence가 failed attempt와 연결된다."""
+
+    def incoming(self) -> list[str]:
+        directory = self.root / "artifacts" / "incoming"
+        if not directory.is_dir():
+            return []
+        return sorted(f"artifacts/incoming/{p.name}" for p in directory.iterdir() if p.is_file())
+
+    def test_input_change_records_code_location_and_the_real_temp_path(self) -> None:
+        spec = self.spec()
+
+        def big(context: StageContext) -> Sequence[StageOutput]:
+            target = context.workspace / "out.txt"
+            target.write_text("x" * (1 << 20) + "yy", encoding="utf-8")
+            return [StageOutput(name="out.txt", path=target)]
+
+        def mutate(index: int) -> None:
+            if index == 0:
+                for candidate in (self.root / "jobs").rglob("out.txt"):
+                    with open(candidate, "r+b") as handle:
+                        handle.write(b"Z")
+                    os.utime(candidate, (0, 0))
+
+        error = self.assert_violation(
+            "E_INPUT_CHANGED",
+            self.runtime.run_job,
+            spec,
+            {"extract": big},
+            injection=FailureInjection(on_chunk=mutate),
+        )
+
+        record = self.attempts(spec, "extract")[0]
+        self.assertEqual(record["status"], "failed")
+        self.assertEqual(record["error_code"], error.code)
+        self.assertEqual(record["error_location"], error.location)
+        self.assertEqual(record["temp_paths"], self.incoming())
+        self.assertTrue(record["temp_paths"], "보존된 temp가 record에 없다")
+        for relative in record["temp_paths"]:
+            self.assertTrue((self.root / relative).is_file(), f"{relative}가 실제 파일이 아니다")
+
+    def test_promotion_collision_records_code_location_and_temp_path(self) -> None:
+        spec = self.spec()
+        self.runtime.run_job(spec, {"extract": emit("hello")})
+        promoted = next(
+            path for path in (self.root / "artifacts" / "sha256").rglob("*") if path.is_file()
+        )
+        promoted.write_text("corrupted", encoding="utf-8")
+
+        changed = JobSpec(
+            job_id="job-b",
+            pipeline_id=spec.pipeline_id,
+            source_identity=spec.source_identity,
+            stages=spec.stages,
+        )
+        before = self.incoming()
+        error = self.assert_violation(
+            "E_ARTIFACT_COLLISION", self.runtime.run_job, changed, {"extract": emit("hello")}
+        )
+        record = self.attempts(changed, "extract")[0]
+        self.assertEqual(record["status"], "failed")
+        self.assertEqual(record["error_code"], "E_ARTIFACT_COLLISION")
+        self.assertEqual(record["error_location"], error.location)
+        self.assertEqual(sorted(record["temp_paths"]), sorted(set(self.incoming()) - set(before)))
+        self.assertTrue(record["temp_paths"])
+        self.assertEqual(promoted.read_text(encoding="utf-8"), "corrupted", "기존 object가 바뀌었다")
+
+    def test_successful_run_records_no_temp_evidence(self) -> None:
+        """성공 뒤 정리된 temp 경로를 실패 증거로 기록하지 않는다."""
+
+        spec = self.spec()
+        self.runtime.run_job(spec, {"extract": emit("hello")})
+        record = self.attempts(spec, "extract")[0]
+        self.assertEqual(record["status"], "completed")
+        self.assertEqual(record["temp_paths"], [])
+        self.assertEqual(self.incoming(), [])
+
+    def test_callable_failure_records_stable_code_and_location(self) -> None:
+        spec = self.spec()
+
+        def boom(context: StageContext) -> Sequence[StageOutput]:
+            raise RuntimeError("stage 내부 실패")
+
+        self.assert_violation("E_STAGE_FAILED", self.runtime.run_job, spec, {"extract": boom})
+        record = self.attempts(spec, "extract")[0]
+        self.assertEqual(record["error_code"], "E_STAGE_FAILED")
+        self.assertEqual(
+            record["error_location"],
+            self.runtime.relative(self.runtime.attempts_dir(spec, "extract") / "a0001.json"),
+        )
+        self.assertEqual(record["temp_paths"], [])
+
+
+class ReviewM05SeedValidationTests(RuntimeCase):
+    """REVIEW-018 M-05 — 외부 seed ArtifactRef를 mutation 전에 검증한다."""
+
+    def valid_ref(self) -> dict[str, Any]:
+        source = self.root / "seed-input.txt"
+        source.write_text("seed bytes", encoding="utf-8")
+        written = self.runtime.store.add_file(source, job_id="job-a", stage_id="extract")
+        return dict(written.ref)
+
+    def entries(self) -> list[str]:
+        return sorted(path.name for path in self.root.iterdir())
+
+    def test_malformed_seed_is_a_stable_schema_error_without_raw_exceptions(self) -> None:
+        cases = {
+            "empty_object": {},
+            "missing_content_hash": {"schema_version": "1.0.0", "artifact_id": "a1"},
+            "bad_hash": None,
+            "bad_uri": None,
+            "bad_byte_size": None,
+        }
+        good = self.valid_ref()
+        cases["bad_hash"] = {**good, "content_hash": "sha1:" + "a" * 40}
+        cases["bad_uri"] = {**good, "uri": ""}
+        cases["bad_byte_size"] = {**good, "byte_size": -1}
+
+        for name, entry in cases.items():
+            with self.subTest(case=name):
+                before = self.entries()
+                spec = self.spec()
+                with self.assertRaises(ContractViolation) as caught:
+                    self.runtime.run_job(
+                        spec, {"extract": emit("hello")}, seed_inputs={"extract": [entry]}
+                    )
+                self.assertEqual(caught.exception.code, "E_SCHEMA")
+                self.assertTrue(
+                    caught.exception.location.startswith("seed_inputs/extract/0"),
+                    caught.exception.location,
+                )
+                self.assertEqual(self.entries(), before, "거부했는데 filesystem이 바뀌었다")
+
+    def test_error_location_resolves_in_the_actual_seed_input(self) -> None:
+        entry = {**self.valid_ref(), "byte_size": -1}
+        seed_inputs = {"extract": [entry]}
+        error = self.assert_violation(
+            "E_SCHEMA",
+            self.runtime.run_job,
+            self.spec(),
+            {"extract": emit("hello")},
+            seed_inputs=seed_inputs,
+        )
+        node: Any = {"seed_inputs": seed_inputs}
+        for token in error.location.split("/"):
+            node = node[int(token)] if isinstance(node, list) else node[token]
+        self.assertEqual(node, -1)
+
+    def test_bad_containers_and_unknown_stages_are_rejected(self) -> None:
+        cases = {
+            "not_a_mapping": ([], "seed_inputs"),
+            "not_a_list": ({"extract": {}}, "seed_inputs/extract"),
+            "entry_not_object": ({"extract": ["nope"]}, "seed_inputs/extract/0"),
+            "unknown_stage": ({"ghost": []}, "seed_inputs/ghost"),
+        }
+        for name, (seed_inputs, location) in cases.items():
+            with self.subTest(case=name):
+                before = self.entries()
+                error = self.assert_violation(
+                    "E_SCHEMA",
+                    self.runtime.run_job,
+                    self.spec(),
+                    {"extract": emit("hello")},
+                    seed_inputs=seed_inputs,
+                )
+                self.assertEqual(error.location, location)
+                self.assertEqual(self.entries(), before)
+
+    def test_missing_or_corrupt_seed_artifact_is_rejected_before_mutation(self) -> None:
+        good = self.valid_ref()
+        target = self.runtime.store.absolute(good["uri"], "uri")
+
+        before = self.entries()
+        target.unlink()
+        self.assert_violation(
+            "E_ARTIFACT_MISSING",
+            self.runtime.run_job,
+            self.spec(),
+            {"extract": emit("hello")},
+            seed_inputs={"extract": [good]},
+        )
+        self.assertEqual(self.entries(), before)
+
+        target.write_text("tampered", encoding="utf-8")
+        self.assert_violation(
+            "E_ARTIFACT_CORRUPT",
+            self.runtime.run_job,
+            self.spec(),
+            {"extract": emit("hello")},
+            seed_inputs={"extract": [good]},
+        )
+        self.assertEqual(self.entries(), before)
+
+    def test_valid_seed_reaches_the_stage(self) -> None:
+        """positive — 정상 seed는 그대로 stage 입력이 된다."""
+
+        good = self.valid_ref()
+        seen: list[str] = []
+
+        def stage(context: StageContext) -> Sequence[StageOutput]:
+            seen.extend(path.read_text(encoding="utf-8") for path in context.input_paths)
+            target = context.workspace / "out.txt"
+            target.write_text("done", encoding="utf-8")
+            return [StageOutput(name="out.txt", path=target)]
+
+        result = self.runtime.run_job(
+            self.spec(), {"extract": stage}, seed_inputs={"extract": [good]}
+        )
+        self.assertEqual(seen, ["seed bytes"])
+        self.assertEqual(result.status, "completed")
+        record = self.attempts(self.spec(), "extract")[0]
+        self.assertEqual(record["inputs"][0]["content_hash"], good["content_hash"])
+
+    def test_seed_hash_participates_in_the_cache_key(self) -> None:
+        good = self.valid_ref()
+        first = self.runtime.run_job(
+            self.spec(), {"extract": emit("hello")}, seed_inputs={"extract": [good]}
+        )
+        without = self.runtime.run_job(self.spec(), {"extract": emit("hello")})
+        self.assertNotEqual(
+            first.outcome("extract").cache_key, without.outcome("extract").cache_key
+        )
+
+    def test_check_seed_inputs_accepts_none(self) -> None:
+        check_seed_inputs(None, ("extract",), self.runtime.validator, self.runtime.store)
+
+    def test_artifact_ref_pointer_resolves(self) -> None:
+        node, document = job_schema_set().resolve(
+            f"common-v1.schema.json#{ARTIFACT_REF_POINTER}", JOB_SCHEMA_FILE
+        )
+        self.assertEqual(document, "common-v1.schema.json")
+        self.assertIs(node["additionalProperties"], False)
 
 
 if __name__ == "__main__":

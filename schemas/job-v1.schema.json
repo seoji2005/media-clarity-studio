@@ -178,7 +178,14 @@
           "type": "boolean"
         },
         "started_at": { "$ref": "common-v1.schema.json#/$defs/timestamp" },
-        "ended_at": { "$ref": "common-v1.schema.json#/$defs/timestamp" },
+        "ended_at": {
+          "description": "attempt가 실제로 끝난 시각. completed·failed에만 있다. interrupted는 언제 죽었는지 관측하지 못했으므로 이 필드를 만들어 내지 않고 interrupted_at을 쓴다 (REVIEW-018 M-02).",
+          "$ref": "common-v1.schema.json#/$defs/timestamp"
+        },
+        "interrupted_at": {
+          "description": "재시작이 남아 있는 running attempt를 interrupted로 전이한 것을 **관측한** 시각. 죽은 시각이 아니다.",
+          "$ref": "common-v1.schema.json#/$defs/timestamp"
+        },
         "wall_duration_seconds": { "$ref": "common-v1.schema.json#/$defs/seconds" },
         "fingerprints": { "$ref": "#/$defs/Fingerprints" },
         "reproducibility_tier": { "$ref": "#/$defs/reproducibility_tier" },

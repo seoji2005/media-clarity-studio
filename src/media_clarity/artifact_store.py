@@ -91,13 +91,24 @@ class ContractViolation(RuntimeError):
     담지 않는다 (TASK-028 §3.7).
     """
 
-    def __init__(self, code: str, location: str, message: str):
+    def __init__(
+        self,
+        code: str,
+        location: str,
+        message: str,
+        temp_paths: Sequence[str] = (),
+    ):
         if code not in ERROR_CODES:
             raise AssertionError(f"선언되지 않은 오류 코드: {code}")
         super().__init__(f"{code} {location} {message}")
         self.code = code
         self.location = location
         self.detail = message
+        #: 이 실패로 **실제로 보존된** 임시 파일의 project root 기준 relative path.
+        #: 파일만 orphan으로 남기면 복구·QC 증거가 되지 않으므로 호출자가 attempt record에
+        #: 연결할 수 있게 예외에 실어 보낸다 (REVIEW-018 M-04). 성공 뒤 삭제된 경로는
+        #: 여기에 담지 않는다.
+        self.temp_paths: tuple[str, ...] = tuple(temp_paths)
 
 
 # ---------------------------------------------------------------------------
@@ -158,6 +169,42 @@ def relative_path_error(value: Any) -> str | None:
         reason = path_segment_error(segment)
         if reason is not None:
             return f"경로 구간 {reason}"
+    return None
+
+
+def opaque_identity_error(value: Any) -> str | None:
+    """외부 경로처럼 보이는 비민감 식별자의 위반 사유. 문제가 없으면 None.
+
+    `source_identity`는 호출자가 주는 **불투명** 식별자다. 주석만으로는 production API의
+    안전 경계가 되지 않으므로, 명백히 경로처럼 보이는 값을 filesystem을 바꾸기 전에
+    거부한다 (REVIEW-018 M-03).
+
+    **사유 문자열에 값 자체를 담지 않는다.** 담으면 거부하려던 경로가 예외 메시지와
+    로그로 그대로 새어 나간다.
+    """
+
+    if not isinstance(value, str) or value == "":
+        return "빈 식별자"
+    if len(value) > 256:
+        return "256자 초과"
+    if value != value.strip():
+        return "앞뒤 공백"
+    if "\x00" in value:
+        return "NUL 문자"
+    if "\\" in value:
+        return "역슬래시 (Windows 경로 구분자)"
+    if value.startswith("//"):
+        return "UNC 경로처럼 보인다"
+    if value.startswith("/"):
+        return "POSIX 절대 경로처럼 보인다"
+    if _WINDOWS_DRIVE_RE.match(value):
+        return "Windows drive 경로처럼 보인다"
+    if value.startswith("~"):
+        return "home 확장 경로처럼 보인다"
+    if "/" in value:
+        return "경로 구분자를 포함한다 (불투명 식별자여야 한다)"
+    if value in {".", ".."} or ".." in value:
+        return "traversal 구간을 포함한다"
     return None
 
 
@@ -362,30 +409,38 @@ class ArtifactStore:
         temp_relative = f"{INCOMING_ROOT}/{temp_name}"
         temp_path = self.absolute(temp_relative, "temp_path")
 
-        digest, size = self._stream_to_temp(source, temp_path, injection)
+        try:
+            digest, size = self._stream_to_temp(source, temp_path, injection)
 
-        # 3. 임시 파일을 다시 열어 확인한다. 여기서 어긋나면 승격하지 않는다.
-        written_digest, written_size = hash_file(temp_path)
-        if written_digest != digest or written_size != size:
-            raise ContractViolation(
-                "E_ARTIFACT_CORRUPT", temp_relative, "임시 파일의 hash·size가 계산값과 다르다"
+            # 3. 임시 파일을 다시 열어 확인한다. 여기서 어긋나면 승격하지 않는다.
+            written_digest, written_size = hash_file(temp_path)
+            if written_digest != digest or written_size != size:
+                raise ContractViolation(
+                    "E_ARTIFACT_CORRUPT", temp_relative, "임시 파일의 hash·size가 계산값과 다르다"
+                )
+
+            final_relative = cas_relative_uri(digest)
+            final_path = self.absolute(final_relative, "artifact_uri")
+            final_path.parent.mkdir(parents=True, exist_ok=True)
+
+            deduped = self._promote(
+                temp_path, final_path, temp_relative, final_relative, digest, size
             )
 
-        final_relative = cas_relative_uri(digest)
-        final_path = self.absolute(final_relative, "artifact_uri")
-        final_path.parent.mkdir(parents=True, exist_ok=True)
+            if injection is not None and injection.after_promote is not None:
+                injection.after_promote(final_relative)
 
-        deduped = self._promote(temp_path, final_path, temp_relative, final_relative, digest, size)
-
-        if injection is not None and injection.after_promote is not None:
-            injection.after_promote(final_relative)
-
-        # 6. 승격된 최종 바이트를 다시 확인한다.
-        final_digest, final_size = hash_file(final_path)
-        if final_digest != digest or final_size != size:
-            raise ContractViolation(
-                "E_ARTIFACT_CORRUPT", final_relative, "승격된 artifact의 hash·size가 다르다"
-            )
+            # 6. 승격된 최종 바이트를 다시 확인한다.
+            final_digest, final_size = hash_file(final_path)
+            if final_digest != digest or final_size != size:
+                raise ContractViolation(
+                    "E_ARTIFACT_CORRUPT", final_relative, "승격된 artifact의 hash·size가 다르다"
+                )
+        except ContractViolation as error:
+            # 실패로 **실제로 남은** 임시 파일만 증거로 싣는다. 아무것도 지우지 않는다
+            # (REVIEW-018 M-04).
+            error.temp_paths = self.surviving_temp_paths((temp_relative,))
+            raise
 
         ref = {
             "schema_version": SCHEMA_VERSION,
@@ -493,6 +548,20 @@ class ArtifactStore:
         except OSError:
             pass
         return False
+
+    def surviving_temp_paths(self, candidates: Sequence[str]) -> tuple[str, ...]:
+        """후보 중 **지금도 디스크에 있는** 임시 경로만 돌려준다.
+
+        성공 승격 뒤 정리된 이름을 실패 증거로 기록하지 않기 위한 확인이다.
+        """
+
+        alive: list[str] = []
+        for relative in candidates:
+            if relative_path_error(relative) is not None:  # pragma: no cover - 내부 생성 경로
+                continue
+            if (self.project_root / relative).is_file():
+                alive.append(relative)
+        return tuple(alive)
 
 
 def _counter() -> Iterator[int]:

@@ -26,6 +26,7 @@ from media_clarity.artifact_store import (
     digest_of,
     existing_temp_paths,
     hash_file,
+    opaque_identity_error,
     path_segment_error,
     relative_path_error,
     resolve_inside_root,
@@ -328,6 +329,90 @@ class PathSafetyTests(StoreCase):
 
     def test_missing_project_root_is_rejected(self) -> None:
         self.assert_violation("E_UNSAFE_PATH", ArtifactStore, self.root / "nope")
+
+
+class ReviewM03OpaqueIdentityTests(unittest.TestCase):
+    """REVIEW-018 M-03 — 불투명 식별자와 경로처럼 보이는 값의 경계."""
+
+    def test_path_like_values_are_rejected(self) -> None:
+        cases = {
+            "/var/media/a.mkv": "POSIX 절대 경로처럼 보인다",
+            "C:/Users/a.mkv": "Windows drive 경로처럼 보인다",
+            "//server/share/a.mkv": "UNC 경로처럼 보인다",
+            "~/Movies/a.mkv": "home 확장 경로처럼 보인다",
+            "media/a.mkv": "경로 구분자를 포함한다 (불투명 식별자여야 한다)",
+            "C:\\Users\\a.mkv": "역슬래시 (Windows 경로 구분자)",
+            "..": "traversal 구간을 포함한다",
+            "a..b": "traversal 구간을 포함한다",
+            "": "빈 식별자",
+            " src": "앞뒤 공백",
+            "a\x00b": "NUL 문자",
+            "s" * 257: "256자 초과",
+        }
+        for value, expected in cases.items():
+            with self.subTest(value=value[:24]):
+                self.assertEqual(opaque_identity_error(value), expected)
+
+    def test_opaque_identifiers_are_accepted(self) -> None:
+        for value in ("src-1", "sha256-abcdef", "corpus.sample.001", "SOURCE_42"):
+            with self.subTest(value=value):
+                self.assertIsNone(opaque_identity_error(value))
+
+    def test_reason_never_contains_the_value(self) -> None:
+        secret = "/var/media/DO-NOT-LEAK.mkv"
+        reason = opaque_identity_error(secret)
+        self.assertIsNotNone(reason)
+        self.assertNotIn(secret, reason)
+        self.assertNotIn("DO-NOT-LEAK", reason)
+
+
+class ReviewM04TempEvidenceTests(StoreCase):
+    """REVIEW-018 M-04 — 실패 예외가 실제 보존 temp 경로를 싣는다."""
+
+    def test_failure_carries_the_surviving_temp_path(self) -> None:
+        source = self.write_source("a.txt", "x" * (CHUNK_BYTES + 4))
+
+        def mutate(index: int) -> None:
+            if index == 0:
+                os.utime(source, (0, 0))
+
+        error = self.assert_violation(
+            "E_INPUT_CHANGED", self.add, source, injection=FailureInjection(on_chunk=mutate)
+        )
+        self.assertEqual(list(error.temp_paths), existing_temp_paths(self.root))
+        self.assertTrue(error.temp_paths)
+        for relative in error.temp_paths:
+            self.assertTrue((self.root / relative).is_file())
+
+    def test_collision_failure_carries_the_surviving_temp_path(self) -> None:
+        written = self.add(self.write_source("a.txt", "original"))
+        self.store.absolute(written.ref["uri"], "uri").write_text("corrupted", encoding="utf-8")
+        before = set(existing_temp_paths(self.root))
+
+        error = self.assert_violation(
+            "E_ARTIFACT_COLLISION", self.add, self.write_source("again.txt", "original")
+        )
+        self.assertEqual(
+            set(error.temp_paths), set(existing_temp_paths(self.root)) - before
+        )
+        self.assertTrue(error.temp_paths)
+
+    def test_success_leaves_no_temp_evidence(self) -> None:
+        self.add(self.write_source("a.txt", "hello"))
+        self.assertEqual(self.store.surviving_temp_paths(existing_temp_paths(self.root)), ())
+
+    def test_surviving_temp_paths_filters_deleted_names(self) -> None:
+        """성공 뒤 정리된 이름은 증거가 아니다."""
+
+        written = self.add(self.write_source("a.txt", "hello"))
+        self.assertEqual(
+            self.store.surviving_temp_paths((written.temp_relative_path,)),
+            (),
+            "이미 지워진 temp 경로가 증거로 남았다",
+        )
+
+    def test_default_violation_has_no_temp_paths(self) -> None:
+        self.assertEqual(ContractViolation("E_SCHEMA", "x", "y").temp_paths, ())
 
 
 if __name__ == "__main__":

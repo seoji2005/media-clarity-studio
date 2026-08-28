@@ -44,10 +44,12 @@ from tempfile import TemporaryDirectory
 from typing import Any, Callable, Mapping, Sequence
 
 from media_clarity.artifact_store import (
+    ERROR_CODES,
     ArtifactStore,
     ContractViolation,
     FailureInjection,
     content_hash_of,
+    opaque_identity_error,
     path_segment_error,
     relative_path_error,
     resolve_inside_root,
@@ -73,6 +75,7 @@ JOB_SCHEMA_FILE = "job-v1.schema.json"
 JOB_SCHEMA_FILES = (COMMON_SCHEMA_FILE, JOB_SCHEMA_FILE)
 
 ATTEMPT_RECORD_POINTER = "/$defs/AttemptRecord"
+ARTIFACT_REF_POINTER = "/$defs/ArtifactRef"
 
 JOBS_ROOT = "jobs"
 
@@ -216,6 +219,104 @@ class JobResult:
 # ---------------------------------------------------------------------------
 
 
+#: attempt 상태별 필수·금지 필드 (TASK-028 §3.4, REVIEW-018 M-01).
+#: schema는 "있어도 된다"만 말하므로, 상태가 실제로 뜻하는 바는 이 표가 고정한다.
+ATTEMPT_STATE_RULES: dict[str, dict[str, tuple[str, ...]]] = {
+    "running": {
+        "required": (),
+        "forbidden": ("ended_at", "wall_duration_seconds", "interrupted_at", "error_code"),
+    },
+    "interrupted": {
+        # 언제 죽었는지는 관측하지 못했다. ended_at을 지어내지 않고, 전이를 **관측한**
+        # 시각과 안정 code/location만 남긴다 (REVIEW-018 M-02).
+        "required": ("interrupted_at", "error_code", "error_location"),
+        "forbidden": ("ended_at", "wall_duration_seconds"),
+    },
+    "failed": {
+        "required": ("ended_at", "wall_duration_seconds"),
+        "forbidden": ("interrupted_at",),
+    },
+    "completed": {
+        "required": ("ended_at", "wall_duration_seconds"),
+        "forbidden": ("interrupted_at", "error_code", "error_location"),
+    },
+}
+
+#: 완료가 아닌 attempt는 출력을 가질 수 없다. 출력이 있다는 것은 완료했다는 뜻이다.
+_TERMINAL_WITHOUT_OUTPUTS = ("running", "interrupted", "failed")
+
+
+def check_attempt_semantics(record: Mapping[str, Any], location: str) -> list[Finding]:
+    """schema를 통과한 attempt record가 **의미상으로도** 성립하는지 검사한다.
+
+    schema만으로는 `outputs=[]`·종료 시각 없음·검증 수 0인 `completed` record가 통과한다.
+    그런 record를 cache hit로 쓰면 callable을 건너뛴 거짓 완료가 된다 (REVIEW-018 M-01).
+
+    반환하는 finding의 코드는 `E_CHECKPOINT_INVALID`이고, 위치는 실제 record 파일과
+    그 안의 JSON Pointer다.
+    """
+
+    findings: list[Finding] = []
+
+    def fail(where: str, message: str) -> None:
+        findings.append(Finding(where, "E_CHECKPOINT_INVALID", message))
+
+    status = record.get("status")
+    rules = ATTEMPT_STATE_RULES.get(status)
+    if rules is None:  # pragma: no cover - schema enum이 이미 거른다
+        fail(f"{location}/status", f"알 수 없는 attempt 상태: {status!r}")
+        return findings
+
+    for name in rules["required"]:
+        if name not in record:
+            fail(location, f"{status} attempt에 필수 필드가 없다: {name}")
+    for name in rules["forbidden"]:
+        if name in record:
+            fail(f"{location}/{name}", f"{status} attempt에 있을 수 없는 필드다: {name}")
+
+    outputs = record.get("outputs")
+    if not isinstance(outputs, list):  # pragma: no cover - schema가 이미 거른다
+        fail(f"{location}/outputs", "outputs가 배열이 아니다")
+        return findings
+
+    count = record.get("verified_artifact_count")
+    total = record.get("verified_artifact_bytes")
+
+    if status == "completed":
+        if not outputs:
+            # 이번 TASK의 stage 계약에는 zero-output stage가 없다. 빈 완료 record는
+            # 완료 증거가 아니라 손상이다.
+            fail(f"{location}/outputs", "completed attempt에 출력이 하나도 없다")
+        if count != len(outputs):
+            fail(
+                f"{location}/verified_artifact_count",
+                f"검증한 artifact 수({count})가 outputs 수({len(outputs)})와 다르다",
+            )
+        expected_bytes = sum(
+            entry.get("byte_size", 0) for entry in outputs if isinstance(entry, dict)
+        )
+        if total != expected_bytes:
+            fail(
+                f"{location}/verified_artifact_bytes",
+                f"검증한 byte 합({total})이 outputs의 byte_size 합({expected_bytes})과 다르다",
+            )
+    else:
+        if outputs:
+            fail(
+                f"{location}/outputs",
+                f"{status} attempt는 출력을 가질 수 없다 (완료하지 않았다)",
+            )
+        if count != 0:
+            fail(f"{location}/verified_artifact_count", f"{status} attempt의 검증 수는 0이어야 한다")
+        if total != 0:
+            fail(f"{location}/verified_artifact_bytes", f"{status} attempt의 검증 byte는 0이어야 한다")
+
+    if status in _TERMINAL_WITHOUT_OUTPUTS and record.get("cache_status") == "hit":
+        fail(f"{location}/cache_status", f"{status} attempt가 hit로 기록됐다")
+
+    return sort_findings(findings)
+
+
 def _check_identifier(value: str, location: str) -> None:
     reason = path_segment_error(value)
     if reason is not None:
@@ -251,14 +352,76 @@ def deterministic_order(spec: JobSpec) -> tuple[str, ...]:
     return tuple(resolved)
 
 
-def preflight(spec: JobSpec, project_root: Path) -> tuple[str, ...]:
-    """DAG·식별자·경로를 검사하고 결정적 실행 순서를 돌려준다.
+def check_seed_inputs(
+    seed_inputs: Mapping[str, Sequence[Mapping[str, Any]]] | None,
+    known_stages: Sequence[str],
+    validator: SchemaValidator,
+    store: ArtifactStore | None = None,
+) -> None:
+    """외부에서 들어온 seed `ArtifactRef`를 **filesystem을 바꾸기 전에** 검사한다.
+
+    `seed_inputs`는 public API의 외부 입력 통로다. 검사 없이 `content_hash`를 바로
+    indexing하면 raw `KeyError`가 밖으로 새고, 그 전에 job 디렉터리까지 만들어진다
+    (REVIEW-018 M-05).
+
+    위치는 `seed_inputs/<stage>/<index>` 이하로, 실제 입력에서 해석된다.
+    """
+
+    if seed_inputs is None:
+        return
+    if not isinstance(seed_inputs, Mapping):
+        raise ContractViolation("E_SCHEMA", "seed_inputs", "seed_inputs는 매핑이어야 한다")
+
+    for stage_id in sorted(seed_inputs):
+        location = f"seed_inputs/{stage_id}"
+        if stage_id not in known_stages:
+            raise ContractViolation("E_SCHEMA", location, "DAG에 없는 stage의 seed 입력이다")
+        entries = seed_inputs[stage_id]
+        if not isinstance(entries, (list, tuple)):
+            raise ContractViolation("E_SCHEMA", location, "seed 입력은 배열이어야 한다")
+        for index, entry in enumerate(entries):
+            where = f"{location}/{index}"
+            if not isinstance(entry, Mapping):
+                raise ContractViolation("E_SCHEMA", where, "seed 입력 항목은 객체여야 한다")
+            findings = sort_findings(
+                validator.validate(dict(entry), COMMON_SCHEMA_FILE, where, ARTIFACT_REF_POINTER)
+            )
+            if findings:
+                first = findings[0]
+                raise ContractViolation(
+                    "E_SCHEMA", first.location, f"seed ArtifactRef schema 위반: {first.message}"
+                )
+            if store is not None:
+                # runtime은 seed artifact를 실제로 읽어 stage에 넘긴다. 존재·hash·size도
+                # mutation 전에 확인한다.
+                store.verify_ref(entry, where)
+
+
+def preflight(
+    spec: JobSpec,
+    project_root: Path,
+    seed_inputs: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
+    validator: SchemaValidator | None = None,
+    store: ArtifactStore | None = None,
+) -> tuple[str, ...]:
+    """DAG·식별자·경로·seed 입력을 검사하고 결정적 실행 순서를 돌려준다.
 
     이 함수는 **어떤 파일도 만들지 않는다.** 실패하면 filesystem은 그대로다.
     """
 
     _check_identifier(spec.job_id, "job_id")
     _check_identifier(spec.pipeline_id, "pipeline_id")
+
+    # source_identity는 호출자가 주는 불투명 식별자다. 외부 절대 경로가 manifest에
+    # 복제되지 않도록 mutation 전에 거부한다 (REVIEW-018 M-03).
+    if spec.source_identity is not None:
+        reason = opaque_identity_error(spec.source_identity)
+        if reason is not None:
+            raise ContractViolation(
+                "E_UNSAFE_PATH",
+                "source_identity",
+                f"비민감 불투명 식별자가 아니다: {reason}",
+            )
 
     reason = relative_path_error(spec.jobs_root)
     if reason is not None:
@@ -296,6 +459,9 @@ def preflight(spec: JobSpec, project_root: Path) -> tuple[str, ...]:
                 raise ContractViolation(
                     "E_DAG_CYCLE", f"dag/{index}/depends_on/{position}", "자기 자신에 의존한다"
                 )
+
+    if validator is not None:
+        check_seed_inputs(seed_inputs, tuple(seen), validator, store)
 
     return deterministic_order(spec)
 
@@ -492,9 +658,8 @@ class JobRuntime:
     def _require_valid(self, findings: Sequence[Finding], what: str) -> None:
         if findings:
             first = findings[0]
-            raise ContractViolation(
-                "E_SCHEMA", first.location, f"{what} schema 위반: {first.message}"
-            )
+            code = first.code if first.code in ERROR_CODES else "E_SCHEMA"
+            raise ContractViolation(code, first.location, f"{what}: {first.message}")
 
     # -- attempt record ---------------------------------------------------
 
@@ -510,9 +675,16 @@ class JobRuntime:
                 raise ContractViolation(
                     "E_CHECKPOINT_INVALID", self.relative(path), f"attempt record JSON 오류: {exc}"
                 ) from exc
-            self._require_valid(
-                self.validate_attempt(record, self.relative(path)), "attempt record"
-            )
+            location = self.relative(path)
+            self._require_valid(self.validate_attempt(record, location), "attempt record")
+            # schema를 통과해도 의미상 완료되지 않은 record가 있다. cache lookup **전에**
+            # 걸러야 거짓 hit가 생기지 않는다 (REVIEW-018 M-01).
+            semantic = check_attempt_semantics(record, location)
+            if semantic:
+                first = semantic[0]
+                raise ContractViolation(
+                    "E_CHECKPOINT_INVALID", first.location, first.message
+                )
             records.append((path, record))
         return records
 
@@ -532,11 +704,17 @@ class JobRuntime:
         for path, record in records:
             if record["status"] != "running":
                 continue
+            location = self.relative(path)
             transitioned = dict(record)
             transitioned["status"] = "interrupted"
             transitioned["error_code"] = "E_STATE_TRANSITION"
+            transitioned["error_location"] = location
+            # 언제 죽었는지는 관측하지 못했다. 전이를 **관측한** 시각만 남기고
+            # ended_at·duration을 지어내지 않는다 (REVIEW-018 M-02).
+            transitioned["interrupted_at"] = utc_now()
+            self._require_valid(self.validate_attempt(transitioned, location), "attempt record")
             self._require_valid(
-                self.validate_attempt(transitioned, self.relative(path)), "attempt record"
+                check_attempt_semantics(transitioned, location), "interrupted attempt record"
             )
             write_json_atomic(path, transitioned)
             preserved.append(record["attempt_id"])
@@ -601,7 +779,7 @@ class JobRuntime:
         `callables`는 stage ID → callable. cache hit인 stage의 callable은 호출되지 않는다.
         """
 
-        order = preflight(spec, self.project_root)
+        order = preflight(spec, self.project_root, seed_inputs, self.validator, self.store)
         stages = {stage.stage_id: stage for stage in spec.stages}
         fingerprint = job_fingerprint(spec)
 
@@ -675,6 +853,11 @@ class JobRuntime:
         injection: FailureInjection | None,
     ) -> StageOutcome:
         records = self._read_attempts(spec, stage.stage_id)
+        # cache hit 여부와 **무관하게** 남아 있는 running attempt를 먼저 interrupted로
+        # 보존한다. hit를 먼저 돌려주면 running record가 영원히 running으로 남는다
+        # (REVIEW-018 M-02).
+        if self._preserve_running_attempts(spec, stage.stage_id, records):
+            records = self._read_attempts(spec, stage.stage_id)
         cache_status, cache_reason, hit_record = self._lookup_cache(
             spec, stage, cache_key, records
         )
@@ -697,8 +880,6 @@ class JobRuntime:
                 verified_artifact_bytes=total,
             )
 
-        self._preserve_running_attempts(spec, stage.stage_id, records)
-        records = self._read_attempts(spec, stage.stage_id)
         attempt_id, attempt_number = self._next_attempt_id(records)
         attempt_path = self.attempts_dir(spec, stage.stage_id) / f"{attempt_id}.json"
 
@@ -748,11 +929,13 @@ class JobRuntime:
 
         callable_ = callables.get(stage.stage_id)
         if callable_ is None:
-            record["status"] = "failed"
-            record["error_code"] = "E_STAGE_FAILED"
-            record["ended_at"] = utc_now()
-            record["wall_duration_seconds"] = round(time.monotonic() - started_monotonic, 6)
-            write_json_atomic(attempt_path, record)
+            self._fail_attempt(
+                attempt_path,
+                record,
+                started_monotonic,
+                "E_STAGE_FAILED",
+                self.relative(attempt_path),
+            )
             raise ContractViolation(
                 "E_STAGE_FAILED", self.relative(attempt_path), "stage callable이 등록되지 않았다"
             )
@@ -763,11 +946,24 @@ class JobRuntime:
         except InjectedInterrupt:
             # 프로세스가 죽은 것을 흉내 낸다 — record는 running 그대로 남는다.
             raise
-        except ContractViolation:
-            self._fail_attempt(attempt_path, record, started_monotonic, "E_STAGE_FAILED")
+        except ContractViolation as error:
+            self._fail_attempt(
+                attempt_path,
+                record,
+                started_monotonic,
+                error.code,
+                error.location,
+                self.store.surviving_temp_paths(error.temp_paths),
+            )
             raise
         except Exception as exc:
-            self._fail_attempt(attempt_path, record, started_monotonic, "E_STAGE_FAILED")
+            self._fail_attempt(
+                attempt_path,
+                record,
+                started_monotonic,
+                "E_STAGE_FAILED",
+                self.relative(attempt_path),
+            )
             raise ContractViolation(
                 "E_STAGE_FAILED",
                 self.relative(attempt_path),
@@ -790,9 +986,16 @@ class JobRuntime:
                 refs.append(written.ref)
         except InjectedInterrupt:
             raise
-        except ContractViolation:
-            record["temp_paths"] = temp_paths
-            self._fail_attempt(attempt_path, record, started_monotonic, None)
+        except ContractViolation as error:
+            # 실패로 **실제 남은** temp만 기록한다. 성공 뒤 정리된 이름은 증거가 아니다.
+            self._fail_attempt(
+                attempt_path,
+                record,
+                started_monotonic,
+                error.code,
+                error.location,
+                self.store.surviving_temp_paths(tuple(temp_paths) + error.temp_paths),
+            )
             raise
 
         if injection is not None and injection.after_stage_outputs is not None:
@@ -805,9 +1008,16 @@ class JobRuntime:
             for index, ref in enumerate(refs):
                 verified_bytes += self.store.verify_ref(ref, f"outputs/{index}")
                 verified_count += 1
-        except ContractViolation:
-            record["temp_paths"] = temp_paths
-            self._fail_attempt(attempt_path, record, started_monotonic, None)
+        except ContractViolation as error:
+            # 실패로 **실제 남은** temp만 기록한다. 성공 뒤 정리된 이름은 증거가 아니다.
+            self._fail_attempt(
+                attempt_path,
+                record,
+                started_monotonic,
+                error.code,
+                error.location,
+                self.store.surviving_temp_paths(tuple(temp_paths) + error.temp_paths),
+            )
             raise
 
         if injection is not None and injection.before_completed_write is not None:
@@ -840,15 +1050,25 @@ class JobRuntime:
         attempt_path: Path,
         record: dict[str, Any],
         started_monotonic: float,
-        error_code: str | None,
+        error_code: str,
+        error_location: str,
+        temp_paths: Sequence[str] = (),
     ) -> None:
-        """실패 evidence를 남긴다. completed checkpoint는 만들지 않는다."""
+        """실패 evidence를 남긴다. completed checkpoint는 만들지 않는다.
+
+        안정 code·location과 **실제로 보존된** temp 경로를 함께 남겨야 복구·QC 증거가
+        된다. 파일만 orphan으로 남기는 것은 증거가 아니다 (REVIEW-018 M-04).
+        """
 
         record["status"] = "failed"
-        if error_code is not None:
-            record["error_code"] = error_code
+        record["error_code"] = error_code
+        record["error_location"] = error_location
+        record["temp_paths"] = list(temp_paths)
         record["ended_at"] = utc_now()
         record["wall_duration_seconds"] = round(time.monotonic() - started_monotonic, 6)
+        location = self.relative(attempt_path)
+        self._require_valid(self.validate_attempt(record, location), "failed attempt record")
+        self._require_valid(check_attempt_semantics(record, location), "failed attempt record")
         write_json_atomic(attempt_path, record)
 
     # -- manifest ---------------------------------------------------------
