@@ -3,8 +3,8 @@
 **"지금 무엇이 되어 있고, 누가 무엇을 들고 있는가."**
 새 세션을 시작하는 에이전트는 [`AGENTS.md`](AGENTS.md) 다음으로 이 파일을 봅니다 (`AGENTS.md` §0.2).
 
-마지막 갱신: 2026-08-28 (TASK-006 PR #28 병합 후 상태 정합성)
-현재 단계: **Phase 1a** — TASK-006 평가 계약 병합 완료, 후속 일반 Phase 1 TASK 계약 대기
+마지막 갱신: 2026-08-28 (TASK-028 runtime foundation 계약 제안)
+현재 단계: **Phase 1a** — TASK-028 content-addressed artifact/cache/resume 계약 검토
 
 ---
 
@@ -16,16 +16,16 @@
 | Phase 0 | **완료 — `main`에 병합됨** (PR #1, 병합 SHA `d11b2450d324ac7f509741acc1ac591313876d30`) |
 | 기능 코드 | **있음** — TASK-022 CLI: local input → probe → SRT → soft-sub → verify → local staging export |
 | 런타임 / 의존성 | Python 3.12+ 표준 라이브러리와 FFmpeg/ffprobe. Python package 의존성·모델·CI·비밀정보 없음 |
-| 병합된 PR | **#1·#5·#16·#18·#19·#21·#22·#23·#24·#25·#28** — 각 merge commit은 §3에 기록; 현재 HEAD는 GitHub에서 조회 |
+| 병합된 PR | **#1·#5·#16·#18·#19·#21·#22·#23·#24·#25·#28·#33** — 각 merge commit은 §3에 기록; 현재 HEAD는 GitHub에서 조회 |
 | 열린 PR | **#6~#10·#12·#14·#15·#17·#29~#32** — 과거 작업·리뷰 Draft, 현재 실행 차단 아님 |
 | 미병합 종료 | **#2·#3·#4·#11** — #11은 TASK-024로 대체, branch·원문 보존 |
 | 운영 구조 | **TASK-027 결정** — 코드는 Claude Code, 비코드·검증·리뷰·승인 후 통합은 Lean Root (`AGENTS.md` §3, ADR-0028) |
-| 현재 작업 | **활성 구현 TASK 없음** — TASK-006은 완료됐고, 후속 일반 Phase 1 TASK의 범위·번호·Owner는 아직 정하지 않음 |
+| 현재 작업 | **TASK-028 계약 제안** — content-addressed artifact store와 재개 가능한 synchronous stage runtime. 구현 전 |
 | U-31 | **답변됨 (2026-08-22)** — 번역 대상 언어 **한국어(`ko`)** |
-| 다음 실행 의존성 | **후속 일반 Phase 1 TASK의 범위·계약 확정** — TASK 번호·Owner·구현 범위는 아직 정하지 않음 |
+| 다음 실행 의존성 | **TASK-028 계약 승인·병합** → Claude Code 구현 → Lean Root 고정 HEAD Gate H 검토 |
 | U-08 | **답변됨 (2026-08-09)** — **채점 정답은 번역 자막** |
 | U-11 | **부분 답변됨 (2026-08-09)** — **약 2개월·품질 우선.** 정확한 제출 날짜는 **미확정** |
-| 차단 요인 | **활성 구현 TASK가 아직 지정되지 않음.** U-07·U-18·U-19·U-26·U-27은 미정값으로 유지하며 임의 확정 금지 |
+| 차단 요인 | **TASK-028 계약 착수 차단 없음.** U-16 보관 정책은 미정이므로 자동 삭제·GC를 범위 밖에 두며, 다른 U-XX도 임의 확정하지 않음 |
 
 ---
 
@@ -67,6 +67,7 @@
 | [TASK-003](docs/tasks/TASK-003.md) | seed 코퍼스·라이선스·합성 fixture 조사 및 Gate E 증거 통합 | Claude Code 주 세션 → Lean Root 통합 | Gate S: TASK-021/REVIEW-012 승인; Gate E: PR #21 고정 HEAD 제한 재검토 통과 | Phase 1a seed corpus | **Done** — PR #21 병합 |
 | [TASK-005](docs/tasks/TASK-005.md) | 평가 하네스 설계 명세 | Lean Root Orchestrator | 없음 — Gate M 비코드 설계; 제품 오너가 고정 HEAD 승인 | Phase 1a evaluation foundation | **Done — PR #25 병합** |
 | [TASK-006](docs/tasks/TASK-006.md) | ReferenceBundle/v1 및 평가 실행 계약 구체화 | Claude Code 구현 세션 | Lean Root 고정 HEAD 검토 — `REVIEW-014`·`015`·`016` **변경 요청**, [`REVIEW-017`](docs/reviews/REVIEW-017.md) **승인** | Phase 1a evaluation contracts | **Done — PR #28 병합** (`bd00f604565cac09b91b07286437032486933a08`) |
+| [TASK-028](docs/tasks/TASK-028.md) | Content-addressed artifact store와 재개 가능한 stage runtime | Claude Code 구현 세션 | Lean Root 고정 HEAD Gate H 검토 | Phase 1a shared storage·orchestrator foundation | **Not started** — contract proposed |
 | [TASK-012](docs/tasks/TASK-012.md) | Phase 1 계획 기준선 확립 | Claude Code 주 세션 | TASK-013~017 / REVIEW-005~009 (사람 오너의 예외 승인) | Phase 1 planning / 1a 진입 | **Done** — REVIEW-009 승인 후 PR #5 병합 (`10d34b4a4545f9ae8894c8038e7f1cc9a7706d61`) |
 | [TASK-013](docs/tasks/TASK-013.md) | TASK-012 고정 HEAD 독립 검토 | **이 독립 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 review | **In review** (판정: 변경 요청 — [REVIEW-005](docs/reviews/REVIEW-005.md)) |
 | [TASK-014](docs/tasks/TASK-014.md) | TASK-012 M-01·M-02 제한 재검토 | **REVIEW-005를 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 limited rereview | **In review** (M-01·M-02 부분 해소 · 판정: 변경 요청 — [REVIEW-006](docs/reviews/REVIEW-006.md)) |
@@ -260,7 +261,7 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 
 | TASK | 내용 | Owner |
 |---|---|---|
-| 후속 일반 Phase 1 TASK — 계약 미정 | TASK-006 이후의 다음 구현 범위·번호·수용 기준을 별도 TASK로 확정한다. 현재 저장소에는 승인된 후속 구현 TASK가 없다 | 사람 제품 오너 범위 결정 → 운영 계약에 따른 Owner/Reviewer 배정 |
+| [TASK-028](docs/tasks/TASK-028.md) — 계약 검토 | content-addressed artifact store, stage fingerprint/cache, crash-safe checkpoint와 resume 기반 | Claude Code 구현 → Lean Root 검증 (Gate H) |
 
 > **판정과 반영 상태는 서로 다른 사실입니다. 섞지 마십시오.**
 >
@@ -297,13 +298,16 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 | **TASK-005** | 평가 하네스 설계 명세 (Phase 1a) | TASK-003 · U-06 선택 | **Done — PR #25** |
 | **TASK-006** | `ReferenceBundle/v1` 및 평가 실행 계약 구체화 | **TASK-005** | **Done — PR #28** |
 | TASK-006 코드 구현 | schema·validator·fixture | TASK-006 계약 승인·병합 | **Done — PR #28** |
-| 후속 일반 Phase 1 구현 | 범위·번호 미정 | 별도 TASK 계약 | **대기** |
+| **TASK-028** | 공용 artifact/cache/resume runtime | TASK-006 완료 | **계약 제안 — 구현 전** |
+| 후속 ASR·평가 구현 | 범위·번호 미정 | TASK-028 완료와 별도 TASK 계약 | **대기** |
 
 > **TASK-005 평가 하네스 설계와 TASK-006 평가 실행 계약은 완료됐습니다.** TASK-006 계약은 PR #27,
 > schema·validator·fixture 구현은 Gate H REVIEW-017 승인 뒤 PR #28로 병합됐습니다.
 > REVIEW-014·015·016의 변경 요청과 REVIEW-017의 승인은 각 고정 HEAD의 역사 기록으로 보존합니다.
 > **TASK-003·005·006은 예약된 번호이며 의미를 바꾸지 않았습니다.**
-> 후속 일반 Phase 1 구현은 별도 TASK 파일에서 범위·수용 기준·Owner/Reviewer를 정한 뒤 시작합니다.
+> TASK-028은 TASK-022의 원본 불변·partial·no-overwrite 경험을 공용 storage/orchestrator 기반으로 일반화하는 제안입니다.
+> 계약 승인·병합 뒤 Claude Code가 구현하고 Lean Root가 고정 HEAD에서 검증합니다.
+> 모델·corpus·ASR·번역·metric·worker supervision은 이 TASK에 포함하지 않습니다.
 > PR #16은 승인된 좁은 합성 예외라는 경계를 유지합니다.
 
 **TASK-003과 U-06 결정은 완료됐습니다.** 실제 외부 코퍼스 다운로드·검증·cache 생성은 별도 작업입니다.

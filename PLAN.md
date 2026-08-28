@@ -2,7 +2,7 @@
 
 `media-clarity-studio`의 로드맵입니다.
 
-마지막 갱신: 2026-08-25 (TASK-005 완료 — PR #25 병합)
+마지막 갱신: 2026-08-28 (TASK-028 shared runtime foundation 계약 제안)
 상태: **제안됨 (Proposed) 유지** — PR #5 병합은 계획 기준선 작업을 완료했지만,
 제안됨 ADR·실행 순서·미해결 U-XX를 자동 승인하거나 해결하지 않습니다
 
@@ -153,6 +153,7 @@ ingest → audio → asr ──▶ 원문 transcript      (채점 대상 아님,
 - 열화 레시피 구현 — **시간 변경 레시피는 `TimeMapping` 필수 반환**
 - 지표 계산기 + 계산 규약(EVALS §4) 구현
 - 통계 처리: 군집 부트스트랩, 신뢰구간, 최소 실질 효과 (EVALS §7)
+- **공용 실행 기반:** content-addressed artifact, stage fingerprint/cache, checkpoint, 중단 후 재개 (TASK-028 제안)
 
 ### 1b. 최소 자막 파이프라인
 
@@ -171,7 +172,7 @@ ingest → audio → asr ──▶ 원문 transcript      (채점 대상 아님,
 > **상태: 제안됨 유지.** TASK-012는 완료되고 PR #5는 병합됐지만,
 > 그 사실만으로 제안됨 ADR과 이 실행 순서를 자동 승인하지 않습니다.
 > 사람 제품 오너의 별도 승인 전에는 아래 그래프를 **승인된 계획으로 인용하지 마십시오.**
-> TASK-003·TASK-005·TASK-006과 U-06 선택은 완료됐고 U-31도 해소됐습니다. 후속 일반 Phase 1 TASK의 범위·번호는 아직 정하지 않았습니다.
+> TASK-003·TASK-005·TASK-006과 U-06 선택은 완료됐고 U-31도 해소됐습니다. 다음 제안 작업은 TASK-028 공용 artifact/cache/resume 기반입니다.
 >
 > **승인된 한정 예외:** 2026-08-22 사람 제품 오너는 Gate S 합성 기술 게이트 승인에 따라
 > 외부 코퍼스·모델·네트워크가 없는 synthetic media plumbing slice를 별도로 허용했습니다.
@@ -196,7 +197,10 @@ TASK-005  평가 하네스 설계 명세 — 완료 (PR #25)
 TASK-006  ReferenceBundle/v1·평가 실행 계약과 schema/validator/fixture — 완료 (PR #28)
    │
    ▼
-후속 일반 Phase 1 TASK 계약 — 범위·번호 미정
+TASK-028  content-addressed artifact/cache/resume runtime — 계약 제안
+   │
+   ▼
+후속 ASR·평가 구현 TASK — 범위·번호 미정
 ```
 
 | 노드 | 성격 | **선행 (이 표가 정답)** | 현재 상태 |
@@ -206,7 +210,8 @@ TASK-006  ReferenceBundle/v1·평가 실행 계약과 schema/validator/fixture �
 | **(사람) U-06 선택** | 제품 오너 결정 | TASK-003 결과 | **완료 — TASK-026 / PR #23** |
 | **TASK-005** | 평가 하네스 설계 명세 (기존 의미 유지) | TASK-003 · U-06 선택 | **Done — PR #25** |
 | **TASK-006** | `ReferenceBundle/v1`·평가 실행 계약과 schema/validator/fixture (기존 의미 유지) | **TASK-005** | **Done — PR #28** |
-| 후속 일반 Phase 1 구현 | 별도 TASK 계약 | TASK-006 완료 | **대기 — 범위·번호 미정** |
+| **TASK-028** | 공용 storage·orchestrator 실행 기반 | TASK-006 완료 | **계약 제안 — 구현 전** |
+| 후속 ASR·평가 구현 | 별도 TASK 계약 | TASK-028 완료 | **대기 — 범위·번호 미정** |
 
 **왜 이렇게 보수적으로 두는가**
 
@@ -214,10 +219,11 @@ TASK-006  ReferenceBundle/v1·평가 실행 계약과 schema/validator/fixture �
 |---|---|
 | **TASK-006의 선행을 TASK-005로 둔다** | `ReferenceBundle/v1`은 **어떤 지표를 계산할지**가 정해져야 정답 필드를 고정할 수 있습니다. TASK-005보다 먼저 시작하면 스키마 재작업 위험이 있습니다. **병행 가능 여부는 아직 검증되지 않았으므로 직렬로 둡니다** |
 | **U-31은 TASK-005 차단에서 제거한다** | 사람 제품 오너가 대상 언어를 한국어(`ko`)로 확정했습니다. TASK-003과 U-06 선택도 완료되어 TASK-005 선행 차단은 없습니다 |
+| **TASK-028을 모델보다 먼저 둔다** | 긴 ASR·번역·평가 stage를 붙이기 전에 원본 불변·content hash·cache 무효화·checkpoint·resume을 공용화해야 데이터 손상과 전체 재실행 위험을 줄일 수 있습니다. 정확도 모델 선택은 동일 corpus 직접 비교 뒤에 합니다 |
 
 > **각 TASK는 착수 전에 자기 TASK 파일을 먼저 만듭니다** (`AGENTS.md` §6.2).
 > **TASK-003·005·006은 예약된 번호이며 의미를 바꾸지 않았습니다.**
-> **후속 일반 Phase 1 구현은 별도 TASK 계약과 사람 제품 오너 승인 전에는 시작하지 않습니다.** 위의 PR #16 합성 plumbing은
+> **TASK-028 구현은 계약 병합과 별도 Claude Code 구현 PR 전에는 시작하지 않습니다.** 후속 ASR·평가 구현도 별도 TASK 계약과 사람 제품 오너 승인 전에는 시작하지 않습니다. 위의 PR #16 합성 plumbing은
 > 사람 오너가 승인한 좁은 예외이며 일반 ASR·번역·외부 코퍼스 구현 착수를 뜻하지 않습니다.
 > **이 순서 자체가 사람 오너의 승인 대상입니다.** 승인 전에는 "제안"입니다.
 
