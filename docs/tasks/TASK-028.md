@@ -10,6 +10,7 @@
 | **구현 상태** | **`Implemented — awaiting fixed HEAD rereview`** — 구현 세션 자기 승인 없음 |
 | **1차 Gate H 검토** | `REVIEW-018` (PR #37, 리뷰 commit `a08981795739901b9fa14733ff3e0a9afc614e8a`) — 고정 HEAD `9c60ccb67d5475ce1c794852ccadfd82594383a3`, 판정 **변경 요청** (필수 수정 5건). 반영은 §12.8 |
 | **2차 Gate H 재검토** | `REVIEW-019` (PR #38, 리뷰 commit `c57e22b507a97d1b7f63bc8ab530bb7935efaa2c`) — 고정 HEAD `26139810bb4f3d8c1033d7802254c4144c370eac`, 판정 **변경 요청** (REVIEW-018 5건 해소 · 추가 필수 수정 4건). 반영은 §12.10 |
+| **3차 Gate H 재검토** | `REVIEW-020` (PR #39, 리뷰 commit `801a804b467ea61378203f96f4680fc3d78996ff`) — 고정 HEAD `45459b0331113ea18319cdf6072e24e64b6c3da4`, 판정 **변경 요청** (REVIEW-018·019 직접 반례 해소 · 추가 필수 수정 2건). 반영은 §12.12 |
 | **구현 기준 main** | `b55476086ca55a2bb806fb237239be604ed7efb8` |
 | **구현 브랜치** | `claude/task-028-resumable-runtime` |
 | **계약 상태** | **Approved — PR #34 병합 완료** |
@@ -613,3 +614,71 @@ M-01-R1~R3·M-05-R1의 새 검사 22종을 더해 저장소 밖 임시 사본에
 `seed key 타입 선행 검사 제거`는 회귀 테스트의 공백이었다. 각각 `completed` 완전성 규칙이
 가리지 않는 `failed` manifest 경로와, 정수 key의 **진단 사유**를 고정하는 테스트를 추가해
 마지막 라운드에서 탐지되게 했다.
+
+### 12.12 REVIEW-020 변경 요청 반영 (4차 커밋)
+
+`REVIEW-020` (PR #39, 리뷰 commit `801a804…`)이 고정 HEAD `45459b0…`에서 **변경 요청**으로
+지목한 M-01-R2-R1·M-01-R2-R2를 제한 범위로 반영했다. REVIEW-018·019·020 원문과
+PR #37·#38·#39, `main`은 수정하지 않았다. 두 반례를 먼저 production API로 **재현한 뒤** 고쳤다.
+
+REVIEW-020은 REVIEW-018의 다섯 반례와 REVIEW-019의 네 반례가 모두 해소됐음을 확인했고,
+fingerprint를 semantic 검사보다 먼저 처리하는 판단과 새 evidence가 없는 거부에서 기존
+manifest를 수정하지 않는 판단도 유지 승인했다.
+
+| ID | 반영 위치 |
+|---|---|
+| **M-01-R2-R1** | `JobRuntime.canonical_attempt_path()` 신설. `_check_stage_state()`가 stage state의 `attempt_path`를 현재 `job_id`·`stage_id`·`attempt_id`로 계산한 `jobs/<job_id>/stages/<stage_id>/attempts/<attempt_id>.json`과 **문자열 수준에서 정확히** 비교한다. 존재하고 내부 record가 유효하더라도 relocated·aliased·잘못된 parent 경로는 checkpoint로 인정하지 않는다. manifest 경로로 도달한 record에도 실제 path·spec·stage로 `check_attempt_identity()`와 `check_attempt_semantics()`를 적용한다. 코드 `E_CHECKPOINT_INVALID`, 위치 `.../attempt_path` |
+| **M-01-R2-R2** | `JobRuntime._check_execution_prefix()` 신설. manifest의 stage ID 목록이 `deterministic_order(spec)`의 **정확한 prefix**인지 검사한다. `completed`는 전체 순서와 정확히 일치해야 하고, `running`·`failed` 등 비완료 상태는 빈 prefix를 포함한 유효 prefix만 허용한다. downstream-only subset·dependency gap·out-of-order state를 `E_CHECKPOINT_INVALID`와 실제 `stages/<index>/stage_id` 또는 `stages` 위치로 거부한다 |
+
+**왜 canonical 경로여야 하는가.** cache discovery는 canonical 디렉터리만 읽는다. 따라서
+relocated 사본을 가리키는 manifest를 받아들이면 checkpoint는 유효해 보이는데 lookup은 miss가
+되어, 비싼 stage를 다시 실행하고 손상 manifest를 덮어쓴다. 존재·schema·필드 일치만으로는
+이 모순을 막을 수 없다.
+
+**왜 prefix여야 하는가.** 이 runtime은 `deterministic_order(spec)` 순서로 실행하며 성공한
+stage를 차례로 누적한다. 그러므로 저장된 stage 목록은 그 순서의 completed prefix 외에는
+runtime이 만들 수 없다. `[beta]`는 alpha dependency evidence가 빠진 모순 graph다.
+
+**기존 위치 하나가 더 앞선 검사로 옮겨졌다 (약화 아님).** stage state의 `attempt_id`만 바꾸는
+조작은 canonical 경로도 함께 어긋나므로 이제 `/attempt_id`가 아니라 `/attempt_path`에서 잡힌다.
+거부 자체는 그대로이며, `attempt_id`와 `attempt_path`를 함께 canonical로 옮긴 경우도 그 파일이
+없으므로 거부되는 것을 별도 회귀로 고정했다.
+
+**알려진 중복 방어 (숨기지 않는다).** `_check_stage_state()`의 state↔record `attempt_id` 직접
+비교는 canonical 경로 결박과 `check_attempt_identity()`가 함께 있으면 도달하지 않는다 —
+canonical 경로가 `attempt_id`를 결정하고 정체성 검사가 record의 `attempt_id`를 파일 stem에
+묶기 때문이다. 진단을 좁혀 주므로 유지했고, mutation 감사 결과에 그대로 적는다.
+
+**schema·fixture·Makefile·artifact store 변경 없음.** 이번 반영은 `job_runtime.py`와
+`tests/test_job_runtime.py`만 바꾼다.
+
+### 12.13 REVIEW-020 반영 뒤 mutation 감사
+
+M-01-R2-R1·R2의 새 검사 7종을 더해 저장소 밖 임시 사본에서 다시 감사했다.
+
+**81개 mutation 중 79개 탐지. 감사 불가(SKIP) 0건, 미탐지 2건.**
+
+| 묶음 | mutation | 결과 |
+|---|---|---|
+| M-01-R2-R1 | canonical path 대조 제거 / canonical을 존재 여부로만 대체 / 가리킨 record의 정체성 검사 제거 / 가리킨 record의 semantic 검사 제거 (4종) | 전부 탐지 |
+| M-01-R2-R2 | 실행 prefix 검사 호출 제거 / prefix 순서 비교를 집합 비교로 약화 / completed 전체 순서 일치 검사 제거 (3종) | 전부 탐지 |
+| 기존 74종 (REVIEW-019까지) | cache key·checkpoint·CAS·path·입력 변경·민감정보·DAG·JSON·순서·M-01~M-05·M-01-R1~R3·M-05-R1 | 전부 탐지 유지 |
+
+**이번 라운드에서 스스로 만든 감사 공백 2건을 복구했다.** 새 검사가 기존 mutation을 가려
+이전에 탐지되던 두 항목이 미탐지로 바뀌었는데, 그대로 두지 않고 회귀 테스트를 보강했다.
+
+1. **`실패 경로가 기존 manifest를 무조건 덮어씀`** — canonical path 결박이 기존 반례를 더
+   이른 단계에서 잡아 `progress` 가드가 실행되지 않게 됐다. manifest 자체는 정상이고
+   **manifest가 참조하지 않는** 두 번째 attempt record만 손상시켜 stage loop 안에서 거부되는
+   경로를 새 회귀로 추가했고, 이 mutation은 다시 **탐지**된다.
+2. **`stage state 중복 검사 제거`** — 실행 prefix 검사가 중복도 함께 잡아 단독 mutation이
+   무해해졌다. 중복 진단 자체를 고정하는 회귀(`중복` 사유 확인)를 추가해 다시 **탐지**되게 했고,
+   두 검사를 **함께** 제거한 조합 mutation도 탐지되는 것을 확인했다.
+
+**남은 미탐지 2건은 §12.11에 이미 기록한 REVIEW-019의 중복 방어 그대로다.**
+`attempt ID·number 중복 검사 호출 제거`는 파일 stem 대조가, `manifest가 record 내부 ID로
+경로를 재구성`은 정체성 검사가 상위 방어이며, 각각 보완 mutation(함수 본문 무력화 / 두 방어
+동시 제거)이 **탐지**되는 것으로 실증했다. 새로 생긴 미탐지는 없다.
+
+**추가로 확인한 중복 방어.** `_check_stage_state()`의 state↔record `attempt_id` 직접 비교는
+canonical 경로 결박과 정체성 검사가 함께 있으면 도달하지 않는다. 진단을 좁혀 주므로 유지했다.

@@ -770,6 +770,11 @@ class JobRuntime:
     def manifest_path(self, spec: JobSpec) -> Path:
         return self.job_dir(spec) / "manifest.json"
 
+    def canonical_attempt_path(self, spec: JobSpec, stage_id: str, attempt_id: str) -> str:
+        """attempt record가 있어야 하는 **유일한** project root 기준 relative path."""
+
+        return self.relative(self.attempts_dir(spec, stage_id) / f"{attempt_id}.json")
+
     def attempts_dir(self, spec: JobSpec, stage_id: str) -> Path:
         return self.job_dir(spec) / "stages" / stage_id / "attempts"
 
@@ -839,9 +844,11 @@ class JobRuntime:
             return sort_findings(findings)
 
         seen: dict[str, int] = {}
+        recorded: list[Any] = []
         for index, state in enumerate(states):
             where = f"{location}/stages/{index}"
             stage_id = state.get("stage_id")
+            recorded.append(stage_id)
             if stage_id not in dag_stage_ids:
                 fail(f"{where}/stage_id", f"DAG에 없는 stage다: {stage_id!r}")
                 continue
@@ -854,13 +861,9 @@ class JobRuntime:
             seen[stage_id] = index
             findings.extend(self._check_stage_state(state, spec, where))
 
+        findings.extend(self._check_execution_prefix(manifest, spec, recorded, location))
+
         if manifest.get("status") == "completed":
-            missing = sorted(dag_stage_ids - set(seen))
-            if missing:
-                fail(
-                    f"{location}/stages",
-                    f"completed manifest에 없는 stage가 있다: {', '.join(missing)}",
-                )
             for stage_id, index in sorted(seen.items()):
                 if states[index].get("attempt_status") != "completed":
                     fail(
@@ -869,6 +872,63 @@ class JobRuntime:
                     )
 
         return sort_findings(findings)
+
+    def _check_execution_prefix(
+        self,
+        manifest: Mapping[str, Any],
+        spec: JobSpec,
+        recorded: Sequence[Any],
+        location: str,
+    ) -> list[Finding]:
+        """저장된 stage 목록이 **실제 실행 순서의 prefix**인지 검사한다.
+
+        이 runtime은 `deterministic_order(spec)` 순서대로 실행하며 성공한 stage를
+        manifest에 누적한다. 따라서 저장된 목록은 그 순서의 **정확한 completed prefix**여야
+        한다. downstream만 남은 집합·dependency 공백·순서가 뒤바뀐 state는 runtime이
+        만들 수 없는 모순 graph다 (REVIEW-020 M-01-R2-R2).
+
+        비완료 manifest는 빈 prefix를 포함한 유효 prefix만, `completed`는 전체 순서와
+        정확히 일치할 때만 허용한다.
+        """
+
+        findings: list[Finding] = []
+        try:
+            order = list(deterministic_order(spec))
+        except ContractViolation:  # pragma: no cover - preflight가 이미 거른다
+            return findings
+
+        prefix = order[: len(recorded)]
+        if list(recorded) != prefix:
+            index = next(
+                (
+                    position
+                    for position in range(max(len(recorded), len(prefix)))
+                    if position >= len(prefix) or recorded[position] != prefix[position]
+                ),
+                0,
+            )
+            expected = prefix[index] if index < len(prefix) else "없음(순서 밖)"
+            findings.append(
+                Finding(
+                    f"{location}/stages/{index}/stage_id",
+                    "E_CHECKPOINT_INVALID",
+                    "manifest의 stage 목록이 실행 순서의 prefix가 아니다 "
+                    f"(기대 {expected!r}, 발견 {recorded[index]!r})",
+                )
+            )
+            return findings
+
+        if manifest.get("status") == "completed" and list(recorded) != order:
+            missing = [stage_id for stage_id in order if stage_id not in recorded]
+            findings.append(
+                Finding(
+                    f"{location}/stages",
+                    "E_CHECKPOINT_INVALID",
+                    "completed manifest는 실행 순서 전체를 담아야 한다 "
+                    f"(없는 stage: {', '.join(missing) or '없음'})",
+                )
+            )
+        return findings
 
     def _check_stage_state(
         self, state: Mapping[str, Any], spec: JobSpec, location: str
@@ -889,6 +949,21 @@ class JobRuntime:
             fail(f"{location}/attempt_path", f"portable relative path가 아니다: {reason}")
             return findings
 
+        # attempt record는 canonical 위치에만 있다. 존재하고 내부 record가 맞더라도
+        # 다른 parent 아래로 옮겨진(relocated·aliased) 경로는 checkpoint가 아니다
+        # (REVIEW-020 M-01-R2-R1). cache discovery는 canonical 디렉터리만 읽으므로,
+        # 이런 manifest를 받아들이면 stage를 다시 실행하고 손상 manifest를 덮어쓰게 된다.
+        stage_id = state.get("stage_id")
+        attempt_id = state.get("attempt_id")
+        if isinstance(stage_id, str) and isinstance(attempt_id, str):
+            canonical = self.canonical_attempt_path(spec, stage_id, attempt_id)
+            if relative != canonical:
+                fail(
+                    f"{location}/attempt_path",
+                    f"canonical attempt 경로가 아니다 (기대 {canonical!r}, 발견 {relative!r})",
+                )
+                return findings
+
         path = resolve_inside_root(self.project_root, relative, f"{location}/attempt_path")
         if not path.is_file():
             fail(f"{location}/attempt_path", "가리키는 attempt record 파일이 없다")
@@ -904,9 +979,26 @@ class JobRuntime:
             return findings
 
         # 가리키는 record가 schema를 어기면 그것이 먼저다 — 코드를 E_SCHEMA로 보존한다.
-        schema_findings = self.validate_attempt(record, self.relative(path))
+        record_location = self.relative(path)
+        schema_findings = self.validate_attempt(record, record_location)
         if schema_findings:
             return list(schema_findings)
+
+        # manifest 경로로 도달한 record에도 실제 path·spec·stage로 정체성과 상태
+        # 불변식을 적용한다 (REVIEW-020 M-01-R2-R1).
+        if isinstance(stage_id, str):
+            identity = check_attempt_identity(
+                record,
+                record_location,
+                job_id=spec.job_id,
+                stage_id=stage_id,
+                file_stem=path.stem,
+            )
+            if identity:
+                return identity
+        semantic = check_attempt_semantics(record, record_location)
+        if semantic:
+            return semantic
 
         for field, state_field in (
             ("attempt_id", "attempt_id"),

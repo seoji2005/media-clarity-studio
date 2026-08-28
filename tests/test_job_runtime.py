@@ -10,6 +10,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import shutil
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -1971,11 +1972,31 @@ class ReviewM01R2ManifestSemanticsTests(RuntimeCase):
         self.assertIn("attempt_path", error.location)
 
     def test_stage_state_attempt_id_mismatch_is_rejected(self) -> None:
+        """state의 `attempt_id`를 바꾸면 canonical 경로가 함께 어긋나 거부된다.
+
+        REVIEW-020 M-01-R2-R1 이후 `attempt_path`는 `attempt_id`에서 계산한 canonical
+        경로와 정확히 일치해야 하므로, 이 조작은 `/attempt_path`에서 먼저 잡힌다.
+        거부 자체는 그대로이며 위치가 더 앞선 검사로 옮겨졌다.
+        """
+
         spec, path = self.seeded()
         manifest = json.loads(path.read_text(encoding="utf-8"))
         manifest["stages"][0]["attempt_id"] = "a0002"
         write_json_atomic(path, manifest)
-        self.assert_manifest_rejected(spec, path, "/attempt_id")
+        self.assert_manifest_rejected(spec, path, "/attempt_path")
+
+    def test_stage_state_attempt_id_and_path_moved_together_is_still_rejected(self) -> None:
+        """canonical 경로까지 함께 바꿔도 그 파일이 없으므로 거부된다."""
+
+        spec, path = self.seeded()
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["stages"][0]["attempt_id"] = "a0002"
+        manifest["stages"][0]["attempt_path"] = self.runtime.canonical_attempt_path(
+            spec, "alpha", "a0002"
+        )
+        write_json_atomic(path, manifest)
+        self.assert_manifest_rejected(spec, path, "/attempt_path")
+        self.assertFalse((self.root / manifest["stages"][0]["attempt_path"]).exists())
 
     def test_stage_state_cache_key_mismatch_is_rejected(self) -> None:
         spec, path = self.seeded()
@@ -2284,6 +2305,346 @@ class ReviewM05R1SeedKeyTests(RuntimeCase):
 
     def test_valid_keys_are_accepted(self) -> None:
         check_seed_inputs({"extract": []}, ("extract",), self.runtime.validator, self.runtime.store)
+
+
+# ---------------------------------------------------------------------------
+# REVIEW-020 M-01-R2-R1 · M-01-R2-R2 회귀
+# ---------------------------------------------------------------------------
+
+
+class ReviewM01R2R1CanonicalAttemptPathTests(RuntimeCase):
+    """REVIEW-020 M-01-R2-R1 — manifest의 attempt_path가 canonical 경로에 결박된다."""
+
+    def seeded(self) -> tuple[JobSpec, Path, Path]:
+        spec = self.spec()
+        self.runtime.run_job(spec, {"extract": emit("hello")})
+        canonical = self.runtime.attempts_dir(spec, "extract") / "a0001.json"
+        return spec, canonical, self.runtime.manifest_path(spec)
+
+    def point_manifest_at(self, manifest_path: Path, relative: str) -> None:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["stages"][0]["attempt_path"] = relative
+        write_json_atomic(manifest_path, manifest)
+
+    def assert_rejected_without_side_effects(
+        self, spec: JobSpec, manifest_path: Path, canonical: Path
+    ) -> ContractViolation:
+        manifest_before = manifest_path.read_bytes()
+        attempt_before = canonical.read_bytes() if canonical.is_file() else None
+        calls = [0]
+        with self.assertRaises(ContractViolation) as caught:
+            self.runtime.run_job(spec, {"extract": emit("hello", calls)})
+        self.assertEqual(caught.exception.code, "E_CHECKPOINT_INVALID")
+        self.assertTrue(
+            caught.exception.location.endswith("/attempt_path"), caught.exception.location
+        )
+        self.assertEqual(calls[0], 0, "callable이 실행됐다")
+        self.assertEqual(manifest_path.read_bytes(), manifest_before, "manifest를 덮어썼다")
+        if attempt_before is not None:
+            self.assertEqual(canonical.read_bytes(), attempt_before, "attempt record가 바뀌었다")
+        return caught.exception
+
+    def test_canonical_path_is_accepted(self) -> None:
+        """positive를 먼저 고정한다 — runtime이 쓴 경로가 곧 canonical 경로다."""
+
+        spec, canonical, manifest_path = self.seeded()
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        recorded = manifest["stages"][0]["attempt_path"]
+        self.assertEqual(recorded, self.runtime.relative(canonical))
+        self.assertEqual(
+            recorded, self.runtime.canonical_attempt_path(spec, "extract", "a0001")
+        )
+        self.assertEqual(
+            self.runtime.check_manifest_semantics(manifest, spec, "m.json"), []
+        )
+        self.assertEqual(
+            self.runtime.run_job(spec, {"extract": emit("hello")}).outcome("extract").cache_status,
+            "hit",
+        )
+
+    def test_relocated_existing_copy_is_rejected(self) -> None:
+        """REVIEW-020이 재현한 반례 — 유효한 record를 다른 디렉터리로 옮긴다."""
+
+        spec, canonical, manifest_path = self.seeded()
+        relocated = self.root / "jobs" / "job-a" / "relocated" / "a0001.json"
+        relocated.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(canonical, relocated)
+        canonical.unlink()
+        self.point_manifest_at(manifest_path, "jobs/job-a/relocated/a0001.json")
+
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        # schema는 통과하고 가리키는 파일도 존재한다 — 그래서 canonical 결박이 필요하다.
+        self.assertEqual(self.runtime.validate_manifest(manifest, "m.json"), [])
+        self.assertTrue(relocated.is_file())
+
+        self.assert_rejected_without_side_effects(spec, manifest_path, canonical)
+        self.assertFalse(canonical.exists(), "canonical record를 새로 만들었다")
+        self.assertTrue(relocated.is_file(), "relocated 사본을 건드렸다")
+
+    def test_wrong_job_and_stage_parents_are_rejected(self) -> None:
+        cases = {
+            "wrong_job_parent": "jobs/job-other/stages/extract/attempts/a0001.json",
+            "wrong_stage_parent": "jobs/job-a/stages/other/attempts/a0001.json",
+            "missing_attempts_segment": "jobs/job-a/stages/extract/a0001.json",
+            "extra_segment": "jobs/job-a/stages/extract/attempts/nested/a0001.json",
+        }
+        for name, relative in cases.items():
+            with self.subTest(case=name):
+                directory = self.root / name
+                directory.mkdir()
+                runtime = JobRuntime(directory)
+                spec = self.spec()
+                runtime.run_job(spec, {"extract": emit("hello")})
+                canonical = runtime.attempts_dir(spec, "extract") / "a0001.json"
+                target = directory / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(canonical, target)
+                manifest_path = runtime.manifest_path(spec)
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                manifest["stages"][0]["attempt_path"] = relative
+                write_json_atomic(manifest_path, manifest)
+
+                before = manifest_path.read_bytes()
+                calls = [0]
+                with self.assertRaises(ContractViolation) as caught:
+                    runtime.run_job(spec, {"extract": emit("hello", calls)})
+                self.assertEqual(caught.exception.code, "E_CHECKPOINT_INVALID")
+                self.assertTrue(
+                    caught.exception.location.endswith("/attempt_path"),
+                    caught.exception.location,
+                )
+                self.assertEqual(calls[0], 0)
+                self.assertEqual(manifest_path.read_bytes(), before)
+
+    def test_pointed_record_gets_identity_and_semantic_checks(self) -> None:
+        """canonical 경로여도 그 record에 정체성·상태 불변식을 적용한다."""
+
+        spec, canonical, manifest_path = self.seeded()
+        record = json.loads(canonical.read_text(encoding="utf-8"))
+        record["job_id"] = "job-other"
+        write_json_atomic(canonical, record)
+
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        findings = self.runtime.check_manifest_semantics(manifest, spec, "m.json")
+        self.assertTrue(findings, "manifest 경로로 도달한 record의 정체성을 보지 않았다")
+        self.assertEqual(findings[0].code, "E_CHECKPOINT_INVALID")
+        self.assertTrue(
+            any(f.location.endswith("/job_id") for f in findings),
+            [f.location for f in findings],
+        )
+
+    def test_pointed_record_semantic_damage_is_reported(self) -> None:
+        spec, canonical, manifest_path = self.seeded()
+        record = json.loads(canonical.read_text(encoding="utf-8"))
+        record["outputs"] = []
+        record["verified_artifact_count"] = 0
+        record["verified_artifact_bytes"] = 0
+        write_json_atomic(canonical, record)
+
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        findings = self.runtime.check_manifest_semantics(manifest, spec, "m.json")
+        self.assertTrue(findings)
+        self.assertTrue(
+            any(f.location.endswith("/outputs") for f in findings),
+            [f.location for f in findings],
+        )
+
+
+class ReviewM01R2R2ExecutionPrefixTests(RuntimeCase):
+    """REVIEW-020 M-01-R2-R2 — 저장된 stage 목록이 실행 순서의 prefix여야 한다."""
+
+    def seeded(self) -> tuple[JobSpec, Path]:
+        spec = self.two_stage()
+        self.runtime.run_job(spec, {"alpha": emit("A"), "beta": emit("B")})
+        return spec, self.runtime.manifest_path(spec)
+
+    def rewrite(self, path: Path, **patch: Any) -> dict[str, Any]:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest.update(patch)
+        write_json_atomic(path, manifest)
+        return manifest
+
+    def assert_prefix_rejected(self, spec: JobSpec, path: Path, suffix: str) -> ContractViolation:
+        before = path.read_bytes()
+        attempts = {
+            name: (self.runtime.attempts_dir(spec, name) / "a0001.json").read_bytes()
+            for name in ("alpha", "beta")
+        }
+        calls = [0]
+        with self.assertRaises(ContractViolation) as caught:
+            self.runtime.run_job(
+                spec, {"alpha": emit("A", calls), "beta": emit("B", calls)}
+            )
+        self.assertEqual(caught.exception.code, "E_CHECKPOINT_INVALID")
+        self.assertTrue(caught.exception.location.endswith(suffix), caught.exception.location)
+        self.assertEqual(calls[0], 0, "callable이 실행됐다")
+        self.assertEqual(path.read_bytes(), before, "manifest를 덮어썼다")
+        for name, blob in attempts.items():
+            self.assertEqual(
+                (self.runtime.attempts_dir(spec, name) / "a0001.json").read_bytes(),
+                blob,
+                f"{name} attempt record가 바뀌었다",
+            )
+        return caught.exception
+
+    def test_downstream_only_failed_manifest_is_rejected(self) -> None:
+        """REVIEW-020이 재현한 반례 — alpha→beta에서 [beta]만 남긴 failed manifest."""
+
+        spec, path = self.seeded()
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        beta = [state for state in manifest["stages"] if state["stage_id"] == "beta"]
+        self.rewrite(path, status="failed", stages=beta)
+
+        stored = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(self.runtime.validate_manifest(stored, "m.json"), [])
+        self.assert_prefix_rejected(spec, path, "/stages/0/stage_id")
+
+    def test_out_of_order_stage_states_are_rejected(self) -> None:
+        spec, path = self.seeded()
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        self.rewrite(path, status="failed", stages=list(reversed(manifest["stages"])))
+        self.assert_prefix_rejected(spec, path, "/stages/0/stage_id")
+
+    def test_dependency_gap_in_a_three_stage_dag_is_rejected(self) -> None:
+        spec = JobSpec(
+            job_id="job-a",
+            pipeline_id="pipe-a",
+            source_identity="src-1",
+            stages=(
+                StageSpec(stage_id="alpha", implementation_version="a/1.0.0"),
+                StageSpec(
+                    stage_id="beta", implementation_version="b/1.0.0", depends_on=("alpha",)
+                ),
+                StageSpec(
+                    stage_id="gamma", implementation_version="g/1.0.0", depends_on=("beta",)
+                ),
+            ),
+        )
+        callables = {"alpha": emit("A"), "beta": emit("B"), "gamma": emit("G")}
+        self.runtime.run_job(spec, callables)
+        path = self.runtime.manifest_path(spec)
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        # alpha와 gamma만 남긴다 — beta dependency evidence가 빠진 graph.
+        kept = [state for state in manifest["stages"] if state["stage_id"] != "beta"]
+        self.rewrite(path, status="failed", stages=kept)
+
+        before = path.read_bytes()
+        calls = [0]
+        with self.assertRaises(ContractViolation) as caught:
+            self.runtime.run_job(
+                spec,
+                {
+                    "alpha": emit("A", calls),
+                    "beta": emit("B", calls),
+                    "gamma": emit("G", calls),
+                },
+            )
+        self.assertEqual(caught.exception.code, "E_CHECKPOINT_INVALID")
+        self.assertTrue(
+            caught.exception.location.endswith("/stages/1/stage_id"), caught.exception.location
+        )
+        self.assertEqual(calls[0], 0)
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_empty_prefix_is_allowed_for_a_non_completed_manifest(self) -> None:
+        spec, path = self.seeded()
+        self.rewrite(path, status="failed", stages=[])
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(self.runtime.check_manifest_semantics(manifest, spec, "m.json"), [])
+
+    def test_valid_alpha_prefix_is_allowed_and_resumes(self) -> None:
+        """정상 prefix에서 alpha는 cache hit, beta만 다시 실행한다."""
+
+        spec = self.two_stage()
+
+        def failing(context: StageContext) -> Sequence[StageOutput]:
+            raise RuntimeError("beta 실패")
+
+        alpha, beta = [0], [0]
+        self.assert_violation(
+            "E_STAGE_FAILED",
+            self.runtime.run_job,
+            spec,
+            {"alpha": emit("A", alpha), "beta": failing},
+        )
+        manifest = self.manifest(spec)
+        self.assertEqual(manifest["status"], "failed")
+        self.assertEqual([state["stage_id"] for state in manifest["stages"]], ["alpha"])
+        self.assertEqual(
+            self.runtime.check_manifest_semantics(manifest, spec, "m.json"), []
+        )
+
+        result = self.runtime.run_job(
+            spec, {"alpha": emit("A", alpha), "beta": emit("B", beta)}
+        )
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(result.outcome("alpha").cache_status, "hit")
+        self.assertEqual(result.outcome("beta").cache_status, "miss")
+        self.assertEqual(alpha[0], 1, "완료된 alpha를 다시 실행했다")
+        self.assertEqual(beta[0], 1)
+
+    def test_completed_manifest_must_hold_the_whole_order(self) -> None:
+        spec, path = self.seeded()
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        alpha_only = [state for state in manifest["stages"] if state["stage_id"] == "alpha"]
+        self.rewrite(path, status="completed", stages=alpha_only)
+        error = self.assert_prefix_rejected(spec, path, "/stages")
+        self.assertIn("beta", error.detail)
+
+    def test_rejection_with_no_new_evidence_leaves_the_manifest_untouched(self) -> None:
+        """새 evidence를 만들지 않은 거부는 기존 manifest를 건드리지 않는다.
+
+        manifest 자체는 정상이라 semantic 검사를 통과하고, manifest가 참조하지 않는
+        두 번째 attempt record만 손상시킨다. `_read_attempts()`가 stage loop 안에서
+        거부하므로 `progress` 가드가 실제로 동작해야 한다.
+        """
+
+        spec = self.spec()
+        self.runtime.run_job(spec, {"extract": emit("hello")})
+        manifest_path = self.runtime.manifest_path(spec)
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            self.runtime.check_manifest_semantics(manifest, spec, "m.json"), []
+        )
+
+        record = json.loads(
+            (self.runtime.attempts_dir(spec, "extract") / "a0001.json").read_text(encoding="utf-8")
+        )
+        record.update(attempt_id="a0002", attempt_number=2, verified_artifact_count=99)
+        write_json_atomic(self.runtime.attempts_dir(spec, "extract") / "a0002.json", record)
+
+        before = manifest_path.read_bytes()
+        calls = [0]
+        with self.assertRaises(ContractViolation) as caught:
+            self.runtime.run_job(spec, {"extract": emit("hello", calls)})
+        self.assertEqual(caught.exception.code, "E_CHECKPOINT_INVALID")
+        self.assertEqual(calls[0], 0)
+        self.assertEqual(
+            manifest_path.read_bytes(), before, "새 evidence가 없는데 manifest를 덮어썼다"
+        )
+
+    def test_duplicate_state_is_still_rejected_when_the_prefix_rule_is_satisfied(self) -> None:
+        """중복 검사가 prefix 검사에 완전히 흡수되지 않는 경로를 직접 고정한다."""
+
+        spec, path = self.seeded()
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        duplicated = manifest["stages"] + [copy.deepcopy(manifest["stages"][1])]
+        findings = self.runtime.check_manifest_semantics(
+            {**manifest, "status": "failed", "stages": duplicated}, spec, "m.json"
+        )
+        self.assertTrue(findings)
+        self.assertTrue(
+            any("중복" in finding.message for finding in findings),
+            [f.message for f in findings],
+        )
+
+    def test_prefix_rule_matches_deterministic_order(self) -> None:
+        spec, path = self.seeded()
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            [state["stage_id"] for state in manifest["stages"]],
+            list(deterministic_order(spec)),
+        )
 
 
 if __name__ == "__main__":
