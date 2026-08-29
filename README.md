@@ -12,9 +12,10 @@ Local-first multilingual subtitle generation and AI-assisted media restoration s
 
 로컬 우선(local-first) 미디어 처리 도구를 목표로 합니다.
 
-현재 단계는 **Phase 0 (Foundation)** 이며, 이 저장소에는 아직 **기능 코드가 없습니다.**
-지금 있는 것은 사람과 AI 에이전트(GPT Work, Claude Code 세션들)가 **같은 전제 위에서** 작업하기 위한
-설계·평가·협업 문서뿐입니다. 문서 없이 코드를 먼저 쓰지 않는 것이 이 프로젝트의 의도된 순서입니다.
+현재 단계는 **Phase 1a**입니다. 합성 미디어 plumbing, 평가 계약, content-addressed artifact store와
+재개 가능한 local synchronous stage runtime까지 구현·병합됐습니다. 실제 ASR·번역·화자분리·정렬,
+OCR/VLM, 시각 재구성과 제품 UI는 아직 본격 구현 전입니다. 현재 상태의 정본은
+[`STATUS.md`](STATUS.md)입니다.
 
 > **용어 원칙 (반드시 준수)**
 > AI 기반 deblur / demosaic / restoration 결과는 항상 **"재구성(reconstruction)" 또는 "추정(estimation)"** 으로
@@ -86,27 +87,28 @@ media-clarity-studio/
 ├── CLAUDE.md              # Claude 전용 진입점
 ├── PLAN.md                # 단계별 로드맵
 ├── STATUS.md              # 현재 상태 / 소유권 보드
+├── Makefile               # 공용 검증 진입점
+├── schemas/               # 실행 가능한 공통·평가·job 계약
+├── src/media_clarity/     # 합성 slice, 평가 validator, artifact store, stage runtime
+├── tests/                 # 계약·mutation·runtime 테스트와 fixture
+├── scripts/               # smoke·검증 스크립트
 └── docs/
     ├── PRODUCT_SPEC.md    # 과제 범위 vs 상용 범위, MVP, 비목표
     ├── ARCHITECTURE.md    # 모듈 경계 + 공통 계약 + 안전 게이트
     ├── EVALS.md           # 평가 설계, 지표 계산 규약, 통계 규칙
     ├── DECISIONS.md       # ADR + 미해결 목록
-    ├── tasks/
-    │   ├── TASK-000.md    # 소급 기록: Phase 0 문서 기반 (닫힘)
-    │   ├── TASK-001.md    # 독립 저장소·아키텍처 리뷰 (닫힘)
-    │   ├── TASK-002.md    # REVIEW-001 지적 반영
-    │   └── TASK-007.md    # 운영 구조 전환 (문서 전용)
-    └── reviews/
-        └── REVIEW-001.md  # TASK-001 리뷰 결과 (변경 요청)
+    ├── tasks/             # TASK 계약과 구현 기록
+    └── reviews/           # 고정 HEAD 독립 검토 기록
 ```
 
-- 소스 코드: **없음**
+- 소스 코드: **있음** — 합성 media slice, 평가 계약 validator, CAS, cache/checkpoint/resume runtime
 - 의존성 매니페스트(`requirements.txt`, `package.json`, `pyproject.toml` 등): **없음**
 - 모델 가중치 / 다운로드 스크립트: **없음**
 - CI 설정: **없음**
 - 비밀정보(secret) / API 키 / `.env`: **없음**
 
-이는 의도된 상태입니다. Phase 0에서는 아무것도 설치하거나 고정하지 않습니다.
+현재 Python 코드는 표준 라이브러리를 사용하고 media smoke는 FFmpeg/ffprobe를 사용합니다.
+실제 모델·외부 corpus·추가 의존성은 각 gate와 제품 오너 승인 전에는 반입하지 않습니다.
 
 ---
 
@@ -167,7 +169,6 @@ media-clarity-studio/
   **모든 인계(handoff)는 저장소 안의 파일과 PR 설명으로만 이루어집니다.**
 - 완료 보고만 믿지 않고, 가능한 경우 **GitHub 상태와 diff로 확인**합니다 ([`AGENTS.md`](AGENTS.md) §3.5).
 
-**현재 진행 상황:** TASK-001(독립 리뷰)이 완료되어 `변경 요청` 판정을 받았고
-([`docs/reviews/REVIEW-001.md`](docs/reviews/REVIEW-001.md)), 그 지적 사항이 문서 전반에 반영되었습니다.
-이후 TASK-007로 위 운영 구조 전환을 문서에 반영했습니다.
-다음 단계는 [`STATUS.md`](STATUS.md) §4를 보십시오.
+**현재 진행 상황:** TASK-028의 content-addressed artifact store와 재개 가능한 stage runtime은
+[`REVIEW-022`](docs/reviews/REVIEW-022.md) 승인 뒤 PR #36으로 병합됐습니다. 다음 기능은 별도 TASK 계약과
+제품 오너 승인 전에는 착수하지 않습니다. 최신 상태와 다음 후보는 [`STATUS.md`](STATUS.md) §4를 보십시오.
