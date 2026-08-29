@@ -6,18 +6,20 @@
 | **Owner** | Claude Code 구현 세션 |
 | **Reviewer** | Lean Root Orchestrator — 구현 세션과 분리된 고정 HEAD Gate H 검토 |
 | **Phase** | Phase 1a / shared storage·orchestrator foundation |
-| **Status** | `In review` |
-| **구현 상태** | **`Implemented — awaiting fixed HEAD rereview`** — 구현 세션 자기 승인 없음 |
+| **Status** | `Done` |
+| **구현 상태** | **Approved and merged** — 구현 고정 HEAD `9cfaf4dad35b313ae2a2357f5257c2897a7b01a3`, merge commit `1d05de31aa39fd4dc8790d6c6e6442c0f8765ddc` |
 | **1차 Gate H 검토** | `REVIEW-018` (PR #37, 리뷰 commit `a08981795739901b9fa14733ff3e0a9afc614e8a`) — 고정 HEAD `9c60ccb67d5475ce1c794852ccadfd82594383a3`, 판정 **변경 요청** (필수 수정 5건). 반영은 §12.8 |
 | **2차 Gate H 재검토** | `REVIEW-019` (PR #38, 리뷰 commit `c57e22b507a97d1b7f63bc8ab530bb7935efaa2c`) — 고정 HEAD `26139810bb4f3d8c1033d7802254c4144c370eac`, 판정 **변경 요청** (REVIEW-018 5건 해소 · 추가 필수 수정 4건). 반영은 §12.10 |
 | **3차 Gate H 재검토** | `REVIEW-020` (PR #39, 리뷰 commit `801a804b467ea61378203f96f4680fc3d78996ff`) — 고정 HEAD `45459b0331113ea18319cdf6072e24e64b6c3da4`, 판정 **변경 요청** (REVIEW-018·019 직접 반례 해소 · 추가 필수 수정 2건). 반영은 §12.12 |
 | **4차 Gate H 재검토** | `REVIEW-021` (PR #40, 리뷰 commit `c35f5b7201697469508fa49264d76a5542cc0d2b`) — 고정 HEAD `f0c5e86c3a23f8b358464f7117d63c46149b9403`, 판정 **변경 요청** (REVIEW-020 직접 반례 해소 · 추가 필수 수정 1건). 반영은 §12.14 |
+| **5차 Gate H 최종 재검토** | [`REVIEW-022`](../reviews/REVIEW-022.md) (리뷰 PR #41, 리뷰 commit `4a00e7015b8b33dbf0bfa9eac31de971aab2287a`) — 고정 HEAD `9cfaf4dad35b313ae2a2357f5257c2897a7b01a3`, 판정 **승인** |
 | **구현 기준 main** | `b55476086ca55a2bb806fb237239be604ed7efb8` |
 | **구현 브랜치** | `claude/task-028-resumable-runtime` |
 | **계약 상태** | **Approved — PR #34 병합 완료** |
 | **계약 기준 main** | `d000284d71e18788a89c8be4ca3c45c26db35b5a` |
 | **계약 승인 HEAD** | `3ebb407ff14498a8d6cc23303b9bf5773d4b2de0` |
 | **계약 merge commit** | `0056ca01225cd662b9d3f3c5de079a380b893378` |
+| **구현 PR / merge commit** | PR #36 / `1d05de31aa39fd4dc8790d6c6e6442c0f8765ddc` |
 | **위험 등급** | **Gate H** — 파일 형식·원자적 쓰기·캐시·중단 후 재개 |
 | **선행** | TASK-006 Done, TASK-022 Done |
 | **차단 질문** | 없음. U-16 보관 정책은 미정이므로 자동 삭제·GC를 구현하지 않는다 |
@@ -342,9 +344,11 @@ mutation 감사 최소 항목:
 
 ## 12. 구현 기록 (Claude Code 구현 세션)
 
-**상태: `Implemented — awaiting fixed HEAD rereview`.** 아래는 구현 세션의 주장이며 검증이 아니다.
+**이 절은 최종 검토 전 구현 세션의 역사 기록이다. 당시 상태는
+`Implemented — awaiting fixed HEAD rereview`였다.** 아래 내용은 구현 세션의 주장이며 검증이 아니다.
 판정은 Lean Root가 고정 HEAD에서 직접 재현한다 (`AGENTS.md` R10 / §3.5).
 구현 세션은 자기 변경을 승인하지 않았고 병합·Ready 전환을 하지 않았다.
+최종 검토·병합 상태는 §13이 기록한다.
 
 ### 12.1 산출물
 
@@ -801,3 +805,19 @@ git status --short
 - JSON Schema Draft 2020-12 전체 구현과 외부 meta-validator
 
 이번 반영은 Linux 단일 프로세스 기본 경로에서 재현·수정·재검증했다.
+
+---
+
+## 13. 최종 검토와 병합 결과
+
+- Lean Root의 최종 고정 HEAD 검토 [`REVIEW-022`](../reviews/REVIEW-022.md)는
+  `9cfaf4dad35b313ae2a2357f5257c2897a7b01a3`을 **승인**했다.
+- 사람 제품 오너가 승인한 뒤 PR #36이 병합됐고, merge commit은
+  `1d05de31aa39fd4dc8790d6c6e6442c0f8765ddc`이다.
+- 승인 HEAD 대비 merge commit은 1커밋 앞, 0커밋 뒤이며 변경 파일은 0개다. 따라서 승인된
+  구현 tree가 그대로 병합됐다. 병합 뒤 `make verify-task-028`은 J 16/16,
+  artifact store 36, runtime 149, 전체 355 tests와 TASK-028·FFmpeg smoke를 통과했다.
+- `Done`은 TASK-028 계약·구현·검토·병합 완료를 뜻한다. Windows 11/NTFS, 실제 OS crash,
+  멀티프로세스 경합과 외부 JSON Schema meta-validator는 여전히 후속 검증 경계다.
+- [`REVIEW-022`](../reviews/REVIEW-022.md)의 PR #36 상태와 다음 허용 행동은 **리뷰 당시의 역사 기록**이다.
+  현재 상태는 이 절과 `STATUS.md`가 기록한다.
