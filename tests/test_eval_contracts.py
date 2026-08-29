@@ -1769,5 +1769,90 @@ class ReviewR03R2RequiredFieldLocationTests(unittest.TestCase):
         self.assertEqual(codes_for(documents_of("H-11")), ())
 
 
+class SharedSchemaCoreTests(unittest.TestCase):
+    """TASK-028 공용 helper 추출 회귀 — 두 구현이 갈라지지 않는다.
+
+    TASK-028은 `eval_contracts`와 `job_runtime`이 **같은** schema 해석을 쓰도록
+    검사기를 `schema_core`로 옮겼다. 이름만 공유하고 의미가 갈라지는 복제 구현이
+    다시 생기면 이 테스트가 실패한다 (TASK-028 §3.6).
+    """
+
+    def test_public_names_are_the_shared_implementation_not_a_copy(self) -> None:
+        from media_clarity import eval_contracts, schema_core
+
+        for name in (
+            "Finding",
+            "JsonInputError",
+            "SchemaContractError",
+            "SchemaValidator",
+            "loads_strict",
+            "load_strict",
+            "sort_findings",
+            "utc_timestamp_error",
+            "portable_relative_path_error",
+            "SUPPORTED_KEYWORDS",
+            "SEMANTIC_CHECKS",
+            "SCHEMA_DIALECT",
+            "SCHEMA_VERSION",
+        ):
+            with self.subTest(name=name):
+                self.assertIs(
+                    getattr(eval_contracts, name),
+                    getattr(schema_core, name),
+                    f"{name}이 schema_core와 다른 객체다 — 복제 구현일 수 있다",
+                )
+
+    def test_task_006_schema_set_is_the_shared_one_narrowed_to_seven_files(self) -> None:
+        from media_clarity import eval_contracts, schema_core
+
+        self.assertTrue(issubclass(eval_contracts.SchemaSet, schema_core.SchemaSet))
+        self.assertEqual(SCHEMAS.filenames, eval_contracts.SCHEMA_FILES)
+        self.assertEqual(len(eval_contracts.SCHEMA_FILES), 7)
+        self.assertIn(schema_core.COMMON_SCHEMA_FILE, eval_contracts.SCHEMA_FILES)
+
+    def test_task_006_verdicts_are_unchanged_after_the_extraction(self) -> None:
+        """H-01~H-14의 판정·오류 코드·순서·pointer가 그대로다."""
+
+        expected = {
+            "H-01": (),
+            "H-02": (),
+            "H-03": ("E_TARGET_LANGUAGE",),
+            "H-04": ("E_AXIS_MISMATCH",),
+            "H-05": (),
+            "H-06": (),
+            "H-07": (),
+            "H-08": (),
+            "H-09": ("E_SPLIT_LEAKAGE",),
+            "H-10": (),
+            "H-11": (),
+            "H-12": ("E_RESUME_FINGERPRINT",),
+            "H-13": (),
+            "H-14": ("E_PAIRED_SAMPLE_SET",),
+        }
+        self.assertEqual(sorted(expected), sorted(EXPECTED_CASE_IDS))
+        for case, codes in expected.items():
+            with self.subTest(case=case):
+                documents = documents_of(case)
+                findings = findings_for(documents)
+                self.assertEqual(codes_for(documents), codes)
+                self.assertEqual(list(findings), sort_findings(findings))
+                for finding in findings:
+                    assert_location_resolves(self, documents, finding.location)
+
+    def test_unsupported_keyword_still_stops_as_a_contract_defect(self) -> None:
+        from media_clarity import schema_core
+
+        injected = copy.deepcopy(SCHEMAS.documents["common-v1.schema.json"])
+        injected["$defs"]["identifier"]["oneOf"] = []
+        with self.assertRaises(schema_core.SchemaContractError):
+            SCHEMAS._assert_supported(injected, "common-v1.schema.json#")
+
+    def test_a_schema_set_without_the_common_contract_is_a_contract_defect(self) -> None:
+        from media_clarity import schema_core
+
+        with self.assertRaises(schema_core.SchemaContractError):
+            schema_core.SchemaSet(DEFAULT_SCHEMA_DIR, ("eval-report-v1.schema.json",))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,12 @@
+{
+ "case_id": "J-04",
+ "expect": {
+  "cache_reason": "not_cacheable",
+  "cache_status": "bypassed",
+  "cacheable": false,
+  "calls": 2,
+  "recorded_reason": "not_cacheable"
+ },
+ "scenario": "j04_not_cacheable",
+ "title": "cacheable=false면 동일 fingerprint여도 bypassed로 실행하고 이유를 기록한다"
+}

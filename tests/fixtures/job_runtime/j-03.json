@@ -1,0 +1,37 @@
+{
+ "case_id": "J-03",
+ "expect": {
+  "chunking_hash": {
+   "cache_reason": "cache_key_changed",
+   "cache_status": "miss",
+   "calls": 1
+  },
+  "config_hash": {
+   "cache_reason": "cache_key_changed",
+   "cache_status": "miss",
+   "calls": 1
+  },
+  "context_hash": {
+   "cache_reason": "cache_key_changed",
+   "cache_status": "miss",
+   "calls": 1
+  },
+  "dependency_fingerprint": {
+   "cache_reason": "cache_key_changed",
+   "cache_status": "miss",
+   "calls": 1
+  },
+  "implementation_version": {
+   "cache_reason": "cache_key_changed",
+   "cache_status": "miss",
+   "calls": 1
+  },
+  "model_hash": {
+   "cache_reason": "cache_key_changed",
+   "cache_status": "miss",
+   "calls": 1
+  }
+ },
+ "scenario": "j03_fingerprint_miss",
+ "title": "config·implementation·dependency·model·context·chunking을 하나씩 바꾸면 각각 cache miss다"
+}

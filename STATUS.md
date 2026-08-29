@@ -3,8 +3,8 @@
 **"지금 무엇이 되어 있고, 누가 무엇을 들고 있는가."**
 새 세션을 시작하는 에이전트는 [`AGENTS.md`](AGENTS.md) 다음으로 이 파일을 봅니다 (`AGENTS.md` §0.2).
 
-마지막 갱신: 2026-08-28 (TASK-028 계약 병합 후 구현 착수 준비)
-현재 단계: **Phase 1a** — TASK-028 content-addressed artifact/cache/resume 구현 착수 준비
+마지막 갱신: 2026-08-29 (TASK-028 REVIEW-021 반영 — 고정 HEAD Gate H 재검토 대기)
+현재 단계: **Phase 1a** — TASK-028 REVIEW-021 반영 완료, 고정 HEAD Gate H 재검토 대기
 
 ---
 
@@ -20,7 +20,7 @@
 | 열린 PR | **#6~#10·#12·#14·#15·#17·#29~#32** — 과거 작업·리뷰 Draft, 현재 실행 차단 아님 |
 | 미병합 종료 | **#2·#3·#4·#11** — #11은 TASK-024로 대체, branch·원문 보존 |
 | 운영 구조 | **TASK-027 결정** — 코드는 Claude Code, 비코드·검증·리뷰·승인 후 통합은 Lean Root (`AGENTS.md` §3, ADR-0028) |
-| 현재 작업 | **TASK-028 구현 착수 준비** — 계약은 PR #34로 병합됨. 구현 코드는 아직 없음 |
+| 현재 작업 | **TASK-028 고정 HEAD Gate H 재검토 대기** — `claude/task-028-resumable-runtime`에 구현 완료 후 `REVIEW-018` (PR #37)·`REVIEW-019` (PR #38)·`REVIEW-020` (PR #39)·`REVIEW-021` (PR #40) 지적 반영. 구현 세션 자기 승인 없음 |
 | U-31 | **답변됨 (2026-08-22)** — 번역 대상 언어 **한국어(`ko`)** |
 | 다음 실행 의존성 | **Claude Code 구현** → Lean Root 고정 HEAD Gate H 검토 → 사람 제품 오너 병합 판단 |
 | U-08 | **답변됨 (2026-08-09)** — **채점 정답은 번역 자막** |
@@ -67,7 +67,7 @@
 | [TASK-003](docs/tasks/TASK-003.md) | seed 코퍼스·라이선스·합성 fixture 조사 및 Gate E 증거 통합 | Claude Code 주 세션 → Lean Root 통합 | Gate S: TASK-021/REVIEW-012 승인; Gate E: PR #21 고정 HEAD 제한 재검토 통과 | Phase 1a seed corpus | **Done** — PR #21 병합 |
 | [TASK-005](docs/tasks/TASK-005.md) | 평가 하네스 설계 명세 | Lean Root Orchestrator | 없음 — Gate M 비코드 설계; 제품 오너가 고정 HEAD 승인 | Phase 1a evaluation foundation | **Done — PR #25 병합** |
 | [TASK-006](docs/tasks/TASK-006.md) | ReferenceBundle/v1 및 평가 실행 계약 구체화 | Claude Code 구현 세션 | Lean Root 고정 HEAD 검토 — `REVIEW-014`·`015`·`016` **변경 요청**, [`REVIEW-017`](docs/reviews/REVIEW-017.md) **승인** | Phase 1a evaluation contracts | **Done — PR #28 병합** (`bd00f604565cac09b91b07286437032486933a08`) |
-| [TASK-028](docs/tasks/TASK-028.md) | Content-addressed artifact store와 재개 가능한 stage runtime | Claude Code 구현 세션 | Lean Root 고정 HEAD Gate H 검토 | Phase 1a shared storage·orchestrator foundation | **Not started** — contract approved, PR #34 merged |
+| [TASK-028](docs/tasks/TASK-028.md) | Content-addressed artifact store와 재개 가능한 stage runtime | Claude Code 구현 세션 | Lean Root 고정 HEAD Gate H 검토 | Phase 1a shared storage·orchestrator foundation | **In review** — 1차 `REVIEW-018` (PR #37) · 2차 `REVIEW-019` (PR #38) · 3차 `REVIEW-020` (PR #39) · 4차 `REVIEW-021` (PR #40) **변경 요청** 반영, 구현 `Implemented — awaiting fixed HEAD rereview` (구현 세션 자기 승인 없음) |
 | [TASK-012](docs/tasks/TASK-012.md) | Phase 1 계획 기준선 확립 | Claude Code 주 세션 | TASK-013~017 / REVIEW-005~009 (사람 오너의 예외 승인) | Phase 1 planning / 1a 진입 | **Done** — REVIEW-009 승인 후 PR #5 병합 (`10d34b4a4545f9ae8894c8038e7f1cc9a7706d61`) |
 | [TASK-013](docs/tasks/TASK-013.md) | TASK-012 고정 HEAD 독립 검토 | **이 독립 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 review | **In review** (판정: 변경 요청 — [REVIEW-005](docs/reviews/REVIEW-005.md)) |
 | [TASK-014](docs/tasks/TASK-014.md) | TASK-012 M-01·M-02 제한 재검토 | **REVIEW-005를 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 limited rereview | **In review** (M-01·M-02 부분 해소 · 판정: 변경 요청 — [REVIEW-006](docs/reviews/REVIEW-006.md)) |
@@ -268,7 +268,7 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 
 | TASK | 내용 | Owner |
 |---|---|---|
-| [TASK-028](docs/tasks/TASK-028.md) — 구현 대기 | content-addressed artifact store, stage fingerprint/cache, crash-safe checkpoint와 resume 기반 | Claude Code 구현 → Lean Root 검증 (Gate H) |
+| [TASK-028](docs/tasks/TASK-028.md) — 고정 HEAD 재검토 대기 | content-addressed artifact store, stage fingerprint/cache, crash-safe checkpoint와 resume 기반. J-01~J-16 16건, mutation 감사, `REVIEW-018`·`REVIEW-019`·`REVIEW-020`·`REVIEW-021` 반영 포함 | Claude Code 구현 → Lean Root 검증 (Gate H) |
 
 > **판정과 반영 상태는 서로 다른 사실입니다. 섞지 마십시오.**
 >
@@ -305,7 +305,7 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 | **TASK-005** | 평가 하네스 설계 명세 (Phase 1a) | TASK-003 · U-06 선택 | **Done — PR #25** |
 | **TASK-006** | `ReferenceBundle/v1` 및 평가 실행 계약 구체화 | **TASK-005** | **Done — PR #28** |
 | TASK-006 코드 구현 | schema·validator·fixture | TASK-006 계약 승인·병합 | **Done — PR #28** |
-| **TASK-028** | 공용 artifact/cache/resume runtime | TASK-006 완료 | **계약 승인·병합 — 구현 전** |
+| **TASK-028** | 공용 artifact/cache/resume runtime | TASK-006 완료 | **In review — REVIEW-018·019·020·021 반영, 고정 HEAD 재검토 대기** |
 | 후속 ASR·평가 구현 | 범위·번호 미정 | TASK-028 완료와 별도 TASK 계약 | **대기** |
 
 > **TASK-005 평가 하네스 설계와 TASK-006 평가 실행 계약은 완료됐습니다.** TASK-006 계약은 PR #27,

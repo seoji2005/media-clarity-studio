@@ -1,0 +1,18 @@
+{
+ "case_id": "J-01",
+ "expect": {
+  "artifact_exists": true,
+  "artifact_uri_is_relative": true,
+  "attempt_schema_findings": 0,
+  "attempt_status": "completed",
+  "cache_reason": "no_completed_checkpoint",
+  "cache_status": "miss",
+  "callable_invoked": true,
+  "job_status": "completed",
+  "manifest_schema_findings": 0,
+  "manifest_status": "completed",
+  "verified_artifact_count": 1
+ },
+ "scenario": "j01_happy_path",
+ "title": "새 deterministic stage 성공 → artifact·completed attempt·manifest가 schema를 통과한다"
+}

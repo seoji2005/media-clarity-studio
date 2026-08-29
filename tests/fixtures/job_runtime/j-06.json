@@ -1,0 +1,11 @@
+{
+ "case_id": "J-06",
+ "expect": {
+  "code": "E_ARTIFACT_COLLISION",
+  "existing_untouched": true,
+  "location": "artifacts/sha256/06/0682c5f2076f099c34cfdd15a9e063849ed437a49677e6fcc5b4198c76575be5",
+  "verify_rejects": "E_ARTIFACT_CORRUPT"
+ },
+ "scenario": "j06_corrupt_object",
+ "title": "기존 CAS object가 손상됐으면 hit로 쓰거나 덮어쓰지 않고 안정 오류로 실패한다"
+}

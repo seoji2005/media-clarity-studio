@@ -1,0 +1,21 @@
+{
+ "case_id": "J-09",
+ "expect": {
+  "alpha_cache_status": "hit",
+  "alpha_calls_first_run": 1,
+  "alpha_calls_on_resume": 0,
+  "beta_attempt_ids": [
+   "a0001",
+   "a0002"
+  ],
+  "beta_cache_status": "miss",
+  "beta_calls_on_resume": 1,
+  "beta_statuses": [
+   "completed",
+   "failed"
+  ],
+  "job_status": "completed"
+ },
+ "scenario": "j09_partial_resume",
+ "title": "A 완료 뒤 B 실패 시 재개하면 A는 hit, B만 새 attempt로 실행한다"
+}

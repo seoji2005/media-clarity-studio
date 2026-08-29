@@ -1,0 +1,33 @@
+{
+ "case_id": "J-16",
+ "expect": {
+  "alpha_output_bytes_identical": true,
+  "calls_after_change": {
+   "alpha": 1,
+   "beta": 1,
+   "charlie": 0
+  },
+  "changed_reasons": {
+   "alpha": "cache_key_changed",
+   "beta": "cache_key_changed",
+   "charlie": "verified_checkpoint"
+  },
+  "changed_statuses": {
+   "alpha": "miss",
+   "beta": "miss",
+   "charlie": "hit"
+  },
+  "first_calls": {
+   "alpha": 1,
+   "beta": 1,
+   "charlie": 1
+  },
+  "first_statuses": {
+   "alpha": "miss",
+   "beta": "miss",
+   "charlie": "miss"
+  }
+ },
+ "scenario": "j16_selective_invalidation",
+ "title": "A fingerprint 변경 때 A와 downstream만 miss이고 독립 C는 유효 cache를 재사용한다"
+}

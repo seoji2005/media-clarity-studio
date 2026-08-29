@@ -1,0 +1,217 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.media-clarity-studio.invalid/job-v1.schema.json",
+  "title": "Job/v1 — 재개 가능한 stage runtime 계약 (TASK-028)",
+  "description": "TASK-028 §3.1·§3.4·§3.7. root는 jobs/<job_id>/manifest.json이고 attempt record는 $defs/AttemptRecord로 검사한다. $id는 안정적인 식별자이며 네트워크에서 가져오는 주소가 아니다(.invalid, RFC 2606). ArtifactRef/v1은 common-v1.schema.json의 상대 $ref로 재사용한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "runtime_version",
+    "job_id",
+    "pipeline_id",
+    "status",
+    "created_at",
+    "updated_at",
+    "job_fingerprint",
+    "dag",
+    "stages"
+  ],
+  "properties": {
+    "schema_version": { "$ref": "common-v1.schema.json#/$defs/schema_version" },
+    "runtime_version": {
+      "description": "runtime 계약 버전. cache key와 job fingerprint 양쪽에 들어간다.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "job_id": { "$ref": "#/$defs/path_segment_identifier" },
+    "pipeline_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "status": { "$ref": "#/$defs/job_status" },
+    "created_at": { "$ref": "common-v1.schema.json#/$defs/timestamp" },
+    "updated_at": { "$ref": "common-v1.schema.json#/$defs/timestamp" },
+    "job_fingerprint": {
+      "description": "job-level identity. pipeline ID·runtime/schema version·source identity·DAG topology만 들어간다. 개별 stage의 config/model/context/implementation 변경은 여기가 아니라 stage cache key를 바꾼다 (TASK-028 §3.5).",
+      "$ref": "common-v1.schema.json#/$defs/content_hash"
+    },
+    "source_identity": {
+      "description": "호출자가 제공한 비민감 입력 식별자. 외부 절대 경로를 넣지 않는다 (§3.1).",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "dag": {
+      "description": "선언 순서 그대로의 stage 목록. 실행 순서는 runtime이 결정적으로 topological sort한다.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/DagNode" }
+    },
+    "stages": {
+      "description": "stage별 최신 상태. completed attempt만 checkpoint로 가리킨다.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/StageState" }
+    }
+  },
+  "$defs": {
+    "job_status": {
+      "description": "TASK-028 §3.4.",
+      "enum": ["queued", "running", "paused", "failed", "completed", "cancelled"]
+    },
+    "attempt_status": {
+      "description": "TASK-028 §3.4. running attempt는 재시작 시 interrupted로 보존한다.",
+      "enum": ["running", "interrupted", "failed", "completed"]
+    },
+    "cache_status": {
+      "description": "TASK-028 §3.4.",
+      "enum": ["hit", "miss", "bypassed"]
+    },
+    "cache_reason": {
+      "description": "안정 사유 문자열. 문구가 아니라 이 값이 계약이다.",
+      "enum": [
+        "verified_checkpoint",
+        "no_completed_checkpoint",
+        "cache_key_changed",
+        "not_cacheable"
+      ]
+    },
+    "reproducibility_tier": {
+      "description": "EVAL_HARNESS와 같은 등급 이름을 쓴다.",
+      "enum": ["T1", "T2", "T3"]
+    },
+    "path_segment_identifier": {
+      "description": "filesystem segment로 그대로 쓰는 식별자. 공통 identifier는 ':'을 허용하지만 Windows에서 쓸 수 없으므로 여기서는 더 좁힌다 (TASK-028 §3.1).",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "DagNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage_id", "depends_on"],
+      "properties": {
+        "stage_id": { "$ref": "#/$defs/path_segment_identifier" },
+        "depends_on": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/path_segment_identifier" }
+        }
+      }
+    },
+    "StageState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage_id", "cache_key", "cache_status", "cache_reason", "attempt_id", "attempt_status"],
+      "properties": {
+        "stage_id": { "$ref": "#/$defs/path_segment_identifier" },
+        "cache_key": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+        "cache_status": { "$ref": "#/$defs/cache_status" },
+        "cache_reason": { "$ref": "#/$defs/cache_reason" },
+        "attempt_id": { "$ref": "#/$defs/path_segment_identifier" },
+        "attempt_status": { "$ref": "#/$defs/attempt_status" },
+        "attempt_path": {
+          "description": "project root 기준 portable relative path.",
+          "$ref": "common-v1.schema.json#/$defs/run_output_path"
+        },
+        "error_code": { "$ref": "#/$defs/error_code" }
+      }
+    },
+    "error_code": {
+      "description": "TASK-028 §3.6 안정 오류 코드. events pattern과 같은 모양을 쓴다.",
+      "type": "string",
+      "pattern": "^E_[A-Z_]+$"
+    },
+    "Fingerprints": {
+      "description": "cache key에 들어간 fingerprint 중 실제로 제공된 값. 없는 항목은 필드를 두지 않으며, 부재 자체는 cache key canonical JSON에 null로 들어간다 (§3.3).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implementation_version"],
+      "properties": {
+        "implementation_version": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "config_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+        "dependency_fingerprint": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+        "source_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+        "chunking_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+        "model_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+        "context_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+        "random_seed": { "type": "integer" }
+      }
+    },
+    "AttemptRecord": {
+      "description": "jobs/<job_id>/stages/<stage_id>/attempts/<attempt_id>.json. 원본 바이트·transcript·비밀정보·외부 절대 경로를 담지 않는다 (§3.7).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "runtime_version",
+        "job_id",
+        "stage_id",
+        "attempt_id",
+        "attempt_number",
+        "status",
+        "cache_status",
+        "cache_reason",
+        "cache_key",
+        "callable_invoked",
+        "started_at",
+        "fingerprints",
+        "inputs",
+        "outputs",
+        "verified_artifact_count",
+        "verified_artifact_bytes",
+        "temp_paths"
+      ],
+      "properties": {
+        "schema_version": { "$ref": "common-v1.schema.json#/$defs/schema_version" },
+        "runtime_version": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "job_id": { "$ref": "#/$defs/path_segment_identifier" },
+        "stage_id": { "$ref": "#/$defs/path_segment_identifier" },
+        "attempt_id": { "$ref": "#/$defs/path_segment_identifier" },
+        "attempt_number": { "type": "integer", "minimum": 1 },
+        "status": { "$ref": "#/$defs/attempt_status" },
+        "cache_status": { "$ref": "#/$defs/cache_status" },
+        "cache_reason": { "$ref": "#/$defs/cache_reason" },
+        "cache_key": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+        "cacheable": { "type": "boolean" },
+        "callable_invoked": {
+          "description": "cache hit에서도 callable을 호출하지 않았다는 사실을 명시적으로 남긴다 (§3.7).",
+          "type": "boolean"
+        },
+        "started_at": { "$ref": "common-v1.schema.json#/$defs/timestamp" },
+        "ended_at": {
+          "description": "attempt가 실제로 끝난 시각. completed·failed에만 있다. interrupted는 언제 죽었는지 관측하지 못했으므로 이 필드를 만들어 내지 않고 interrupted_at을 쓴다 (REVIEW-018 M-02).",
+          "$ref": "common-v1.schema.json#/$defs/timestamp"
+        },
+        "interrupted_at": {
+          "description": "재시작이 남아 있는 running attempt를 interrupted로 전이한 것을 **관측한** 시각. 죽은 시각이 아니다.",
+          "$ref": "common-v1.schema.json#/$defs/timestamp"
+        },
+        "wall_duration_seconds": { "$ref": "common-v1.schema.json#/$defs/seconds" },
+        "fingerprints": { "$ref": "#/$defs/Fingerprints" },
+        "reproducibility_tier": { "$ref": "#/$defs/reproducibility_tier" },
+        "inputs": {
+          "type": "array",
+          "items": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" }
+        },
+        "outputs": {
+          "type": "array",
+          "items": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" }
+        },
+        "verified_artifact_count": { "type": "integer", "minimum": 0 },
+        "verified_artifact_bytes": { "type": "integer", "minimum": 0 },
+        "temp_paths": {
+          "description": "실패한 임시 파일의 project root 기준 relative path. 증거로 남기며 자동 삭제하지 않는다 (§3.2).",
+          "type": "array",
+          "items": { "$ref": "common-v1.schema.json#/$defs/run_output_path" }
+        },
+        "error_code": { "$ref": "#/$defs/error_code" },
+        "error_location": {
+          "description": "실제 입력에서 해석되는 JSON Pointer 또는 계약된 filesystem 위치.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      }
+    }
+  }
+}

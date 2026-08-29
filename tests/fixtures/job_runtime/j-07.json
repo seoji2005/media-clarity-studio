@@ -1,0 +1,15 @@
+{
+ "case_id": "J-07",
+ "expect": {
+  "attempt_statuses": [
+   "failed"
+  ],
+  "code": "E_STAGE_FAILED",
+  "completed_count": 0,
+  "manifest_stage_entries": 0,
+  "manifest_status": "failed",
+  "recorded_error": "E_STAGE_FAILED"
+ },
+ "scenario": "j07_stage_failure",
+ "title": "stage callable 실패 시 completed checkpoint·final manifest를 만들지 않고 evidence를 보존한다"
+}

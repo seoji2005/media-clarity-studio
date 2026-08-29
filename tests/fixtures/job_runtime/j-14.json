@@ -1,0 +1,10 @@
+{
+ "case_id": "J-14",
+ "expect": {
+  "code": "E_INPUT_CHANGED",
+  "location": "stage_output",
+  "promoted_artifacts": []
+ },
+ "scenario": "j14_input_changed",
+ "title": "입력 파일이 hashing/copy 중 바뀌면 성공 artifact를 만들지 않는다"
+}

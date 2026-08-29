@@ -8,3 +8,8 @@ __pycache__/
 *.extracted.srt
 *-softsub.mkv
 fixture-source.mkv
+
+# TASK-028 — 저장소 루트에서 runtime을 직접 돌렸을 때 생기는 실행 산출물.
+# 테스트와 smoke는 임시 디렉터리를 쓰므로 평소에는 생기지 않는다.
+/artifacts/
+/jobs/

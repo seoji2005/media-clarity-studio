@@ -1,0 +1,21 @@
+{
+ "case_id": "J-12",
+ "expect": {
+  "missing": {
+   "code": "E_ARTIFACT_MISSING",
+   "evidence_preserved": [
+    "completed"
+   ],
+   "location": "artifacts/sha256/2c/2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+  },
+  "tampered": {
+   "code": "E_ARTIFACT_CORRUPT",
+   "evidence_preserved": [
+    "completed"
+   ],
+   "location": "artifacts/sha256/2c/2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+  }
+ },
+ "scenario": "j12_broken_checkpoint",
+ "title": "완료 checkpoint의 artifact가 누락·변조되면 cache hit를 거부한다"
+}

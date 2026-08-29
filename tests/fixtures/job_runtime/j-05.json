@@ -1,0 +1,13 @@
+{
+ "case_id": "J-05",
+ "expect": {
+  "bytes_unchanged": true,
+  "content_unchanged": true,
+  "first_deduped": false,
+  "inode_unchanged": true,
+  "same_uri": true,
+  "second_deduped": true
+ },
+ "scenario": "j05_dedupe",
+ "title": "기존 CAS object가 같은 hash·size면 dedupe하며 새 바이트를 덮어쓰지 않는다"
+}
