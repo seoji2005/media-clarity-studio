@@ -401,9 +401,16 @@ lineage 규칙:
 | document-level unsupported feature로 cue 비율 계산 불가 | cue ID와 reason이 있는 구조형 record |
 | inline style 숫자가 U-18과 충돌 가능 | profile ID/version+resolved snapshot, schema default 숫자는 없음 |
 
-`docs/EVALS.md`의 Transcript offset 투영도 좁게 정합화한다. raw Transcript는 exact segment `text`와
-ASR segment/token timing을 기준으로 투영하고, SubtitleDocument만 `lines[]`를 결합한
-`canonical_cue_text`를 쓴다. 두 text space를 하나로 취급하지 않는다.
+`docs/EVALS.md`의 offset 규정도 좁게 정합화한다. **두 text space를 하나로 취급하지 않는다** —
+raw Transcript의 offset은 exact segment `text` 기준이고, SubtitleDocument의 offset은 `lines[]`를
+결합한 `canonical_cue_text` 기준이다.
+
+> **문자 offset을 시간으로 옮기는 규칙은 이 TASK에 없다 (§17.7, REVIEW-026 D-04).**
+> 이 절의 초판은 "raw Transcript는 ASR segment/token timing을 기준으로 **투영**한다"고 썼는데,
+> `tokens[]`는 선택 필드이고 문자 offset이 없으며 token 문자열이 segment `text`를 정확히 한 번
+> 분할한다는 계약도 없다. 그래서 EVALS §4.5(a)는 **segment 단위 귀속만** 지원하고
+> intra-segment 문자→시간 투영은 미지원으로 둔다. 위 문장은 offset이 **어느 text space에
+> 속하는가**를 정하는 규칙일 뿐, 시간 투영을 승인하는 규칙이 아니다.
 
 schema와 문서가 다르면 schema가 정답이다. 단, 구현자는 모순을 임의 선택해 schema에 숨기지 않는다.
 이 표로 해결되지 않는 교차 계약 모순을 발견하면 구현을 중단하고 제품 오너에게 올린다.
@@ -484,6 +491,41 @@ finding은 기존처럼 결정적 `(location, code, message)` 정렬을 사용�
 
 같은 입력은 실행마다 같은 code·location 순서를 반환해야 한다.
 finding message에는 source/target text, 절대 경로와 민감한 실제 값을 넣지 않는다.
+
+### 8.1 세 축을 섞지 않는다 — 입력 오류 / schema 위반 / domain 불변식
+
+REVIEW-026 R-02가 지적한 대로, "왜 거부됐는가"는 서로 다른 세 축이다. 하나로 뭉치면
+소비자가 고칠 곳을 찾을 수 없다.
+
+| 축 | 언제 | 어떻게 끝나는가 | 위 표의 code를 쓰나 |
+|---|---|---|---|
+| **입력 오류** | raw JSON 본문이 문서가 되기 **전에** 계약을 어겼다 — 구문 오류, 중복 key, `NaN`/`Infinity`, §18의 숫자 profile 위반 | `JsonInputError`. CLI는 `E_JSON <사유>`를 stderr로 내고 **exit 2**로 끝난다. traceback을 내지 않는다 | **아니다.** finding이 아니다 |
+| **schema 위반** | 문서가 되었지만 정본 schema를 어겼다 | `E_SCHEMA` finding. 그 문서는 **의미 검사를 건너뛴다** (깨진 구조 위에 파생 오류를 쌓지 않는다) | `E_SCHEMA` |
+| **domain 불변식** | schema는 통과했지만 계약이 금지한 조합이다 | `E_TIME_RANGE`·`E_OFFSET_RANGE`·`E_CONFIDENCE` 등 위 표의 code | 그 밖의 21개 |
+
+그래서 **같은 field라도 schema가 먼저 잡으면 `E_SCHEMA`이고, schema를 통과한 뒤 domain이
+잡으면 범위 code**다. 예: `start_seconds: -1`은 schema의 `minimum: 0`이 먼저 잡아 `E_SCHEMA`이고,
+`start_seconds: 10**400`은 schema 범위를 통과하므로(상한이 없다) domain의 `E_TIME_RANGE`가 잡는다.
+이 순서는 우연이 아니라 §8이 정한 것이며 fixture와 mutation이 그대로 고정한다.
+
+문서 집합 root 자체가 객체가 아니면(`[]`·`null`·정수) `E_SCHEMA @ ""`다. 호출자 신뢰로 두지
+않는다 (REVIEW-026 R-02c).
+
+### 8.2 finding location의 비식별화 계약
+
+location은 **정본이 그 자리에서 선언한 고정 field 이름과 배열 index만** 담는다.
+
+- 허용 판정은 **경로별**이다. 어떤 이름이 *다른* 위치의 정본 field라는 사실은 이 위치에서
+  그 이름을 노출해도 된다는 근거가 아니다. 최상위 `uri`·`text`·`artifact_id`,
+  `document_refs["speaker_label"]`은 각각 `""`와 `document_refs`로 접힌다.
+- `patternProperties`가 여는 자리(`resolved_style.language_overrides`)의 key는 **전부** 부모로
+  접는다. BCP-47·private-use 모양(`en-John-Doe`·`en-x-secret`)에도 임의 문자열을 넣을 수 있으므로
+  **모양은 비식별화 근거가 아니다** (REVIEW-026 R-01).
+- 이 계약은 schema finding, domain finding, container 조기 반환, **공개 `check_*` 진입점**에
+  모두 같게 적용된다. `validate_documents()`만 접으면 공개 함수를 직접 부른 소비자에게는
+  raw key가 그대로 간다.
+- 감사의 누출 스캔은 production 접기 함수를 재사용하지 않고 **독립 oracle**(정본에서 펼친 경로
+  패턴 집합 + 입력 해석 가능성)로 판정하며, 동적 mapping key도 민감 후보로 수집한다.
 
 ## 9. fixture와 mutation 요구
 
@@ -1207,3 +1249,156 @@ CLI fixture 경로가 traceback 없이 끝나는 것도 회귀로 고정했다.
 - `STATUS.md`·`PLAN.md`·`DECISIONS.md`의 일반 상태 정합화와 REVIEW-023~025 문서의 통합
   순서는 Lean Root의 몫이며 여기서 하지 않았다 (REVIEW-025 §4).
 - 이 세션은 **작성자**다. 리뷰도 승인도 하지 않는다 (`AGENTS.md` R8).
+
+---
+
+## 18. REVIEW-026 변경 요청 반영 기록 (같은 브랜치의 네 번째 후속 커밋)
+
+> 대상 고정 HEAD `67060e39ef6c4b9b004c77e2c57446804173be3a`,
+> tree `da6d68a45642fbc3d253a4e67bcf9ffcc265b077`, 기준 main
+> `5264f6bec469ae741e8c99d8d5d150cf78e2b76f`.
+> REVIEW-026의 **R-01~R-03과 D-04만** 제한 반영했다. §14~§17의 기록은 각 고정 HEAD의
+> 역사이며 다시 쓰지 않는다.
+
+### 18.1 R-01 — location 비식별화를 **경로별**로 바꿨다
+
+전역 `declared_segments()` 집합을 제거했다. 이제 허용 어휘는 정본 schema를 **입력과 나란히
+따라가며** 그 자리에서 얻는다 (`_document_set_schema()` → `_declared_children()` →
+`_child_position()`/`_item_position()`).
+
+| 입력 | 이전 location | 지금 location |
+|---|---|---|
+| 최상위 `uri` / `text` / `artifact_id` | 그 이름 그대로 | `""` (root) |
+| `document_refs["uri"]` / `["speaker_label"]` / `["artifact_id"]` | `document_refs/<raw key>` | `document_refs` |
+| `language_overrides["patient"]` / `["password"]` | raw key 포함 | `.../language_overrides` |
+| `language_overrides["en-John-Doe"]` / `["en-x-secret"]` | raw key 포함 (BCP-47 모양이라 허용됐다) | `.../language_overrides` |
+| `language_overrides["speaker_label"]` | raw key 포함 | `.../language_overrides` |
+| 정상 `ko` override의 결함 | `.../language_overrides/ko/max_duration_seconds` | `.../language_overrides` |
+
+마지막 줄은 **의도한 축소**다. 정본이 선언한 것은 `language_overrides`까지이고 그 아래 key는
+입력이 정한다. 진단성보다 비노출을 앞세운다 (REVIEW-026 R-01 2번).
+
+- **`patternProperties`는 어휘가 아니다.** language tag 모양은 임의 문자열을 담을 수 있다.
+- **공개 경계도 같은 계약을 지난다.** `_public_boundary()` 데코레이터가 여덟 개 공개
+  `check_*` 함수의 결과를 각자 받은 문서로 접는다. `PB-01`~`PB-08`이 이를 고정한다.
+- **감사 oracle을 분리했다.** `declared_path_patterns()`는 정본을 **먼저 전부 펼쳐**
+  `transcript/streams/*/segments/*/text` 같은 패턴 집합을 만들고,
+  `oracle_location_problem()`이 location을 (a) 입력에서 구간별로 해석되는가,
+  (b) 다른 key와 alias되지 않는가, (c) 그 패턴 집합에 있는가로 판정한다.
+  production `safe_location()`·`declared_segments()`를 부르지 않는다.
+- **동적 mapping key도 민감 후보다.** `oracle_dynamic_keys()`가 정본이 그 자리에서 선언하지
+  않은 key를 전수로 모아 message 누출 판정에 넣는다.
+- 반례는 input mutant `IM-226`~`IM-235`와 fixture `K-160`~`K-169`, source mutant
+  `VM-109`(경로별 어휘를 전역 집합으로 되돌린다)·`VM-142`(language tag 모양을 다시 근거로 삼는다)로
+  고정했다.
+
+### 18.2 R-02 — raw JSON 숫자 profile과 문서 root
+
+**`schema_core.py`는 바꾸지 않았다.** 전부 TASK-029 경계(`subtitle_contracts.py`)에서 해결했다.
+
+#### `num-profile-v1` — 허용 숫자 어휘·정밀도 profile
+
+| 리터럴 종류 | 규칙 | 근거 |
+|---|---|---|
+| 정수 | 유효 자릿수 ≤ **4,300** (`NUMBER_MAX_INTEGER_DIGITS`). 넘으면 거부 | `int()`를 부르기 **전에** 판정하므로 환경의 `ValueError`가 새지 않는다 |
+| decimal (`.` 또는 `e` 포함) | `float(리터럴)`이 유한하고, `Decimal(repr(float(리터럴))) == Decimal(리터럴)` | 리터럴이 그 binary64 값의 **최단 왕복 표기와 수치적으로 같을 것**을 요구한다 |
+
+`parse_int`/`parse_float` hook이 리터럴 **문자열**을 그대로 주므로 tokenizer를 새로 쓰지 않는다.
+
+| 반례 | 결과 |
+|---|---|
+| 4,301자리 · 10,000자리 양/음 정수 | `E_JSON num-profile-v1: 정수 리터럴 유효 자릿수 …` · exit 2. **traceback 없음** |
+| 4,300자리 정수 | 통과 (경계가 정확하다) |
+| confidence `1.0000000000000001` | `E_JSON num-profile-v1: … binary64 반올림으로 값이 바뀐다` |
+| `-1e-400` (timestamp·`min_gap_seconds`) | 같은 profile 오류. `-0.0`으로 조용히 통과하지 않는다 |
+| `1e-400` (`max_cps`) | 같은 profile 오류. `0.0`으로 잘못 거부되지 않는다 |
+| `1e400` | `… binary64 범위를 넘어 유한하지 않다` |
+| `0.1` · `0.30000000000000004` | 통과 — 생산자가 실제로 쓰는 표기를 막지 않는다 |
+
+profile 거부는 **schema 범위 위반과 다른 축**이다 (§8.1). `NumberProfileError`는
+`JsonInputError`의 하위 타입이라 CLI 계약(`E_JSON` + exit 2)이 그대로 유지된다.
+
+#### 문서 집합 root
+
+`documents`가 `[]`·`null`·정수·문자열이면 `E_SCHEMA @ ""`다. 이전 판은
+`AttributeError`/`TypeError` traceback으로 끝났다.
+
+#### 새 회귀 분모
+
+`RJ-01`~`RJ-17`(raw JSON probe)을 `--check-only` payload에 넣었다. in-memory mutation은 이미
+파싱된 객체를 넣으므로 이 축을 **원리적으로** 재현하지 못한다. `validate_documents`의 root
+가드는 방어면 coverage guard에서도 실제로 발화시킨다.
+
+### 18.3 R-03 — manifest가 방어의 **의미**와 자기 갱신을 고정한다
+
+- `SchemaDefense.fingerprint` 추가. 좌표(`파일#/pointer|keyword`)와 함께 **canonical 의미값**을
+  고정한다.
+
+  | kind | fingerprint |
+  |---|---|
+  | `enum` | `enum=["a","b",…]` (canonical JSON, 정렬) |
+  | `pattern` | `pattern="<정규식>"` |
+  | `range:<kw>` | `<kw>=<값>` |
+  | `closed` | `closed=[properties:a,…,patternProperties:^…$]` — **허용되는 이름 집합** |
+  | `required:<f>` | `required=<f>` |
+  | `uniqueItems` | `uniqueItems=true` |
+
+- `--write-manifest`는 **실제로 기록하는 entry**에서 digest를 계산하고, 쓴 직후 같은 파일로
+  `run_manifest_check()`를 돌려 **실패하면 exit 1**로 끝난다. 갱신 도구가 스스로 불일치 파일을
+  만들 수 없다.
+- manifest 검사 8건이 standalone 성공 조건이다.
+
+  | check | 무엇을 막나 |
+  |---|---|
+  | MF-01 / MF-02 | 방어 삭제 / 미등록 신규 방어 |
+  | MF-03 | digest 불일치 |
+  | MF-04 | 근거 없는 equivalent |
+  | MF-05 | 중복 transformation |
+  | **MF-06** | **의미값 drift** — enum 확장, 범위 완화, pattern 변경, closed 객체 확장 |
+  | **MF-07** | killable/equivalent 각 절의 중복과 두 절의 교집합 |
+  | **MF-08** | `defense_declared == defense_unique`, schema·validator mutant의 declared==unique, manifest 선언 수 == 고유 수 |
+
+- 자기검증 `SD-01`~`SD-13`을 저장소 밖 임시 사본에서 돌린다. 각각 `--manifest-check` exit 1이다.
+
+  | id | 훼손 |
+  |---|---|
+  | SD-01~05 | 다섯 정본의 root required 삭제 (REVIEW-024가 지목한 필드) |
+  | **SD-06** | `line_break_policy` enum에 `x_new_policy` 추가 |
+  | **SD-07** | `source_track_index`의 `minimum` 완화 |
+  | **SD-08** | `extension_id` pattern을 `^.*$`로 변경 |
+  | **SD-09** | root `required` 배열에 같은 이름 중복 |
+  | **SD-10 / SD-11** | manifest killable / equivalent 절 안의 ID 중복 |
+  | **SD-12** | killable과 equivalent의 교집합 |
+  | **SD-13** | equivalent 방어(`minLength`) 삭제 → `--manifest-check` **1**, `--write-manifest` **0**, 직후 `--manifest-check` **0** (stale digest 없음) |
+
+- 감사 자기검증에 **AS-04**를 더했다. 갱신 도구가 목록과 다른 digest를 쓰도록 훼손하면
+  `--write-manifest` 자체가 exit 1이어야 한다.
+
+### 18.4 D-04 — 공개 문서 정합화
+
+1. **EVALS §4.5(a)의 1차 분모를 "정답이 알려진 언어를 가진 발화 격자 전부"로 고정했다.**
+   투영 불가·gap·`und` 가설은 분모에서 빼지 않고 `unknown`(오답)으로 센다. 어려운 구간을
+   `und`로 내보내 정확도를 올리는 회피 경로를 닫는다.
+   `hypothesis_coverage`·`unknown_ratio`·`supported_segment_ratio`·`excluded_reference_ratio`를
+   함께 보고하지 않으면 정확도만 보고할 수 없다.
+2. **분모 0은 측정 불가**다. `MetricResult.status = "insufficient_n"`이고 `value`가 없다.
+   0%도 100%도 쓰지 않는다.
+3. intra-segment 문자→시간 투영은 명시적 mapping 계약이 생기기 전까지 **미지원**으로 유지한다.
+4. **ARCHITECTURE §7.3.1의 LID 미지원 fallback을 철회했다.** capability가 거짓이면
+   `language_spans`와 `dominant_language`가 **둘 다 부재**다. 설정 언어를 어댑터 가설처럼 적지
+   않는다.
+5. **TASK §5의 timing projection 문장을 §17.7과 맞췄다.** 그 문장은 offset이 어느 text space에
+   속하는지를 정할 뿐, 시간 투영을 승인하지 않는다.
+6. **`document_refs` 검증 컨텍스트 envelope을 ARCHITECTURE §2.1.1에 공개 계약으로 적었다** —
+   role 두 개, ArtifactRef 모양, 필수 조건, identity 비교 field.
+7. **generic ArtifactRef URI와 TASK-028 store 출력 URI를 분리했다** (ARCHITECTURE §2.1).
+   전자는 불투명 문자열이고 후자는 store가 자기 출력에 대해 지키는 생산 규칙이다.
+   `uri`·`produced_by`·`created_at`·`parent_refs`·`timebase_ref`의 동일성 의미는 **오너 결정**으로
+   남긴다 (§17.8-6).
+
+### 18.5 이 반영에서 정하지 않은 것
+
+§17.8의 오너 결정 항목 아홉 개는 그대로 열려 있다. 이번 반영은 그중 어느 것도 임의로 정하지
+않았다. `schema_core.py`·`artifact_store.py`·`job_runtime.py`·`CACHE_KEY_FIELDS`·
+`common-v1`·`job-v1`은 diff 0이고, 새 dependency·model·network는 0이며 §8의 안정 error code
+22개만 쓴다. **새 error code 0개.**

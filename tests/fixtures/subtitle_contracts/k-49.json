@@ -7,7 +7,7 @@
   "findings": [
    {
     "code": "E_TIME_RANGE",
-    "location": "subtitle_document/resolved_style/language_overrides/ko"
+    "location": "subtitle_document/resolved_style/language_overrides"
    },
    {
     "code": "E_TIME_RANGE",

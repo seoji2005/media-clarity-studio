@@ -92,7 +92,7 @@ ArtifactRef/v1:
   artifact_id      : 문자열                 # 프로젝트 내 고유
   kind             : "audio" | "video" | "frames" | "text" | "mask"
                      | "subtitle" | "report" | "reference_bundle" | "blob"
-  uri              : 문자열                 # storage 상대 경로
+  uri              : 문자열                 # 불투명 위치 문자열 (아래 URI 규칙)
   content_hash     : 문자열                 # 무결성·캐시 키
   byte_size        : 정수
   media_type       : 문자열                 # 예: "audio/wav", "application/json"
@@ -108,6 +108,55 @@ ArtifactRef/v1:
 - `content_hash`가 같으면 같은 산출물로 취급합니다 (캐시 적중).
 - `parent_refs`로 **계보 추적**이 가능해야 합니다. 어떤 입력에서 나왔는지 역추적할 수 없는 산출물은 평가에 쓰지 않습니다.
 - 형식이 바뀌면 `schema_version`의 major를 올립니다. **하위 호환이 깨진 산출물끼리 비교하지 않습니다.**
+
+**`uri` 규칙 — generic ArtifactRef와 TASK-028 store 출력은 다릅니다 (REVIEW-026 D-04)**
+
+| 대상 | `uri`가 담는 것 | 강제하는 곳 |
+|---|---|---|
+| **generic `ArtifactRef`** (기계 정본 `common-v1` `$defs/ArtifactRef`) | **불투명 문자열.** 사용자가 고른 외부 입력 매체의 URI도 담을 수 있어 run 산출물 경로 제한을 적용하지 **않습니다** | `common-v1` schema — `type: string`, `minLength: 1`뿐 |
+| **TASK-028 content-addressed store가 만든 artifact** | project root 기준 **portable relative path**. 외부 절대 경로를 담지 않습니다 | store 구현(`artifact_store.py`)과 §7.8. schema가 아니라 **생산 규칙**입니다 |
+
+즉 §7.8의 relative-path 규칙은 **store가 자기 출력에 대해 지키는 약속**이지 모든
+`ArtifactRef`에 대한 schema 제약이 아닙니다. 외부 입력 매체를 가리키는 ref에 그 제약을
+적용하면 사용자가 고른 파일을 참조할 수 없게 됩니다. 두 규칙을 하나로 합치지 않습니다.
+
+`uri`가 같다는 것이 **같은 artifact라는 뜻인지**는 아직 계약이 없습니다. identity는
+`artifact_id` + `content_hash`이며(§7.12), `uri`·`produced_by`·`created_at`·`parent_refs`·
+`timebase_ref`의 동일성 의미는 **오너 결정 항목으로 열려 있습니다** (TASK-029 §17.8-6).
+TASK-029 validator는 이 다섯 field를 비교하지 않습니다.
+
+### 2.1.1 `document_refs` — 검증 컨텍스트 envelope (공개 계약)
+
+**문서 안에 자기 자신의 `ArtifactRef`를 둘 수 없습니다.** `content_hash`는 그 문서 바이트의
+해시이므로 문서 안에 적으면 순환이 됩니다. 그래서 "지금 검증하는 이 문서가 실제로 어떤
+artifact인가"는 문서가 아니라 **검증 호출의 컨텍스트**로 받습니다. 이 envelope은 구현
+세부가 아니라 검증 API의 일부이므로 여기 적습니다 (REVIEW-026 D-04).
+
+```
+검증 입력 (문서 집합):
+  speech_segments?       : SpeechSegment[]
+  transcript?            : Transcript
+  translated_transcript? : TranslatedTranscript
+  subtitle_document?     : SubtitleDocument
+  document_refs?         : {                      # 검증 컨텍스트 envelope
+      transcript?             : ArtifactRef       # 이 Transcript 자신의 ref
+      translated_transcript?  : ArtifactRef       # 이 TranslatedTranscript 자신의 ref
+  }
+```
+
+| 항목 | 계약 |
+|---|---|
+| role | `transcript`와 `translated_transcript` **둘뿐**입니다. 다른 key는 `E_SCHEMA`이며 그 key 이름은 finding location에 남지 않습니다 |
+| 값의 모양 | 각 role의 값은 `common-v1` `$defs/ArtifactRef` 전체를 만족해야 합니다. 계약 밖 field는 거부합니다 |
+| 종류 결박 | 문서 artifact이므로 `kind`와 `media_type`이 문서용 값이어야 합니다. `kind="video"` 같은 매체 ref를 문서 identity로 쓸 수 없습니다 |
+| **선택이 아님** | 계보 identity를 검사해야 하는 조합(번역·자막이 상류 문서를 참조하는 경우)에서 **필수**입니다. 없거나 필요한 role이 빠지면 조용히 건너뛰지 않고 `E_SOURCE_REF`로 거부합니다. "확인하지 못했다"를 `VALID`로 돌려주지 않습니다 |
+| identity 비교 | 같은 `artifact_id`를 가리키는 모든 ref는 `schema_version`·`content_hash`·`kind`·`media_type`·`byte_size`·`is_estimate`가 일치해야 합니다 (§7.12) |
+| 비교하지 않는 field | `uri`·`produced_by`·`created_at`·`parent_refs`·`timebase_ref` — 동일성 의미가 **오너 결정 항목**입니다 (위 §2.1) |
+
+> 이 envelope을 채우는 것은 **producer(orchestrator)의 몫**입니다. store가 문서를 쓰면서
+> 돌려준 ref를 그대로 넘깁니다. 기계 정본은
+> [`schemas/`](../schemas/)의 다섯 파일 + `common-v1`이고, 검증 진입점 계약은
+> [`docs/tasks/TASK-029.md`](tasks/TASK-029.md) §8에 있습니다.
 
 ### 2.2 `Timebase/v1` — 정준 시간축 (Canonical Timeline)
 
@@ -662,12 +711,20 @@ AdapterCapabilityReport:
 |---|---|---|
 | 단어 타이밍 없음 | `tokens` 생략. 세그먼트 경계만 사용. 강제 정렬(forced alignment)을 **별도 단계로** 시도할 수 있으나, 그 사실을 `provenance`에 기록 | 토큰 단위 타임스탬프 지표는 **미지원** |
 | 신뢰도 없음 | `confidence` 필드 **생략**. 1.0으로 채우지 않는다 | 신뢰도 기반 지표는 **미지원**. `needs_review` 판정은 다른 신호로 대체 |
-| 언어 식별 없음 | `language_spans` 생략. `dominant_language`를 설정에서 받은 값으로 기록하되 `switch_kind: "unknown"` | 언어 식별 정확도 지표는 **미지원** |
+| 언어 식별 없음 | `language_spans`와 `dominant_language`를 **둘 다 생략.** 설정에서 받은 언어를 `dominant_language`에 적지 않는다 | 언어 식별 정확도 지표는 **미지원** |
 | 문장 내 LID 없음 | 세그먼트 전체를 하나의 span으로 기록 | 문장 내 전환 지표는 **미지원** |
 | 겹침 스트림 없음 | 단일 스트림만 생성 | cpWER은 **미지원**, 완화 지표로 대체 ([`EVALS.md`](EVALS.md) §4.2) |
 
 > **금지:** 없는 값을 기본값으로 채우는 것. `confidence = 1.0`, `language = "en"` 같은
 > 조용한 채움은 지표를 오염시키고 오염 사실을 숨깁니다.
+
+> **이전 판의 LID 대체 동작을 철회합니다 (REVIEW-026 D-04).** 이전 표는 `supports_language_id`가
+> 거짓일 때 "설정에서 받은 `dominant_language`를 기록하라"고 적었습니다. 그것은 **어댑터가 하지
+> 않은 판단을 어댑터의 가설처럼 저장하는 것**이고, 위 금지 문장과도 정면으로 어긋납니다.
+> 기계 정본(`transcript-v1`)과 TASK-029 validator는 capability가 거짓이면
+> `language_spans`와 `dominant_language`가 **둘 다 없을 것**을 요구합니다. 설정 언어는
+> 실행 옵션이지 관측이 아니므로 `provenance`의 `params_hash`가 담을 값이며 문서 본문에
+> 언어 가설로 옮겨 적지 않습니다.
 
 **다국어 전략은 아직 미정입니다 (U-13).** (a) 구간별 LID 후 언어별 모델, (b) 다국어 통합 모델.
 

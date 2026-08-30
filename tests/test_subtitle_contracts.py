@@ -553,9 +553,9 @@ class ValidatorBoundaryTests(ContractCase):
         )
         imported = set(re.findall(r"^(?:from|import)\s+([A-Za-z_][A-Za-z0-9_.]*)", source, re.M))
         allowed = {
-            "__future__", "argparse", "json", "math", "shutil", "subprocess", "sys",
-            "tempfile", "dataclasses", "pathlib", "typing", "media_clarity",
-            "media_clarity.schema_core",
+            "__future__", "argparse", "functools", "inspect", "json", "math", "shutil",
+            "subprocess", "sys", "tempfile", "dataclasses", "decimal", "pathlib", "typing",
+            "media_clarity", "media_clarity.schema_core",
         }
         self.assertEqual(imported - allowed, set())
 
@@ -745,7 +745,7 @@ class LocationSafetyTests(ContractCase):
     def test_only_declared_vocabulary_stays_in_the_location(self) -> None:
         """모양이 안전해 보여도 사용자 제어 key는 접는다 (REVIEW-025 R-05).
 
-        남는 것은 정본이 선언한 어휘(language tag subset)뿐이다.
+        남는 것은 정본이 **그 자리에서** 선언한 고정 field 이름뿐이다 (REVIEW-026 R-01).
         """
 
         for key in ("x", "X9", "patient_name", "John_Doe"):
@@ -755,18 +755,86 @@ class LocationSafetyTests(ContractCase):
                     (("E_SCHEMA", "subtitle_document/resolved_style/language_overrides"),),
                 )
 
+        # 정본이 선언한 것은 `language_overrides`까지다. 그 아래 key는 입력이 정하므로
+        # 정상 `ko` override의 결함도 부모로 접힌다 (REVIEW-026 R-01 2번).
         documents = load_fixture(FIXTURE_DIR / "k-01.json")["documents"]
         documents["subtitle_document"]["resolved_style"]["language_overrides"]["ko"] = {
             "max_duration_seconds": 1.0,
             "min_duration_seconds": 2.0,
         }
         self.assertIn(
-            (
-                "E_TIME_RANGE",
-                "subtitle_document/resolved_style/language_overrides/ko/max_duration_seconds",
-            ),
+            ("E_TIME_RANGE", "subtitle_document/resolved_style/language_overrides"),
             validate_documents(documents, self.schemas).pairs,
         )
+
+    def test_field_names_legal_elsewhere_do_not_survive_here(self) -> None:
+        """다른 위치의 정본 field 이름이라는 사실은 이 위치의 노출 근거가 아니다.
+
+        REVIEW-026 R-01의 표를 그대로 고정한다.
+        """
+
+        for key in ("uri", "text", "artifact_id"):
+            with self.subTest(top_level=key):
+                documents = load_fixture(FIXTURE_DIR / "k-01.json")["documents"]
+                documents[key] = "MCS-SENSITIVE-PROBE-VALUE"
+                result = validate_documents(documents, self.schemas)
+                self.assertEqual(result.pairs, (("E_SCHEMA", ""),))
+                for finding in result.findings:
+                    self.assertNotIn(key, finding.location)
+
+        for key in ("uri", "speaker_label", "artifact_id"):
+            with self.subTest(document_refs=key):
+                documents = load_fixture(FIXTURE_DIR / "k-01.json")["documents"]
+                documents["document_refs"][key] = "MCS-SENSITIVE-PROBE-VALUE"
+                result = validate_documents(documents, self.schemas)
+                self.assertEqual(result.pairs, (("E_SCHEMA", "document_refs"),))
+
+    def test_language_tag_shape_is_not_a_deidentification_basis(self) -> None:
+        """BCP-47·private-use 모양에도 임의 문자열을 넣을 수 있다 (REVIEW-026 R-01)."""
+
+        for key in ("patient", "password", "en-John-Doe", "en-x-secret", "ko"):
+            with self.subTest(override=key):
+                documents = load_fixture(FIXTURE_DIR / "k-01.json")["documents"]
+                documents["subtitle_document"]["resolved_style"]["language_overrides"][key] = {
+                    "max_cps": -1
+                }
+                result = validate_documents(documents, self.schemas)
+                self.assertEqual(
+                    result.pairs,
+                    (("E_SCHEMA", "subtitle_document/resolved_style/language_overrides"),),
+                )
+                for finding in result.findings:
+                    self.assertNotIn(key, finding.location)
+
+    def test_public_check_entry_points_apply_the_same_contract(self) -> None:
+        """`validate_documents()`만 접으면 공개 함수 소비자에게 raw key가 그대로 간다."""
+
+        from media_clarity.subtitle_contracts import (
+            check_artifact_consistency,
+            check_document_ref_identity,
+            check_subtitle_document,
+        )
+
+        documents = load_fixture(FIXTURE_DIR / "k-01.json")["documents"]
+        subtitle = documents["subtitle_document"]
+        subtitle["resolved_style"]["language_overrides"]["en-x-secret"] = {"max_cps": -1}
+        refs = dict(documents["document_refs"])
+        refs["speaker_label"] = "MCS-SENSITIVE-PROBE-VALUE"
+        leaky = dict(documents)
+        leaky["document_refs"] = refs
+
+        calls = (
+            lambda: check_subtitle_document(
+                subtitle, documents["transcript"], documents["translated_transcript"]
+            ),
+            lambda: check_document_ref_identity(leaky, refs),
+            lambda: check_artifact_consistency(leaky),
+        )
+        for index, call in enumerate(calls):
+            with self.subTest(entry_point=index):
+                for finding in call():
+                    self.assertNotIn("en-x-secret", finding.location)
+                    self.assertNotIn("speaker_label", finding.location.split("/"))
 
     def test_unknown_top_level_key_never_starts_with_a_slash(self) -> None:
         result = validate_documents({"/home/patient/secret.mp4": {}}, self.schemas)
@@ -1024,8 +1092,10 @@ class RefContextTests(ContractCase):
         documents[REF_CONTEXT_KEY]["subtitle_document"] = json.loads(
             json.dumps(documents[REF_CONTEXT_KEY]["transcript"])
         )
+        # role 이름이 아닌 key는 `document_refs`로 접힌다 — 다른 위치의 정본 문서 key여도
+        # 이 자리에서는 입력이 정한 이름이다 (REVIEW-026 R-01).
         self.assertIn(
-            ("E_SCHEMA", "document_refs/subtitle_document"),
+            ("E_SCHEMA", "document_refs"),
             validate_documents(documents, self.schemas).pairs,
         )
 
@@ -1183,6 +1253,92 @@ class LineageEvidenceTests(ContractCase):
 # ---------------------------------------------------------------------------
 
 
+class RawJsonInputContractTests(ContractCase):
+    """raw JSON 입력 경계 (REVIEW-026 R-02). in-memory 객체로는 재현되지 않는 축이다."""
+
+    def _fixture(self, documents_literal: str) -> str:
+        return (
+            '{"case_id":"K-01","title":"t","expected":{"valid":true,"findings":[]},'
+            f'"documents":{documents_literal}}}'
+        )
+
+    def test_over_limit_integers_are_a_stable_input_error(self) -> None:
+        from media_clarity.subtitle_contracts import (
+            NUMBER_MAX_INTEGER_DIGITS,
+            NumberProfileError,
+            loads_documents,
+        )
+
+        self.assertEqual(NUMBER_MAX_INTEGER_DIGITS, 4300)
+        # 경계 안쪽은 그대로 통과한다 — "큰 수는 무조건 거부"가 아니다.
+        loads_documents(self._fixture('{"speech_segments":[%s]}' % ("1" * 4300)))
+        for digits in (4301, 10000):
+            for sign in ("", "-"):
+                with self.subTest(digits=digits, sign=sign or "+"):
+                    text = self._fixture(
+                        '{"speech_segments":[%s%s]}' % (sign, "1" * digits)
+                    )
+                    with self.assertRaises(NumberProfileError):
+                        loads_documents(text)
+
+    def test_lossy_decimals_are_rejected_not_silently_rounded(self) -> None:
+        from media_clarity.subtitle_contracts import NumberProfileError, loads_documents
+
+        for literal in ("1.0000000000000001", "-1e-400", "1e-400", "1e400"):
+            with self.subTest(literal=literal):
+                with self.assertRaises(NumberProfileError):
+                    loads_documents(self._fixture('{"transcript":{"x":%s}}' % literal))
+
+    def test_ordinary_decimals_pass_the_profile(self) -> None:
+        from media_clarity.subtitle_contracts import loads_documents
+
+        for literal in ("0.1", "0.30000000000000004", "1.5", "1E2", "-0.0", "0"):
+            with self.subTest(literal=literal):
+                loads_documents(self._fixture('{"transcript":{"x":%s}}' % literal))
+
+    def test_every_raw_failure_is_a_json_input_error(self) -> None:
+        from media_clarity.schema_core import JsonInputError
+        from media_clarity.subtitle_contracts import loads_documents
+
+        for text in ('{"a": ', '{"a":1,"a":2}', '{"a":NaN}', '{"a":Infinity}'):
+            with self.subTest(text=text):
+                with self.assertRaises(JsonInputError):
+                    loads_documents(text)
+
+    def test_non_object_document_root_is_a_stable_finding(self) -> None:
+        for root in ([], None, 7, "x"):
+            with self.subTest(root=repr(root)):
+                self.assertEqual(
+                    validate_documents(root, self.schemas).pairs, (("E_SCHEMA", ""),)
+                )
+
+    def test_cli_reports_a_profile_violation_without_a_traceback(self) -> None:
+        import subprocess
+        import tempfile
+
+        from media_clarity import subtitle_contracts
+
+        with tempfile.TemporaryDirectory(prefix="mcs-029-raw-") as tmp:
+            fixtures = Path(tmp) / "fixtures"
+            fixtures.mkdir()
+            (fixtures / "k-01.json").write_text(
+                self._fixture('{"speech_segments":[%s]}' % ("1" * 4301)), encoding="utf-8"
+            )
+            proc = subprocess.run(
+                [
+                    sys.executable, "-m", "media_clarity.subtitle_contracts",
+                    "--fixtures", str(fixtures), "--schemas", str(SCHEMA_DIR),
+                ],
+                cwd=REPO_ROOT, capture_output=True, text=True,
+                env={"PYTHONPATH": "src", "PATH": "/usr/bin:/bin", "HOME": tmp,
+                     "PYTHONDONTWRITEBYTECODE": "1", "PYTHONIOENCODING": "utf-8"},
+            )
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("E_JSON", proc.stderr)
+        self.assertIn(subtitle_contracts.NUMBER_PROFILE_ID, proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+
+
 class ArbitraryPrecisionNumberTests(ContractCase):
     HUGE = 10 ** 400
 
@@ -1295,29 +1451,172 @@ class DefenseManifestTests(ContractCase):
         self.assertTrue(manifest["digest"].startswith("sha256:"))
         self.assertGreaterEqual(len(manifest["killable"]), 250)
         self.assertTrue(manifest["equivalent"])
+        for entry in manifest["killable"] + manifest["equivalent"]:
+            with self.subTest(defense=entry["defense_id"]):
+                self.assertTrue(entry["fingerprint"])
 
     def test_removing_a_production_defense_is_drift_not_a_smaller_denominator(self) -> None:
         import copy
 
         manifest = self.verify.load_defense_manifest()
-        declared = set(manifest["killable"]) | {
-            entry["defense_id"] for entry in manifest["equivalent"]
+        declared = {
+            entry["defense_id"]: entry["fingerprint"]
+            for entry in manifest["killable"] + manifest["equivalent"]
         }
         observed = {
-            defense.defense_id
+            defense.defense_id: defense.fingerprint
             for defense in self.verify.collect_schema_defenses(SCHEMA_DIR)
         }
+        # 좌표만이 아니라 **의미값**까지 같아야 한다 (REVIEW-026 R-03).
         self.assertEqual(declared, observed)
 
         shrunk = copy.deepcopy(observed)
-        shrunk.discard("speech-segment#/|required:source_track_index")
+        shrunk.pop("speech-segment#/|required:source_track_index")
         self.assertNotEqual(declared, shrunk, "삭제가 drift로 드러나야 한다")
+        widened = copy.deepcopy(observed)
+        key = "subtitle-document#/$defs/StyleOverride/properties/line_break_policy|enum"
+        widened[key] = widened[key][:-1] + ',"x_new_policy"]'
+        self.assertNotEqual(declared, widened, "enum 확장이 drift로 드러나야 한다")
 
     def test_equivalent_allowlist_records_a_reason(self) -> None:
         for entry in self.verify.load_defense_manifest()["equivalent"]:
             with self.subTest(defense=entry["defense_id"]):
                 self.assertTrue(entry["reason"].strip())
                 self.assertIn("pattern", entry["reason"])
+
+    def test_semantic_drift_is_caught_without_a_manifest_diff(self) -> None:
+        """enum 확장·범위 완화·pattern 변경이 좌표만 같으면 통과하던 구멍을 막는다."""
+
+        import json as _json
+        import tempfile
+
+        cases = (
+            ("enum 확장", "subtitle-document-v1.schema.json",
+             ("$defs", "StyleOverride", "properties", "line_break_policy"),
+             lambda node: node.__setitem__("enum", list(node["enum"]) + ["x_new_policy"])),
+            ("범위 완화", "speech-segment-v1.schema.json",
+             ("properties", "source_track_index"),
+             lambda node: node.__setitem__("minimum", -1)),
+            ("pattern 변경", "transcript-v1.schema.json", ("$defs", "extension_id"),
+             lambda node: node.__setitem__("pattern", "^.*$")),
+        )
+        for title, name, pointer, mutate in cases:
+            with self.subTest(case=title), tempfile.TemporaryDirectory() as tmp:
+                work = Path(tmp) / "schemas"
+                work.mkdir()
+                for schema_name in SCHEMA_FILES:
+                    (work / schema_name).write_bytes((SCHEMA_DIR / schema_name).read_bytes())
+                document = _json.loads((work / name).read_text(encoding="utf-8"))
+                node = document
+                for token in pointer:
+                    node = node[token]
+                mutate(node)
+                (work / name).write_text(
+                    _json.dumps(document, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+                rows = self.verify.run_manifest_check(work)
+                self.assertFalse(
+                    all(row["passed"] for row in rows),
+                    f"{title}이 manifest diff 없이 통과했다",
+                )
+                self.assertFalse(
+                    next(row for row in rows if row["check_id"] == "MF-06")["passed"]
+                )
+
+    def test_manifest_sections_must_be_unique_and_disjoint(self) -> None:
+        import copy
+        import json as _json
+        import tempfile
+
+        manifest = self.verify.load_defense_manifest()
+        mutations = {
+            "killable 중복": lambda m: m.__setitem__(
+                "killable", m["killable"] + [copy.deepcopy(m["killable"][0])]
+            ),
+            "equivalent 중복": lambda m: m.__setitem__(
+                "equivalent", m["equivalent"] + [copy.deepcopy(m["equivalent"][0])]
+            ),
+            "두 절의 교집합": lambda m: m.__setitem__(
+                "killable",
+                m["killable"] + [{
+                    "defense_id": m["equivalent"][0]["defense_id"],
+                    "fingerprint": m["equivalent"][0]["fingerprint"],
+                }],
+            ),
+        }
+        for title, mutate in mutations.items():
+            with self.subTest(case=title), tempfile.TemporaryDirectory() as tmp:
+                broken = copy.deepcopy(manifest)
+                mutate(broken)
+                path = Path(tmp) / "defense-manifest.json"
+                path.write_text(
+                    _json.dumps(broken, ensure_ascii=False, indent=1) + "\n", encoding="utf-8"
+                )
+                rows = self.verify.run_manifest_check(SCHEMA_DIR, path)
+                self.assertFalse(all(row["passed"] for row in rows), title)
+
+    def test_writer_computes_the_digest_from_what_it_writes(self) -> None:
+        """갱신 도구가 stale digest 파일을 만들 수 없다 (REVIEW-026 R-03 2번)."""
+
+        import json as _json
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp) / "schemas"
+            work.mkdir()
+            for schema_name in SCHEMA_FILES:
+                (work / schema_name).write_bytes((SCHEMA_DIR / schema_name).read_bytes())
+            path = Path(tmp) / "defense-manifest.json"
+            path.write_bytes(self.verify.DEFENSE_MANIFEST_PATH.read_bytes())
+
+            # equivalent 방어 하나를 지운다 — 이전 판이 stale digest를 쓰던 바로 그 경로다.
+            name = "transcript-v1.schema.json"
+            document = _json.loads((work / name).read_text(encoding="utf-8"))
+            document["$defs"]["extension_id"].pop("minLength")
+            (work / name).write_text(
+                _json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
+
+            # 지운 직후에는 drift로 막혀야 한다.
+            self.assertFalse(
+                all(row["passed"] for row in self.verify.run_manifest_check(work, path))
+            )
+            # 명시적 갱신 뒤에는 파일 자체가 일관되어야 한다.
+            _, self_check = self.verify.write_defense_manifest(work, path)
+            self.assertTrue(all(row["passed"] for row in self_check), self_check)
+            self.assertTrue(
+                all(row["passed"] for row in self.verify.run_manifest_check(work, path))
+            )
+            self.assertEqual(
+                _json.loads(path.read_text(encoding="utf-8"))["digest"],
+                self.verify._manifest_digest(
+                    _json.loads(path.read_text(encoding="utf-8"))["killable"],
+                    _json.loads(path.read_text(encoding="utf-8"))["equivalent"],
+                ),
+            )
+
+    def test_duplicate_required_makes_declared_and_unique_differ(self) -> None:
+        import json as _json
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp) / "schemas"
+            work.mkdir()
+            for schema_name in SCHEMA_FILES:
+                (work / schema_name).write_bytes((SCHEMA_DIR / schema_name).read_bytes())
+            name = "transcript-v1.schema.json"
+            document = _json.loads((work / name).read_text(encoding="utf-8"))
+            document["required"] = list(document["required"]) + ["transcript_id"]
+            (work / name).write_text(
+                _json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
+            counts = self.verify.unique_transformation_count(work)
+            self.assertNotEqual(counts["defense_declared"], counts["defense_unique"])
+            rows = self.verify.run_manifest_check(work)
+            self.assertFalse(
+                next(row for row in rows if row["check_id"] == "MF-08")["passed"]
+            )
 
     def test_killable_and_equivalent_denominators_are_separated(self) -> None:
         rows = self.verify.run_schema_defense_inventory(FIXTURE_DIR, SCHEMA_DIR)

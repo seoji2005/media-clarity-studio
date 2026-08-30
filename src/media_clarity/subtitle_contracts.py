@@ -43,10 +43,13 @@ finding 위치는 실제 입력에서 해석 가능한 **선행 ``/`` 없는** J
 from __future__ import annotations
 
 import argparse
+import functools
+import inspect
 import json
 import math
 import sys
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -208,44 +211,107 @@ TRANSLATION_FEATURE_KEYS = ("segment_alignment", "translation_confidence")
 _MISSING = object()
 
 
-def _declared_segments() -> frozenset[str]:
-    """다섯 정본이 **선언한 고정 field 이름**의 전수 집합.
+#: schema 문서 캐시. location 어휘는 정본 파일에서만 나온다.
+_SCHEMA_DOCUMENTS: dict[str, Any] | None = None
 
-    location 구간을 그대로 남겨도 되는 것은 이 allowlist뿐이다. 모양이 ASCII snake_case라는
-    이유만으로는 안전하지 않다 — `patient_name`·`John_Doe`도 같은 모양이다 (REVIEW-025 R-05).
+
+def _schema_documents() -> dict[str, Any]:
+    global _SCHEMA_DOCUMENTS
+    if _SCHEMA_DOCUMENTS is None:
+        documents: dict[str, Any] = {}
+        for name in SCHEMA_FILES:
+            try:
+                documents[name] = load_strict(DEFAULT_SCHEMA_DIR / name)
+            except (JsonInputError, OSError):  # pragma: no cover - 정본이 없으면 어휘가 빈다
+                continue
+        _SCHEMA_DOCUMENTS = documents
+    return _SCHEMA_DOCUMENTS
+
+
+#: 문서 집합 root의 **합성 schema 노드**. 검증 컨텍스트 envelope까지 여기서 선언한다.
+#:
+#: 이 노드가 곧 "location에 남아도 되는 이름"의 유일한 출처다. 전역 field 이름 집합이 아니라
+#: **경로별** 어휘다 — 어떤 이름이 다른 위치의 정본 field라는 사실은 이 위치에서 그 이름을
+#: 노출해도 된다는 근거가 아니다 (REVIEW-026 R-01).
+def _document_set_schema() -> dict[str, Any]:
+    return {
+        "properties": {
+            "speech_segments": {
+                "items": {"$ref": DOCUMENT_KEYS["speech_segments"]}
+            },
+            "transcript": {"$ref": DOCUMENT_KEYS["transcript"]},
+            "translated_transcript": {"$ref": DOCUMENT_KEYS["translated_transcript"]},
+            "subtitle_document": {"$ref": DOCUMENT_KEYS["subtitle_document"]},
+            REF_CONTEXT_KEY: {
+                "properties": {
+                    role: {"$ref": f"{COMMON_SCHEMA_FILE}#/$defs/ArtifactRef"}
+                    for role in REF_CONTEXT_ROLES
+                }
+            },
+        }
+    }
+
+
+#: schema 위치 하나 = `(노드, 그 노드를 정의한 파일)`. `None` 노드는 "어휘를 모른다"다.
+_Position = tuple[Any, str]
+
+_NO_POSITION: _Position = (None, "")
+
+
+def _follow_ref(node: Any, file: str) -> _Position:
+    """`$ref` 체인을 따라 실제 노드로 정규화한다. 못 따라가면 `_NO_POSITION`."""
+
+    for _ in range(16):  # 정본은 순환 $ref를 쓰지 않는다. 상한은 방어적 고정값이다.
+        if not isinstance(node, Mapping) or "$ref" not in node:
+            return (node, file) if isinstance(node, Mapping) else _NO_POSITION
+        reference = node["$ref"]
+        if not isinstance(reference, str):
+            return _NO_POSITION
+        target_file, _, fragment = reference.partition("#")
+        file = target_file or file
+        document = _schema_documents().get(file)
+        if document is None:
+            return _NO_POSITION
+        node = document
+        for token in fragment.split("/"):
+            if not token:
+                continue
+            token = token.replace("~1", "/").replace("~0", "~")
+            if not isinstance(node, Mapping) or token not in node:
+                return _NO_POSITION
+            node = node[token]
+    return _NO_POSITION  # pragma: no cover - 순환 $ref 방어
+
+
+def _declared_children(position: _Position) -> frozenset[str]:
+    """이 위치에서 정본이 **선언한 고정 field 이름**.
+
+    `patternProperties`는 포함하지 않는다. language tag 모양이든 아니든 그 key는 입력이
+    정하는 값이고, 모양은 비식별화 근거가 아니다 (REVIEW-026 R-01).
     """
 
-    names: set[str] = set(DOCUMENT_KEYS)
-    names.add(REF_CONTEXT_KEY)
-
-    def walk(node: Any) -> None:
-        if isinstance(node, dict):
-            for key, value in node.items():
-                if key == "properties" and isinstance(value, dict):
-                    names.update(value)
-                if key in ("patternProperties",):
-                    continue
-                walk(value)
-        elif isinstance(node, list):
-            for item in node:
-                walk(item)
-
-    for name in SCHEMA_FILES:
-        try:
-            walk(load_strict(DEFAULT_SCHEMA_DIR / name))
-        except (JsonInputError, OSError):  # pragma: no cover - 정본이 없으면 allowlist만 줄어든다
-            continue
-    return frozenset(names)
+    node = position[0]
+    if not isinstance(node, Mapping):
+        return frozenset()
+    properties = node.get("properties")
+    return frozenset(properties) if isinstance(properties, Mapping) else frozenset()
 
 
-_DECLARED_SEGMENTS: frozenset[str] | None = None
+def _child_position(position: _Position, key: str) -> _Position:
+    node, file = position
+    if not isinstance(node, Mapping):
+        return _NO_POSITION
+    properties = node.get("properties")
+    if not isinstance(properties, Mapping) or key not in properties:
+        return _NO_POSITION
+    return _follow_ref(properties[key], file)
 
 
-def declared_segments() -> frozenset[str]:
-    global _DECLARED_SEGMENTS
-    if _DECLARED_SEGMENTS is None:
-        _DECLARED_SEGMENTS = _declared_segments()
-    return _DECLARED_SEGMENTS
+def _item_position(position: _Position) -> _Position:
+    node, file = position
+    if not isinstance(node, Mapping) or "items" not in node:
+        return _NO_POSITION
+    return _follow_ref(node["items"], file)
 
 
 def _step(node: Any, segment: str) -> Any:
@@ -261,40 +327,10 @@ def _step(node: Any, segment: str) -> Any:
     return _MISSING
 
 
-#: 정본이 **선언한 dynamic key 어휘**를 가진 유일한 자리.
-#: `patternProperties`의 language tag subset은 계약이 정한 vocabulary이지 자유 입력이 아니다.
+#: 입력이 key를 정하는 자리. 여기 아래 구간은 **전부** 부모로 접는다.
+#: language tag 모양(BCP-47·private-use 포함)은 임의 문자열을 담을 수 있으므로 비식별화
+#: 근거가 아니다 (REVIEW-026 R-01).
 LANGUAGE_OVERRIDES_LOCATION = "subtitle_document/resolved_style/language_overrides"
-
-
-def _is_language_tag_subset(value: str) -> bool:
-    """`^[a-z]{2,8}(-[A-Za-z0-9]{1,8})*$` 부분집합인가 (§4.3의 구조 subset).
-
-    `schema_core`가 쓰는 정규식과 같은 어휘를 표준 라이브러리 문자열 연산으로 확인한다.
-    """
-
-    if not value:
-        return False
-    parts = value.split("-")
-    primary = parts[0]
-    if not 2 <= len(primary) <= 8 or not all("a" <= character <= "z" for character in primary):
-        return False
-    return all(
-        1 <= len(part) <= 8
-        and all(character.isascii() and character.isalnum() for character in part)
-        for part in parts[1:]
-    )
-
-
-def _segment_allowed(parent_location: str, key: str) -> bool:
-    """이 구간을 location에 그대로 남겨도 되는가.
-
-    남길 수 있는 것은 (a) 정본이 선언한 고정 field 이름과 (b) 정본이 선언한 dynamic key
-    어휘뿐이다. 모양이 ASCII snake_case라는 이유만으로는 남기지 않는다 (REVIEW-025 R-05).
-    """
-
-    if key in declared_segments():
-        return True
-    return parent_location == LANGUAGE_OVERRIDES_LOCATION and _is_language_tag_subset(key)
 
 
 def _match_keys(node: Mapping[str, Any], remainder: str) -> list[str]:
@@ -323,12 +359,19 @@ def safe_location(location: str, root: Any = None) -> str:
     - `language_overrides["a/b"]`가 실제 `a.b` 경로와 같은 location으로 충돌
     - `patient_name`·`John_Doe` 같은 ASCII 사용자 key가 그대로 노출
 
-    지금은 **실제 입력을 따라가며** 구간을 확정한다. 각 단계에서 그 노드의 실제 key 중
-    앞부분과 맞는 것을 찾고,
+    지금은 **실제 입력과 정본 schema를 나란히 따라가며** 구간을 확정한다. 각 단계에서 그
+    노드의 실제 key 중 앞부분과 맞는 것을 찾고,
 
     - 맞는 key가 둘 이상이면(alias 충돌) 거기서 접는다,
-    - 맞는 key가 정본이 **선언한 고정 field**가 아니면 거기서 접는다,
+    - 맞는 key가 **바로 그 위치에서** 정본이 선언한 고정 field가 아니면 거기서 접는다,
     - 아무 key도 맞지 않으면 거기서 접는다.
+
+    두 번째 조건이 전역 집합이 아니라 **경로별** 어휘라는 점이 핵심이다. 이전 판은 다섯
+    정본의 모든 `properties` 이름을 하나로 합쳐서 봤기 때문에, 다른 위치의 정본 field 이름과
+    같기만 하면 사용자 제어 key도 그대로 남았다 — 최상위 `uri`·`text`·`artifact_id`,
+    `document_refs["speaker_label"]`이 그랬다. `patternProperties`의 dynamic key도 이제
+    남기지 않는다. `en-John-Doe`·`en-x-secret`처럼 language tag 모양에 임의 문자열을 담을 수
+    있으므로 모양은 비식별화 근거가 아니다 (REVIEW-026 R-01).
 
     `root`가 없으면 입력을 따라갈 수 없으므로 아무것도 접지 않고 그대로 돌려준다. 최종
     정규화는 `validate_documents`가 문서 집합을 들고 한 번에 수행한다.
@@ -339,13 +382,15 @@ def safe_location(location: str, root: Any = None) -> str:
 
     kept: list[str] = []
     node: Any = root
+    position = _follow_ref(_document_set_schema(), COMMON_SCHEMA_FILE)
     remainder = location
     while remainder:
         if isinstance(node, Mapping):
             matches = _match_keys(node, remainder)
-            if len(matches) != 1 or not _segment_allowed("/".join(kept), matches[0]):
+            if len(matches) != 1 or matches[0] not in _declared_children(position):
                 break
             key = matches[0]
+            position = _child_position(position, key)
             node = node[key]
             kept.append(key)
             remainder = remainder[len(key) + 1:] if len(remainder) > len(key) else ""
@@ -354,12 +399,54 @@ def safe_location(location: str, root: Any = None) -> str:
             segment, _, rest = remainder.partition("/")
             if not segment.isdigit() or not 0 <= int(segment) < len(node):
                 break
+            position = _item_position(position)
             node = node[int(segment)]
             kept.append(segment)
             remainder = rest
             continue
         break
     return "/".join(kept)
+
+
+def _public_boundary(root_builder):
+    """공개 `check_*` 진입점도 `validate_documents`와 **같은 비노출 계약**을 지나게 한다.
+
+    이전 판은 `_finalize()`만 접었기 때문에 `check_subtitle_document()`를 직접 부르면 같은
+    raw key가 그대로 나왔다 (REVIEW-026 R-01 3번). 이제 각 공개 함수가 자기가 받은 문서로
+    부분 root를 만들어 스스로 접는다. `validate_documents`가 뒤에서 전체 문서 집합으로 다시
+    접어도 결과는 같다 — 접힌 location은 전부 정본이 선언한 구간이라 다시 접히지 않는다.
+
+    `location` 인자를 정본 문서 key가 아닌 값으로 바꿔 부르면 어휘를 알 수 없으므로 root로
+    접힌다. 안전한 방향이며 내부 호출은 모두 기본값을 쓴다.
+    """
+
+    def decorate(function):
+        signature = inspect.signature(function)
+
+        @functools.wraps(function)
+        def wrapper(*args: Any, **kwargs: Any) -> list[Finding]:
+            findings = function(*args, **kwargs)
+            bound = signature.bind(*args, **kwargs)
+            bound.apply_defaults()
+            root = root_builder(bound.arguments)
+            return dedupe_findings(
+                sort_findings(
+                    Finding(
+                        location=safe_location(finding.location, root),
+                        code=finding.code,
+                        message=finding.message,
+                    )
+                    for finding in findings
+                )
+            )
+
+        return wrapper
+
+    return decorate
+
+
+def _boundary_root(*pairs: tuple[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in pairs if value is not None}
 
 
 def _finding(location: str, code: str, message: str) -> Finding:
@@ -648,6 +735,7 @@ def _check_partition(
 # ---------------------------------------------------------------------------
 
 
+@_public_boundary(lambda a: _boundary_root((a["location"], list(a["segments"]))))
 def check_speech_segments(segments: Sequence[Any], location: str = "speech_segments") -> list[Finding]:
     """같은 실행의 ordered SpeechSegment 집합 불변식 (TASK-029 §4.1)."""
 
@@ -886,6 +974,11 @@ def _transcript_segments(transcript: Mapping[str, Any], location: str) -> list[_
     return collected
 
 
+@_public_boundary(
+    lambda a: _boundary_root(
+        (a["location"], a["transcript"]), ("speech_segments", list(a["speech_segments"]))
+    )
+)
 def check_transcript(
     transcript: Mapping[str, Any],
     speech_segments: Sequence[Any],
@@ -1649,6 +1742,7 @@ def _check_declared_languages(
     ]
 
 
+@_public_boundary(lambda a: _boundary_root((a["location"], a["transcript"])))
 def check_asr_capability_binding(
     transcript: Mapping[str, Any], location: str = "transcript"
 ) -> list[Finding]:
@@ -1883,6 +1977,9 @@ def _translation_segments(
     return collected
 
 
+@_public_boundary(
+    lambda a: _boundary_root((a["location"], a["document"]), ("transcript", a["transcript"]))
+)
 def check_translated_transcript(
     document: Mapping[str, Any],
     transcript: Mapping[str, Any] | None,
@@ -2358,6 +2455,9 @@ def _check_code_switching_input(
     return []
 
 
+@_public_boundary(
+    lambda a: _boundary_root((a["location"], a["document"]), ("transcript", a["transcript"]))
+)
 def check_translation_capability_binding(
     document: Mapping[str, Any],
     location: str = "translated_transcript",
@@ -2552,6 +2652,7 @@ def required_ref_roles(documents: Mapping[str, Any]) -> set[str]:
     return roles
 
 
+@_public_boundary(lambda a: {**a["documents"], REF_CONTEXT_KEY: a["refs"]})
 def check_document_ref_identity(
     documents: Mapping[str, Any], refs: Mapping[str, Any]
 ) -> list[Finding]:
@@ -2658,6 +2759,7 @@ def _collect_artifact_refs(
             _collect_artifact_refs(item, f"{location}/{index}", found)
 
 
+@_public_boundary(lambda a: dict(a["documents"]))
 def check_artifact_consistency(documents: Mapping[str, Any]) -> list[Finding]:
     """같은 `artifact_id`는 같은 artifact여야 한다 (ARCHITECTURE §2.1).
 
@@ -2695,6 +2797,13 @@ def check_artifact_consistency(documents: Mapping[str, Any]) -> list[Finding]:
     return findings
 
 
+@_public_boundary(
+    lambda a: _boundary_root(
+        (a["location"], a["document"]),
+        ("transcript", a["transcript"]),
+        ("translated_transcript", a["translated"]),
+    )
+)
 def check_subtitle_document(
     document: Mapping[str, Any],
     transcript: Mapping[str, Any] | None,
@@ -3375,8 +3484,9 @@ def _finalize(findings: Sequence[Finding], documents: Mapping[str, Any]) -> Vali
     조기 반환 경로가 이 단계를 건너뛰면 dynamic key가 그대로 새어 나간다 (REVIEW-025 R-05).
     """
 
+    root = documents if isinstance(documents, Mapping) else None
     resolved = [
-        Finding(location=safe_location(finding.location, documents), code=finding.code,
+        Finding(location=safe_location(finding.location, root), code=finding.code,
                 message=finding.message)
         for finding in findings
     ]
@@ -3406,7 +3516,16 @@ def validate_documents(documents: Mapping[str, Any], schemas: SchemaSet) -> Vali
 
     schema 검사에서 실패한 문서는 의미 검사를 건너뛴다. 구조가 깨진 문서 위에 파생 오류를
     쌓지 않기 위해서다 (기존 TASK-006·TASK-028 validator와 같은 방침).
+
+    **문서 집합 root가 객체가 아니면 그 자체가 `E_SCHEMA @ ""`다.** precondition을 호출자
+    신뢰로 두면 `[]`·`null`·정수 root가 `AttributeError`/`TypeError` traceback으로 끝난다
+    (REVIEW-026 R-02c). 계약은 traceback이 아니라 안정 code/location이다.
     """
+
+    if not isinstance(documents, Mapping):
+        return _finalize(
+            [_finding("", "E_SCHEMA", "문서 집합 root는 객체여야 한다")], {}
+        )
 
     container_findings = _check_containers(documents, SchemaValidator(schemas))
     if container_findings:
@@ -3485,8 +3604,121 @@ class FixtureOutcome:
     observed: tuple[tuple[str, str], ...]
 
 
+# ---------------------------------------------------------------------------
+# raw JSON 숫자 profile (REVIEW-026 R-02)
+# ---------------------------------------------------------------------------
+
+#: TASK-029가 받는 raw JSON 숫자 리터럴의 **어휘·정밀도 profile** 식별자.
+#: 문서 계약은 TASK-029 §18에 있다.
+NUMBER_PROFILE_ID = "num-profile-v1"
+
+#: 정수 리터럴의 유효 자릿수 상한. CPython 기본 `int` 문자열 변환 상한과 같은 값을 계약으로
+#: 고정한다. 넘는 값은 `int()`를 부르기 **전에** 거부하므로 환경의 `ValueError`가 새지 않는다.
+NUMBER_MAX_INTEGER_DIGITS = 4300
+
+
+class NumberProfileError(JsonInputError):
+    """raw JSON 숫자가 `num-profile-v1`을 벗어났다.
+
+    schema 범위 위반(`E_SCHEMA`·`E_TIME_RANGE` 등 finding)과 **다른 축**이다. 이쪽은 문서를
+    읽기도 전에 입력 어휘 자체가 계약 밖이라는 뜻이고, CLI에서 `E_JSON num-profile-v1 …`로
+    끝난다 (REVIEW-026 R-02).
+    """
+
+
+def _profile_integer(literal: str) -> int:
+    digits = literal.lstrip("+-")
+    if len(digits) > NUMBER_MAX_INTEGER_DIGITS:
+        raise NumberProfileError(
+            f"{NUMBER_PROFILE_ID}: 정수 리터럴 유효 자릿수 {len(digits)}가 상한 "
+            f"{NUMBER_MAX_INTEGER_DIGITS}를 넘는다"
+        )
+    return int(literal)
+
+
+def _profile_decimal(literal: str) -> float:
+    """decimal 리터럴이 binary64로 **값을 잃지 않고** 옮겨지는지.
+
+    기본 `json.loads`는 원문 decimal을 조용히 binary64로 반올림한다. 그래서
+    `1.0000000000000001`이 `1.0`이 되어 `[0,1]` 밖 confidence가 통과하고, `-1e-400`이 `-0.0`이
+    되어 음수 불변식을 우회하며, `1e-400`은 `0.0`이 되어 양수 값이 잘못 거부된다.
+
+    profile은 리터럴이 그 binary64 값의 **최단 왕복 표기와 수치적으로 같을 것**을 요구한다.
+    `0.1`·`0.30000000000000004`처럼 생산자가 실제로 쓰는 표기는 통과하고, 위 세 반례는
+    전부 거부된다 (REVIEW-026 R-02b).
+    """
+
+    value = float(literal)
+    if not math.isfinite(value):
+        raise NumberProfileError(
+            f"{NUMBER_PROFILE_ID}: decimal 리터럴이 binary64 범위를 넘어 유한하지 않다"
+        )
+    try:
+        exact = Decimal(literal)
+    except InvalidOperation:  # pragma: no cover - JSON 문법이 이미 걸러낸다
+        raise NumberProfileError(f"{NUMBER_PROFILE_ID}: decimal 리터럴을 해석할 수 없다") from None
+    if Decimal(repr(value)) != exact:
+        raise NumberProfileError(
+            f"{NUMBER_PROFILE_ID}: decimal 리터럴이 binary64 반올림으로 값이 바뀐다"
+        )
+    return value
+
+
+def assert_number_profile(text: str) -> None:
+    """raw JSON 본문의 **모든 숫자 리터럴**을 profile로 검사한다.
+
+    `parse_int`/`parse_float` hook이 리터럴 문자열을 그대로 준다. 정수는 `int()`를 부르기
+    전에 자릿수를 보므로 4,301자리 입력이 표준 라이브러리 `ValueError`로 터지지 않는다.
+    JSON 구문 오류는 여기서 판단하지 않고 `loads_strict`의 canonical message에 맡긴다.
+    """
+
+    try:
+        json.loads(
+            text,
+            parse_int=_profile_integer,
+            parse_float=_profile_decimal,
+            parse_constant=lambda name: None,
+        )
+    except NumberProfileError:
+        raise
+    except (ValueError, RecursionError):
+        return
+
+
+def loads_documents(text: str) -> Any:
+    """TASK-029의 **raw JSON 입력 경계**. 실패는 언제나 `JsonInputError`다.
+
+    traceback으로 끝나는 경로를 남기지 않는다 (REVIEW-026 R-02). `schema_core.loads_strict`는
+    그대로 쓰고(중복 key·NaN/Infinity 거부), 그 바깥에서 profile 검사와 예외 정규화만 한다.
+    """
+
+    assert_number_profile(text)
+    try:
+        return loads_strict(text)
+    except JsonInputError:
+        raise
+    except json.JSONDecodeError as exc:
+        raise JsonInputError(
+            f"JSON 구문 오류: line {exc.lineno} column {exc.colno}"
+        ) from None
+    except RecursionError:
+        raise JsonInputError("JSON 중첩 깊이가 너무 깊다") from None
+    except ValueError:
+        raise NumberProfileError(
+            f"{NUMBER_PROFILE_ID}: 표준 라이브러리가 거부한 숫자 리터럴"
+        ) from None
+
+
+def load_documents(path: Path) -> Any:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise JsonInputError(f"{path.name}: 읽을 수 없다 ({type(exc).__name__})") from None
+    return loads_documents(text)
+
+
 def load_fixture(path: Path) -> dict[str, Any]:
-    fixture = load_strict(path)
+    fixture = load_documents(path)
     if not isinstance(fixture, dict):
         raise JsonInputError(f"{path.name}: fixture root가 객체가 아니다")
     for key in ("case_id", "title", "expected", "documents"):
@@ -3539,7 +3771,7 @@ def run_fixtures(directory: Path, schemas: SchemaSet) -> list[FixtureOutcome]:
 
 
 #: fixture 디렉터리에 반드시 있어야 하는 case ID. 조용한 누락을 막는다.
-EXPECTED_CASE_IDS = tuple(f"K-{index:02d}" for index in range(1, 160))
+EXPECTED_CASE_IDS = tuple(f"K-{index:02d}" for index in range(1, 170))
 
 
 def main(argv: Sequence[str] | None = None) -> int:

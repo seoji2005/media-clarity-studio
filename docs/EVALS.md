@@ -667,26 +667,55 @@ CER의 단위가 정의되지 않습니다 (REVIEW-002 M-06 ⑤). 그래서 표�
 |---|---|
 | 단위 | 고정 격자 (제안: 100ms 프레임) |
 | 범위 | **정답 발화 구간만.** 무음은 제외 (무음에 언어가 없음) |
-| 분모 | 정답 발화 구간의 격자 수 |
-| 계산 | 격자별 정답 언어 vs 가설 언어 일치율. 가설 쪽 언어의 단일 출처는 **`Transcript.language_spans`** 하나이며([`ARCHITECTURE.md`](ARCHITECTURE.md) §3.0.2 L-1) **문자 오프셋** 기반이므로 아래 투영식으로 시간으로 옮깁니다. `SubtitleDocument` 가설에는 **적용하지 않습니다**(아래 D-02) |
-| 보고 | 언어별 혼동 행렬 |
+| **1차 분모** | **정답이 알려진 언어를 가진 발화 격자 전부.** 가설이 그 격자에 언어를 붙였는지와 **무관하게** 셉니다 |
+| 계산 | 격자별 정답 언어 vs 가설 언어 일치율. 가설 쪽 언어의 단일 출처는 **`Transcript.language_spans`** 하나이며([`ARCHITECTURE.md`](ARCHITECTURE.md) §3.0.2 L-1) **segment 단위**로만 시간에 귀속합니다 (아래 S1–S4). `SubtitleDocument` 가설에는 **적용하지 않습니다**(아래 D-02) |
+| 보고 | 언어별 혼동 행렬 + 아래 네 비율 |
 
-**지금 계산할 수 있는 것과 없는 것을 나눕니다 (REVIEW-025 D-03)**
+**분모는 가설이 줄이지 못합니다 (REVIEW-026 D-04)**
 
-| 범위 | 상태 | 근거 |
+이전 판은 "정답 발화 격자 전부"를 분모라고 쓰면서, 동시에 투영할 수 없는 가설 segment를
+분모에서 제외한다고 썼습니다. 두 문장은 서로 모순이고, 뒤 문장을 따르면 **어려운 구간을
+`und`·gap·복수 언어로 내보내는 것만으로 정확도가 올라갑니다.** 그 회피 경로를 닫습니다.
+
+| 범위 | 상태 | 분모에서의 취급 |
 |---|---|---|
-| **segment 단위** 언어 귀속 — 한 ASR segment의 text 전체가 **알려진 한 언어**로 덮일 때 그 segment 구간 `[start_seconds, end_seconds)` 전체를 그 언어로 본다 | **지원** | segment 구간은 계약이 보장하고, 그 안에 언어 경계가 없다 |
-| segment 안에 **여러 language span**이 있을 때의 문자→시간 투영 (intra-segment 언어 구간·전환 시점) | **미지원** | 아래 |
-| `SubtitleDocument` cue의 문자 범위 언어 | **미지원** | 아래 D-02 |
+| **segment 단위** 언어 귀속 — 한 ASR segment의 text 전체가 **알려진 한 언어**로 덮일 때 그 segment 구간 `[start_seconds, end_seconds)` 전체를 그 언어로 본다 | **지원** | 분모에 포함, 가설 언어 있음 |
+| segment 안에 **여러 language span**이 있을 때의 문자→시간 투영 (intra-segment 언어 구간·전환 시점) | **미지원** | **분모에 그대로 포함**, 가설 언어는 `unknown`(오답) |
+| 가설이 그 시각을 아예 덮지 않음 (gap) | — | **분모에 그대로 포함**, 가설 언어는 `unknown`(오답) |
+| 가설 segment의 언어가 `und` | — | **분모에 그대로 포함**, 가설 언어는 `unknown`(오답) |
+| **정답** 쪽 언어가 `und`이거나 없는 격자 | — | **1차 분모에서 제외** (채점 기준이 없음). 제외 비율을 반드시 보고 |
+| `SubtitleDocument` cue의 문자 범위 언어 | **미지원** | 이 가설에는 지표 자체를 적용하지 않음 (아래 D-02) |
 
 ```
 S1. Transcript segment의 language_spans가 gap·und 없이 **단일 known language**로
     text 전체를 덮으면, 그 segment 구간 전체의 가설 언어는 그 언어다.
-S2. 격자 g의 가설 언어 = g의 중앙 시각을 포함하는 segment 구간의 언어.
-    포함하는 구간이 없으면 "unknown".
-S3. 그 조건을 만족하지 않는 segment(여러 언어·gap·und)는 이 지표의 분모에서
-    **제외하고 그 사실을 보고**한다. 추정으로 채우지 않는다.
+S2. 격자 g의 가설 언어 = g의 중앙 시각을 포함하는, S1을 만족하는 segment 구간의 언어.
+    그런 구간이 없으면 "unknown"이다.
+S3. "unknown"은 **분모에서 빼지 않고 오답으로 센다.** 투영 불가·gap·und를 구분해
+    세지만, 셋 다 정확도의 분자에 들어가지 않는다. 추정으로 채우지도 않는다.
+S4. 1차 분모에서 빠지는 것은 **정답 쪽에 채점 기준이 없는 격자**뿐이다.
 ```
+
+**함께 보고하는 네 비율 — 이 중 하나라도 빠지면 정확도만 보고할 수 없습니다**
+
+| 이름 | 정의 |
+|---|---|
+| `hypothesis_coverage` | 1차 분모 격자 중 가설 언어가 `unknown`이 **아닌** 비율 |
+| `unknown_ratio` | 1차 분모 격자 중 가설이 `unknown`인 비율 (투영 불가 / gap / und로 나눠 보고) |
+| `supported_segment_ratio` | 격자와 겹치는 가설 segment 중 S1을 만족하는 비율 |
+| `excluded_reference_ratio` | 전체 발화 격자 중 **정답 쪽** 언어가 없어 1차 분모에서 빠진 비율 |
+
+`hypothesis_coverage`가 낮은 실행의 정확도는 그 자체로 낮게 나옵니다. 덮인 격자만으로
+계산한 보조 값(`lid_accuracy_on_covered`)을 함께 낼 수는 있지만, **1차 값과 커버리지 없이
+단독으로 보고하지 않습니다.**
+
+**분모가 0이면 지표는 "측정 불가"입니다**
+
+1차 분모 격자 수가 0이면 (정답에 알려진 언어 구간이 없는 실행) 이 지표는 **측정 불가**입니다.
+`MetricResult.status = "insufficient_n"`로 기록하고 `value`를 넣지 않습니다
+(`common-v1` `$defs/MetricResult`는 `status != computed`일 때 `value`를 금지합니다).
+**0%로도 100%로도 쓰지 않습니다.** 0은 "다 틀렸다", 100은 "다 맞았다"는 주장인데 둘 다
+근거가 없습니다. 집계·평균에서도 이 실행은 값이 아니라 **개수**로 셉니다 (§4 지표 상태 규약).
 
 **segment 안쪽 문자→시간 투영은 아직 계약이 없습니다.**
 
@@ -702,7 +731,7 @@ S3. 그 조건을 만족하지 않는 segment(여러 언어·gap·und)는 이 �
 
 | 가설 산출물 | 언어 구간을 어디서 얻나 | 시간 귀속 |
 |---|---|---|
-| `Transcript/v1` (원문 축) | 문서에 저장된 `segments[].language_spans[]` | **segment 단위만** (S1–S3). intra-segment는 미지원 |
+| `Transcript/v1` (원문 축) | 문서에 저장된 `segments[].language_spans[]` | **segment 단위만** (S1–S4). intra-segment는 미지원이며, 그 격자는 분모에 남고 `unknown`으로 셉니다 |
 | `SubtitleDocument/v1` | **없음 — 이 지표는 미지원입니다** (아래) | — |
 
 **cue 문자 범위 LID는 현재 계약으로 계산할 수 없습니다 (REVIEW-024 D-02)**
