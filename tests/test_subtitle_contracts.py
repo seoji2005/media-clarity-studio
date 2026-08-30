@@ -168,12 +168,30 @@ class SchemaContractTests(ContractCase):
             if marker in path.read_text(encoding="utf-8")
         ]
         self.assertEqual(schema_hits, ["translated-transcript-v1.schema.json"])
-        source_hits = [
-            path.name
-            for path in sorted((REPO_ROOT / "src" / "media_clarity").glob("*.py"))
-            if marker in path.read_text(encoding="utf-8")
-        ]
-        self.assertEqual(source_hits, [], "Python 상수가 capability field set을 복제했다")
+
+        # validator가 개별 field를 **읽는** 것은 복제가 아니다. 금지하는 것은 Python 쪽에
+        # field set 자체를 다시 선언하는 것이다. 그래서 상수 선언을 직접 본다.
+        import ast
+
+        fields = set(
+            load_strict(SCHEMA_DIR / "translated-transcript-v1.schema.json")["$defs"][
+                "TranslationCapabilityReport"
+            ]["properties"]
+        )
+        duplicated: list[str] = []
+        for path in sorted((REPO_ROOT / "src" / "media_clarity").glob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+                    continue
+                names = {
+                    element.value
+                    for element in node.elts
+                    if isinstance(element, ast.Constant) and isinstance(element.value, str)
+                }
+                if len(names & fields) >= 3:
+                    duplicated.append(f"{path.name}:{node.lineno}")
+        self.assertEqual(duplicated, [], "Python 상수가 capability field set을 복제했다")
 
     def test_language_tag_subset_has_a_single_type_definition(self) -> None:
         """타입 정의는 한 곳뿐이다.
@@ -491,8 +509,10 @@ class InputMutationTests(ContractCase):
 
 class ValidatorBoundaryTests(ContractCase):
     def test_unknown_document_key_is_rejected(self) -> None:
+        """key 자체가 사용자 제어 값이므로 root로 접는다 (REVIEW-025 R-05)."""
+
         result = validate_documents({"forced_alignment": {}}, self.schemas)
-        self.assertEqual(result.pairs, (("E_SCHEMA", "forced_alignment"),))
+        self.assertEqual(result.pairs, (("E_SCHEMA", ""),))
 
     def test_document_containers_must_have_the_contracted_shape(self) -> None:
         self.assertEqual(
@@ -722,20 +742,31 @@ class LocationSafetyTests(ContractCase):
                     self.assertNotIn(key, finding.location)
                     self.assertNotIn(key, finding.message)
 
-    def test_safe_ascii_keys_stay_in_the_location(self) -> None:
-        """입력에서 온 값이라도 안전한 ASCII 식별자는 진단에 필요한 좌표다."""
+    def test_only_declared_vocabulary_stays_in_the_location(self) -> None:
+        """모양이 안전해 보여도 사용자 제어 key는 접는다 (REVIEW-025 R-05).
 
-        for key in ("x", "X9"):
-            with self.subTest(key=key):
+        남는 것은 정본이 선언한 어휘(language tag subset)뿐이다.
+        """
+
+        for key in ("x", "X9", "patient_name", "John_Doe"):
+            with self.subTest(folded=key):
                 self.assertEqual(
                     self._with_override(key).pairs,
-                    (
-                        (
-                            "E_SCHEMA",
-                            f"subtitle_document/resolved_style/language_overrides/{key}",
-                        ),
-                    ),
+                    (("E_SCHEMA", "subtitle_document/resolved_style/language_overrides"),),
                 )
+
+        documents = load_fixture(FIXTURE_DIR / "k-01.json")["documents"]
+        documents["subtitle_document"]["resolved_style"]["language_overrides"]["ko"] = {
+            "max_duration_seconds": 1.0,
+            "min_duration_seconds": 2.0,
+        }
+        self.assertIn(
+            (
+                "E_TIME_RANGE",
+                "subtitle_document/resolved_style/language_overrides/ko/max_duration_seconds",
+            ),
+            validate_documents(documents, self.schemas).pairs,
+        )
 
     def test_unknown_top_level_key_never_starts_with_a_slash(self) -> None:
         result = validate_documents({"/home/patient/secret.mp4": {}}, self.schemas)
@@ -787,8 +818,11 @@ class BindingTests(ContractCase):
             ("E_SOURCE_REF", "translated_transcript/source_transcript/media_type"), pairs
         )
 
-    def test_direct_input_ref_identity_needs_validation_context(self) -> None:
-        """컨텍스트가 없으면 identity를 **추측하지 않는다.** 있으면 강제한다."""
+    def test_direct_input_ref_identity_requires_validation_context(self) -> None:
+        """컨텍스트가 없으면 **조용히 통과시키지 않는다** (REVIEW-025 R-01).
+
+        identity를 추측하지도 않고, 확인하지 못한 것을 유효로 보고하지도 않는다.
+        """
 
         from media_clarity.subtitle_contracts import REF_CONTEXT_KEY
 
@@ -796,7 +830,7 @@ class BindingTests(ContractCase):
         documents["subtitle_document"]["input_document_ref"]["artifact_id"] = "art-other"
         without = dict(documents)
         without.pop(REF_CONTEXT_KEY)
-        self.assertNotIn(
+        self.assertIn(
             ("E_SOURCE_REF", "subtitle_document/input_document_ref"),
             validate_documents(without, self.schemas).pairs,
         )
@@ -932,6 +966,368 @@ class AuditGateTests(ContractCase):
         self.assertTrue(all(row["passed"] for row in payload["depth_probes"]))
         self.assertIn("leaks", payload)
         self.assertTrue(all(row["passed"] for row in payload["leaks"]))
+
+
+# ---------------------------------------------------------------------------
+# REVIEW-025 R-01 — 검증 컨텍스트 fail-open과 ArtifactRef 일관성
+# ---------------------------------------------------------------------------
+
+
+class RefContextTests(ContractCase):
+    def _base(self) -> Any:
+        return load_fixture(FIXTURE_DIR / "k-01.json")["documents"]
+
+    def test_missing_context_is_invalid_not_silently_valid(self) -> None:
+        from media_clarity.subtitle_contracts import REF_CONTEXT_KEY
+
+        documents = self._base()
+        documents.pop(REF_CONTEXT_KEY)
+        documents["subtitle_document"]["input_document_ref"]["artifact_id"] = "art-other"
+        pairs = validate_documents(documents, self.schemas).pairs
+        self.assertIn(("E_SOURCE_REF", "subtitle_document/input_document_ref"), pairs)
+        self.assertIn(("E_SOURCE_REF", "translated_transcript/source_transcript"), pairs)
+
+    def test_partial_context_is_invalid(self) -> None:
+        from media_clarity.subtitle_contracts import REF_CONTEXT_KEY
+
+        documents = self._base()
+        documents[REF_CONTEXT_KEY].pop("translated_transcript")
+        self.assertIn(
+            ("E_SOURCE_REF", "subtitle_document/input_document_ref"),
+            validate_documents(documents, self.schemas).pairs,
+        )
+
+    def test_required_roles_follow_the_document_combination(self) -> None:
+        from media_clarity.subtitle_contracts import required_ref_roles
+
+        documents = self._base()
+        self.assertEqual(
+            required_ref_roles(documents), {"transcript", "translated_transcript"}
+        )
+        self.assertEqual(required_ref_roles({"speech_segments": []}), set())
+
+    def test_context_values_reuse_the_common_artifact_ref_contract(self) -> None:
+        from media_clarity.subtitle_contracts import REF_CONTEXT_KEY
+
+        documents = self._base()
+        documents[REF_CONTEXT_KEY]["transcript"]["x_extra"] = 1
+        self.assertIn(
+            ("E_SCHEMA", "document_refs/transcript"),
+            validate_documents(documents, self.schemas).pairs,
+        )
+
+    def test_context_roles_are_closed(self) -> None:
+        from media_clarity.subtitle_contracts import REF_CONTEXT_KEY, REF_CONTEXT_ROLES
+
+        self.assertEqual(REF_CONTEXT_ROLES, ("transcript", "translated_transcript"))
+        documents = self._base()
+        documents[REF_CONTEXT_KEY]["subtitle_document"] = json.loads(
+            json.dumps(documents[REF_CONTEXT_KEY]["transcript"])
+        )
+        self.assertIn(
+            ("E_SCHEMA", "document_refs/subtitle_document"),
+            validate_documents(documents, self.schemas).pairs,
+        )
+
+    def test_documents_may_not_collapse_to_one_identity(self) -> None:
+        from media_clarity.subtitle_contracts import REF_CONTEXT_KEY
+
+        documents = self._base()
+        documents[REF_CONTEXT_KEY]["translated_transcript"] = json.loads(
+            json.dumps(documents[REF_CONTEXT_KEY]["transcript"])
+        )
+        self.assertIn(
+            ("E_SOURCE_REF", "document_refs/translated_transcript"),
+            validate_documents(documents, self.schemas).pairs,
+        )
+
+    def test_same_artifact_id_must_agree_on_immutable_metadata(self) -> None:
+        from media_clarity.subtitle_contracts import (
+            ARTIFACT_IMMUTABLE_FIELDS,
+            ARTIFACT_UNCOMPARED_FIELDS,
+            REF_CONTEXT_KEY,
+        )
+
+        self.assertIn("byte_size", ARTIFACT_IMMUTABLE_FIELDS)
+        self.assertIn("content_hash", ARTIFACT_IMMUTABLE_FIELDS)
+        self.assertIn("uri", ARTIFACT_UNCOMPARED_FIELDS)
+        self.assertIn("produced_by", ARTIFACT_UNCOMPARED_FIELDS)
+        self.assertEqual(
+            set(ARTIFACT_IMMUTABLE_FIELDS) & set(ARTIFACT_UNCOMPARED_FIELDS), set()
+        )
+
+        documents = self._base()
+        documents[REF_CONTEXT_KEY]["transcript"]["byte_size"] = 4096
+        self.assertIn(
+            ("E_SOURCE_REF", "document_refs/transcript/byte_size"),
+            validate_documents(documents, self.schemas).pairs,
+        )
+
+    def test_uncompared_fields_do_not_create_findings(self) -> None:
+        """`uri`·`produced_by` 동일성 의미는 계약이 없다 — 임의로 거부하지 않는다."""
+
+        from media_clarity.subtitle_contracts import REF_CONTEXT_KEY
+
+        documents = self._base()
+        documents[REF_CONTEXT_KEY]["transcript"]["uri"] = "/absolute/elsewhere/transcript.json"
+        self.assertEqual(validate_documents(documents, self.schemas).findings, ())
+
+
+# ---------------------------------------------------------------------------
+# REVIEW-025 R-02·R-03 — lineage 시간 겹침과 code-switch capability
+# ---------------------------------------------------------------------------
+
+
+class LineageEvidenceTests(ContractCase):
+    def _base(self) -> Any:
+        return load_fixture(FIXTURE_DIR / "k-01.json")["documents"]
+
+    def test_non_overlapping_source_cannot_lend_a_speaker_label(self) -> None:
+        documents = self._base()
+        for segment in documents["speech_segments"]:
+            if segment["segment_id"] == "sp-4":
+                segment.pop("speaker_label", None)
+        target = documents["transcript"]["streams"][0]["segments"][2]
+        target["speaker_label"] = "CH-L"
+        target["speaker_label_source"] = "input"
+        target["source_speech_segment_ids"] = ["sp-4", "sp-1"]
+        pairs = validate_documents(documents, self.schemas).pairs
+        self.assertIn(
+            ("E_TIME_RANGE", "transcript/streams/0/segments/2/source_speech_segment_ids/1"),
+            pairs,
+        )
+        self.assertIn(
+            ("E_CAPABILITY_MISMATCH", "transcript/streams/0/segments/2/speaker_label_source"),
+            pairs,
+        )
+
+    def test_unlabeled_covering_source_blocks_a_single_input_label(self) -> None:
+        documents = self._base()
+        for segment in documents["speech_segments"]:
+            if segment["segment_id"] in ("sp-3", "sp-4"):
+                segment.pop("speaker_label", None)
+        stream = documents["transcript"]["streams"][0]
+        stream["speaker_label"] = "CH-L"
+        stream["speaker_label_source"] = "input"
+        self.assertIn(
+            ("E_CAPABILITY_MISMATCH", "transcript/streams/0/speaker_label"),
+            validate_documents(documents, self.schemas).pairs,
+        )
+
+    def _split_units(self, documents: Any, cuts: Any) -> None:
+        source = "今日はsunnyですね"
+        stream = documents["translated_transcript"]["streams"][0]
+        template = next(
+            item for item in stream["segments"] if item["segment_id"] == "tl-1"
+        )
+        rest = [item for item in stream["segments"] if item["segment_id"] != "tl-1"]
+        units = []
+        for index, (start, end) in enumerate(cuts):
+            unit = json.loads(json.dumps(template))
+            unit["segment_id"] = f"tl-1{chr(97 + index)}"
+            unit["alignment_kind"] = "split"
+            unit["target_text"] = f"조각{index}"
+            unit["source_fragments"] = [
+                {
+                    "source_segment_id": "tr-1",
+                    "char_start": start,
+                    "char_end": end,
+                    "source_text": source[start:end],
+                }
+            ]
+            units.append(unit)
+        stream["segments"] = units + rest
+
+    def test_mixed_language_unit_requires_code_switching_capability(self) -> None:
+        documents = self._base()
+        documents["translated_transcript"]["capability_report"][
+            "supports_code_switching_input"
+        ] = False
+        self.assertIn(
+            (
+                "E_CAPABILITY_MISMATCH",
+                "translated_transcript/capability_report/supports_code_switching_input",
+            ),
+            validate_documents(documents, self.schemas).pairs,
+        )
+
+    def test_single_language_units_do_not_require_code_switching(self) -> None:
+        """정상 경로 — 언어 경계에 맞춰 나눈 입력은 미지원 adapter로도 유효하다."""
+
+        documents = self._base()
+        documents["translated_transcript"]["capability_report"][
+            "supports_code_switching_input"
+        ] = False
+        self._split_units(documents, [(0, 3), (3, 8), (8, 11)])
+        # 자막 cue lineage는 원래 `tl-1`을 가리키므로 이 검사에서는 번역 계층까지만 본다.
+        documents.pop("subtitle_document")
+        self.assertEqual(validate_documents(documents, self.schemas).findings, ())
+
+    def test_unit_crossing_a_language_boundary_requires_the_capability(self) -> None:
+        documents = self._base()
+        documents["translated_transcript"]["capability_report"][
+            "supports_code_switching_input"
+        ] = False
+        self._split_units(documents, [(0, 5), (5, 11)])
+        self.assertIn(
+            (
+                "E_CAPABILITY_MISMATCH",
+                "translated_transcript/capability_report/supports_code_switching_input",
+            ),
+            validate_documents(documents, self.schemas).pairs,
+        )
+
+
+# ---------------------------------------------------------------------------
+# REVIEW-025 R-04 — 임의 정밀도 JSON 숫자
+# ---------------------------------------------------------------------------
+
+
+class ArbitraryPrecisionNumberTests(ContractCase):
+    HUGE = 10 ** 400
+
+    def _base(self) -> Any:
+        return load_fixture(FIXTURE_DIR / "k-01.json")["documents"]
+
+    def test_huge_integers_return_findings_instead_of_crashing(self) -> None:
+        cases = (
+            ("segment start", lambda d: d["transcript"]["streams"][0]["segments"][0]
+             .__setitem__("start_seconds", self.HUGE)),
+            ("segment start negative", lambda d: d["transcript"]["streams"][0]["segments"][0]
+             .__setitem__("start_seconds", -self.HUGE)),
+            ("token confidence", lambda d: d["transcript"]["streams"][0]["segments"][0]
+             ["tokens"][0].__setitem__("confidence", self.HUGE)),
+            ("speech start", lambda d: d["speech_segments"][0]
+             .__setitem__("start_seconds", self.HUGE)),
+            ("cue end", lambda d: d["subtitle_document"]["cues"][0]
+             .__setitem__("end_seconds", self.HUGE)),
+            ("style max_cps", lambda d: d["subtitle_document"]["resolved_style"]
+             .__setitem__("max_cps", -self.HUGE)),
+            ("fragment offset", lambda d: d["translated_transcript"]["streams"][0]
+             ["segments"][0]["source_fragments"][0].__setitem__("char_end", self.HUGE)),
+            ("boundary float", lambda d: d["transcript"]["streams"][0]["segments"][0]
+             .__setitem__("end_seconds", 1.7976931348623157e308)),
+        )
+        for name, patch in cases:
+            with self.subTest(case=name):
+                documents = self._base()
+                patch(documents)
+                result = validate_documents(documents, self.schemas)
+                self.assertTrue(result.findings, f"{name}: finding이 없다")
+                for finding in result.findings:
+                    self.assertIn(finding.code, ERROR_CODES)
+
+    def test_finite_never_converts_int_to_float(self) -> None:
+        from media_clarity.subtitle_contracts import _as_number, _finite
+
+        self.assertTrue(_finite(self.HUGE))
+        self.assertTrue(_finite(-self.HUGE))
+        self.assertIs(_as_number(self.HUGE), self.HUGE)
+        self.assertFalse(_finite(float("nan")))
+        self.assertFalse(_finite(float("inf")))
+        self.assertIsNone(_as_number(float("inf")))
+
+    def test_cli_returns_stable_codes_for_huge_numbers(self) -> None:
+        """CLI fixture 경로도 traceback 없이 안정 code/location을 낸다."""
+
+        import subprocess
+        import tempfile
+
+        documents = self._base()
+        documents["transcript"]["streams"][0]["segments"][0]["start_seconds"] = self.HUGE
+        fixture = {
+            "case_id": "K-99999",
+            "title": "임의 정밀도 정수",
+            "expected": {
+                "valid": False,
+                "findings": [
+                    {
+                        "code": "E_TIME_RANGE",
+                        "location": "transcript/streams/0/segments/0/end_seconds",
+                    }
+                ],
+            },
+            "documents": {
+                key: documents[key]
+                for key in ("speech_segments", "transcript", "document_refs")
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "k-99.json"
+            path.write_text(json.dumps(fixture, ensure_ascii=False), encoding="utf-8")
+            proc = subprocess.run(
+                [
+                    sys.executable, "-m", "media_clarity.subtitle_contracts",
+                    "--fixtures", tmp,
+                ],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                env={"PYTHONPATH": "src", "PATH": "/usr/bin:/bin", "HOME": tmp,
+                     "PYTHONIOENCODING": "utf-8"},
+                timeout=120,
+            )
+        self.assertNotIn("Traceback", proc.stderr)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+
+# ---------------------------------------------------------------------------
+# REVIEW-025 R-06 — 고정 defense manifest
+# ---------------------------------------------------------------------------
+
+
+class DefenseManifestTests(ContractCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.verify = _load_verify_script()
+
+    def test_manifest_matches_the_current_schema_defenses(self) -> None:
+        rows = self.verify.run_manifest_check(SCHEMA_DIR)
+        failures = [f"{row['check_id']}: {row['note']}" for row in rows if not row["passed"]]
+        self.assertEqual(failures, [])
+
+    def test_manifest_is_a_separate_frozen_file(self) -> None:
+        path = self.verify.DEFENSE_MANIFEST_PATH
+        self.assertTrue(path.is_file())
+        self.assertNotIn("schemas", path.parts, "manifest가 production schema 안에 있으면 안 된다")
+        manifest = self.verify.load_defense_manifest()
+        self.assertTrue(manifest["digest"].startswith("sha256:"))
+        self.assertGreaterEqual(len(manifest["killable"]), 250)
+        self.assertTrue(manifest["equivalent"])
+
+    def test_removing_a_production_defense_is_drift_not_a_smaller_denominator(self) -> None:
+        import copy
+
+        manifest = self.verify.load_defense_manifest()
+        declared = set(manifest["killable"]) | {
+            entry["defense_id"] for entry in manifest["equivalent"]
+        }
+        observed = {
+            defense.defense_id
+            for defense in self.verify.collect_schema_defenses(SCHEMA_DIR)
+        }
+        self.assertEqual(declared, observed)
+
+        shrunk = copy.deepcopy(observed)
+        shrunk.discard("speech-segment#/|required:source_track_index")
+        self.assertNotEqual(declared, shrunk, "삭제가 drift로 드러나야 한다")
+
+    def test_equivalent_allowlist_records_a_reason(self) -> None:
+        for entry in self.verify.load_defense_manifest()["equivalent"]:
+            with self.subTest(defense=entry["defense_id"]):
+                self.assertTrue(entry["reason"].strip())
+                self.assertIn("pattern", entry["reason"])
+
+    def test_killable_and_equivalent_denominators_are_separated(self) -> None:
+        rows = self.verify.run_schema_defense_inventory(FIXTURE_DIR, SCHEMA_DIR)
+        killable = [row for row in rows if not row.get("equivalent")]
+        equivalent = [row for row in rows if row.get("equivalent")]
+        self.assertTrue(equivalent)
+        self.assertTrue(all(row["passed"] for row in killable))
+        self.assertTrue(all(row["passed"] for row in equivalent))
+        self.assertTrue(all(not row.get("subsumed") for row in killable))
+        self.assertTrue(all(row.get("subsumed") for row in equivalent))
 
 
 if __name__ == "__main__":

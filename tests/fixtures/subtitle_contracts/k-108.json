@@ -7,6 +7,14 @@
   "findings": [
    {
     "code": "E_SOURCE_REF",
+    "location": "document_refs/transcript/kind"
+   },
+   {
+    "code": "E_SOURCE_REF",
+    "location": "document_refs/transcript/media_type"
+   },
+   {
+    "code": "E_SOURCE_REF",
     "location": "translated_transcript/source_transcript/kind"
    },
    {

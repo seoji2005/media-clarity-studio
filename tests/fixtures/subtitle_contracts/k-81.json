@@ -7,7 +7,7 @@
   "findings": [
    {
     "code": "E_SCHEMA",
-    "location": "speech_segments/0/x_unknown_root"
+    "location": "speech_segments/0"
    }
   ]
  },

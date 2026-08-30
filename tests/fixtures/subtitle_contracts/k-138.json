@@ -1,17 +1,13 @@
 {
- "case_id": "K-106",
- "title": "자막의 source_transcript_ref가 번역 문서의 source_transcript와 다르다",
- "mutation_id": "IM-172",
+ "case_id": "K-138",
+ "title": "검증 컨텍스트 ref에 계약 밖 필드를 넣었다",
+ "mutation_id": "IM-204",
  "expected": {
   "valid": false,
   "findings": [
    {
-    "code": "E_SOURCE_REF",
-    "location": "subtitle_document/source_transcript_ref"
-   },
-   {
-    "code": "E_SOURCE_REF",
-    "location": "translated_transcript/source_transcript"
+    "code": "E_SCHEMA",
+    "location": "document_refs/transcript"
    }
   ]
  },
@@ -432,10 +428,10 @@
    "timebase_ref": "tb-source",
    "source_transcript": {
     "schema_version": "1.0.0",
-    "artifact_id": "art-detached",
+    "artifact_id": "art-tx-base",
     "kind": "text",
     "uri": "jobs/job-029/transcript.json",
-    "content_hash": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+    "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
     "byte_size": 1024,
     "media_type": "application/json",
     "produced_by": {
@@ -839,7 +835,8 @@
     },
     "created_at": "2026-08-29T00:00:00Z",
     "parent_refs": [],
-    "is_estimate": false
+    "is_estimate": false,
+    "x_extra": 1
    },
    "translated_transcript": {
     "schema_version": "1.0.0",

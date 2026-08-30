@@ -315,7 +315,9 @@ ReferenceBundle/v1:
 | **L-3** | cue의 `review_reasons`에 남는 `language_switch`는 **검토 신호**이지 언어 정답이 아닙니다 |
 | **L-4** | `supports_language_id=false`이면 `language_spans`도 `dominant_language`도 **부재**여야 합니다. 설정에서 받은 후보 언어를 결과처럼 기록하지 않습니다 |
 
-> 원문 축 `Transcript` 가설의 문자 오프셋 → 시간 투영은 [`EVALS.md`](EVALS.md) §4.5(a)에 있습니다.
+> 원문 축 `Transcript` 가설의 언어 시간 귀속 범위는 [`EVALS.md`](EVALS.md) §4.5(a)에 있습니다.
+> **segment 단위까지만 지원**하며, segment 안쪽 문자→시간 투영은 token에 문자 오프셋이 없어
+> 미지원입니다 (REVIEW-025 D-03).
 > 저장 위치를 늘리지 않는 쪽을 택한 이유는, 같은 사실을 두 곳에 적으면 둘이 갈라졌을 때
 > 어느 쪽이 정답인지 정할 방법이 없기 때문입니다.
 >

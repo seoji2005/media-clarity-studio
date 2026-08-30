@@ -7,7 +7,7 @@
   "findings": [
    {
     "code": "E_SCHEMA",
-    "location": "subtitle_document/x_unknown_root"
+    "location": "subtitle_document"
    }
   ]
  },

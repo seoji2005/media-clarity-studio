@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import re
 import shutil
@@ -148,7 +149,9 @@ class Mutation:
         if not patch and self.sentinel_keep is not None:
             keep = self.sentinel_keep
         # 검증 컨텍스트(`document_refs`)는 문서가 아니라 부가 정보이므로 기본으로 남긴다.
-        if not self.without_refs:
+        # `without_refs` 반례는 **컨텍스트 부재 자체**가 결함이므로 변형된 쪽에서만 뺀다.
+        # sentinel은 같은 문서 부분집합에 컨텍스트를 붙인 정상 입력이어야 한다.
+        if not (patch and self.without_refs):
             keep = tuple(keep) + (contracts.REF_CONTEXT_KEY,)
         return {key: documents[key] for key in keep if key in documents}
 
@@ -193,6 +196,37 @@ def mutate(
 
 def _set(node: dict, **values: Any) -> None:
     node.update(values)
+
+
+#: 임의 정밀도 JSON 정수. `float()`로 바꾸면 `OverflowError`가 난다 (REVIEW-025 R-04).
+_HUGE = 10 ** 400
+
+#: 문장 내 전환이 든 원문. code-switch 반례가 이 문자열의 범위를 쪼갠다.
+_SWITCHING_SOURCE = "今日はsunnyですね"
+
+
+def _split_source_units(documents: dict, cuts: Sequence[tuple[int, int]]) -> None:
+    """`tl-1`을 주어진 원문 범위대로 여러 번역 단위로 쪼갠다 (coverage는 유지한다)."""
+
+    stream = documents["translated_transcript"]["streams"][0]
+    template = tl(documents, "tl-1")
+    rest = [item for item in stream["segments"] if item["segment_id"] != "tl-1"]
+    units = []
+    for index, (start, end) in enumerate(cuts):
+        unit = copy.deepcopy(template)
+        unit["segment_id"] = f"tl-1{chr(97 + index)}"
+        unit["alignment_kind"] = "split"
+        unit["target_text"] = f"조각{index}"
+        unit["source_fragments"] = [
+            {
+                "source_segment_id": "tr-1",
+                "char_start": start,
+                "char_end": end,
+                "source_text": _SWITCHING_SOURCE[start:end],
+            }
+        ]
+        units.append(unit)
+    stream["segments"] = units + rest
 
 
 def _detach(ref: dict) -> dict:
@@ -595,7 +629,7 @@ def register_mutations() -> None:
     mutate(
         "IM-43", "feature_status에 여덟 번째 key를 넣었다 (닫힌 객체)", "base",
         lambda d: _set(d["transcript"]["feature_status"], forced_alignment="produced"),
-        [("E_SCHEMA", "transcript/feature_status/forced_alignment")],
+        [("E_SCHEMA", "transcript/feature_status")],
     )
     mutate(
         "IM-44", "번역 confidence semantics가 none인데 confidence가 있다", "base",
@@ -624,7 +658,7 @@ def register_mutations() -> None:
     mutate(
         "IM-47", "TranslationCapabilityReport에 알 수 없는 필드를 넣었다 (닫힌 객체)", "base",
         lambda d: _set(mt_capability(d), supports_confidence=True),
-        [("E_SCHEMA", "translated_transcript/capability_report/supports_confidence")],
+        [("E_SCHEMA", "translated_transcript/capability_report")],
     )
 
     # --- channel semantics ----------------------------------------------------
@@ -1002,7 +1036,7 @@ def register_mutations() -> None:
     mutate(
         "IM-95", "cue에 알 수 없는 필드를 넣었다 (닫힌 객체)", "mini",
         lambda d: _set(cue(d, "cue-m1"), position="bottom-center"),
-        [("E_SCHEMA", f"{C}/0/position")],
+        [("E_SCHEMA", f"{C}/0")],
     )
 
     # --- style profile --------------------------------------------------------------------
@@ -1388,35 +1422,35 @@ def register_mutations() -> None:
     mutate(
         "IM-148", "SpeechSegment root에 미지의 필드를 붙였다", "mini",
         lambda d: _set(d["speech_segments"][0], x_unknown_root=1),
-        [("E_SCHEMA", "speech_segments/0/x_unknown_root")],
+        [("E_SCHEMA", "speech_segments/0")],
         keep=_LAYERS[3][1],
         fixture="K-81",
     )
     mutate(
         "IM-149", "Transcript root에 미지의 필드를 붙였다", "mini",
         lambda d: _set(d["transcript"], x_unknown_root=1),
-        [("E_SCHEMA", "transcript/x_unknown_root")],
+        [("E_SCHEMA", "transcript")],
         keep=_LAYERS[2][1],
         fixture="K-82",
     )
     mutate(
         "IM-150", "AdapterCapabilityReport root에 미지의 필드를 붙였다", "mini",
         lambda d: _set(d["transcript"]["capability_report"], x_unknown_root=1),
-        [("E_SCHEMA", "transcript/capability_report/x_unknown_root")],
+        [("E_SCHEMA", "transcript/capability_report")],
         keep=_LAYERS[2][1],
         fixture="K-83",
     )
     mutate(
         "IM-151", "TranslatedTranscript root에 미지의 필드를 붙였다", "base",
         lambda d: _set(d["translated_transcript"], x_unknown_root=1),
-        [("E_SCHEMA", "translated_transcript/x_unknown_root")],
+        [("E_SCHEMA", "translated_transcript")],
         keep=_LAYERS[1][1],
         fixture="K-84",
     )
     mutate(
         "IM-152", "SubtitleDocument root에 미지의 필드를 붙였다", "base",
         lambda d: _set(d["subtitle_document"], x_unknown_root=1),
-        [("E_SCHEMA", "subtitle_document/x_unknown_root")],
+        [("E_SCHEMA", "subtitle_document")],
         keep=_LAYERS[0][1],
         fixture="K-85",
     )
@@ -1582,7 +1616,7 @@ def register_mutations() -> None:
     mutate(
         "IM-168", "문서 집합에 알 수 없는 key가 들어왔다", "base",
         lambda d: d.update(x_bogus={}),
-        [("E_SCHEMA", "x_bogus")],
+        [("E_SCHEMA", "")],
         keep=("speech_segments", "x_bogus"),
         fixture="K-101",
     )
@@ -1616,14 +1650,17 @@ def register_mutations() -> None:
     # --- REVIEW-024 H-01: ArtifactRef 계보 결박 ----------------------------------
     mutate(
         "IM-172", "자막의 source_transcript_ref가 번역 문서의 source_transcript와 다르다", "base",
+        # 컨텍스트는 그대로 두고 **번역 쪽만** 떼어낸다. 그러면 자막 쪽 위치에는
+        # 문서 집합 안 동일성 검사만 남아 그 방어를 단독으로 증명할 수 있다.
         lambda d: _set(
-            d["subtitle_document"],
-            source_transcript_ref=_detach(d["subtitle_document"]["source_transcript_ref"]),
+            d["translated_transcript"],
+            source_transcript=_detach(d["translated_transcript"]["source_transcript"]),
         ),
-        [("E_SOURCE_REF", "subtitle_document/source_transcript_ref")],
+        [
+            ("E_SOURCE_REF", "subtitle_document/source_transcript_ref"),
+            ("E_SOURCE_REF", "translated_transcript/source_transcript"),
+        ],
         keep=_LAYERS[0][1],
-        # 검증 컨텍스트 없이도 잡혀야 한다 — 문서 집합 안에서 확인 가능한 동일성이다.
-        without_refs=True,
         fixture="K-106",
     )
     mutate(
@@ -1633,6 +1670,9 @@ def register_mutations() -> None:
             input_document_ref=_as_video(d["subtitle_document"]["input_document_ref"]),
         ),
         [
+            # 같은 artifact_id를 가리키는 컨텍스트 ref와 metadata가 어긋난 것도 함께 잡힌다.
+            ("E_SOURCE_REF", "document_refs/translated_transcript/kind"),
+            ("E_SOURCE_REF", "document_refs/translated_transcript/media_type"),
             ("E_SOURCE_REF", "subtitle_document/input_document_ref/kind"),
             ("E_SOURCE_REF", "subtitle_document/input_document_ref/media_type"),
         ],
@@ -1646,6 +1686,8 @@ def register_mutations() -> None:
             source_transcript=_as_video(d["translated_transcript"]["source_transcript"]),
         ),
         [
+            ("E_SOURCE_REF", "document_refs/transcript/kind"),
+            ("E_SOURCE_REF", "document_refs/transcript/media_type"),
             ("E_SOURCE_REF", "translated_transcript/source_transcript/kind"),
             ("E_SOURCE_REF", "translated_transcript/source_transcript/media_type"),
         ],
@@ -1703,17 +1745,19 @@ def register_mutations() -> None:
         fixture="K-112",
     )
     mutate(
-        "IM-179", "참조한 입력 label이 여러 개라 단일 값을 정할 수 없다", "base",
+        "IM-179", "겹치는 입력 label이 여러 개라 단일 값을 정할 수 없다", "base",
+        # REVIEW-025 R-02 — ambiguity 반례는 **실제로 겹치는** 입력 둘로 만든다.
+        # 겹치지 않는 입력을 근거로 쓰는 것은 IM-199가 따로 잡는다.
         lambda d: (
+            _set(sp(d, "sp-3"), end_seconds=4.5, speaker_label="CH-Z"),
             _set(
-                tr(d, "tr-2"),
+                tr(d, "tr-4"),
                 speaker_label="CH-L",
                 speaker_label_source="input",
                 source_speech_segment_ids=["sp-3", "sp-4"],
             ),
-            _set(sp(d, "sp-4"), speaker_label="CH-Z"),
         ),
-        [("E_CAPABILITY_MISMATCH", f"{T0}/1/speaker_label")],
+        [("E_CAPABILITY_MISMATCH", f"{T0}/2/speaker_label")],
         keep=_LAYERS[2][1],
         fixture="K-113",
     )
@@ -1836,8 +1880,9 @@ def register_mutations() -> None:
     mutate(
         "IM-194", "language override key가 2 scalar ASCII다", "base",
         lambda d: _override(d, "X9"),
-        # 안전한 ASCII 구간은 잘라내지 않는다. 입력 값이 아니라 진단에 필요한 좌표다.
-        [("E_SCHEMA", "subtitle_document/resolved_style/language_overrides/X9")],
+        # 모양이 안전해 보여도 정본이 선언한 어휘가 아니면 접는다 (REVIEW-025 R-05).
+        # 남길 수 있는 것은 고정 field 이름과 language tag subset뿐이다.
+        [("E_SCHEMA", "subtitle_document/resolved_style/language_overrides")],
         keep=_LAYERS[0][1],
         fixture="K-128",
     )
@@ -1868,9 +1913,311 @@ def register_mutations() -> None:
     mutate(
         "IM-198", "document_refs 항목에 artifact identity가 없다", "base",
         lambda d: d[contracts.REF_CONTEXT_KEY].__setitem__("transcript", {}),
-        [("E_SCHEMA", "document_refs/transcript")],
+        [
+            ("E_SCHEMA", "document_refs/transcript"),
+            ("E_SOURCE_REF", "document_refs/transcript"),
+        ],
         keep=("speech_segments", "transcript"),
         fixture="K-132",
+    )
+
+    # --- REVIEW-025 R-01: 검증 컨텍스트 fail-open과 ArtifactRef 일관성 ---------------
+    mutate(
+        "IM-199", "검증 컨텍스트가 아예 없다 (fail-open 금지)", "base",
+        lambda d: None,
+        [
+            ("E_SOURCE_REF", "subtitle_document/input_document_ref"),
+            ("E_SOURCE_REF", "subtitle_document/source_transcript_ref"),
+            ("E_SOURCE_REF", "translated_transcript/source_transcript"),
+        ],
+        keep=_LAYERS[0][1],
+        without_refs=True,
+        fixture="K-133",
+    )
+    mutate(
+        "IM-200", "검증 컨텍스트에 필요한 role이 빠졌다", "base",
+        lambda d: d[contracts.REF_CONTEXT_KEY].pop("translated_transcript"),
+        [("E_SOURCE_REF", "subtitle_document/input_document_ref")],
+        keep=_LAYERS[0][1],
+        fixture="K-134",
+    )
+    mutate(
+        "IM-201", "Transcript와 TranslatedTranscript가 같은 identity로 붕괴했다", "base",
+        lambda d: d[contracts.REF_CONTEXT_KEY].__setitem__(
+            "translated_transcript",
+            copy.deepcopy(d[contracts.REF_CONTEXT_KEY]["transcript"]),
+        ),
+        [
+            ("E_SOURCE_REF", "document_refs/translated_transcript"),
+            ("E_SOURCE_REF", "subtitle_document/input_document_ref"),
+        ],
+        keep=_LAYERS[0][1],
+        fixture="K-135",
+    )
+    mutate(
+        "IM-202", "같은 artifact_id에 서로 다른 content_hash를 썼다", "base",
+        lambda d: d[contracts.REF_CONTEXT_KEY]["transcript"].__setitem__(
+            "content_hash", "sha256:" + "7" * 64
+        ),
+        [
+            ("E_SOURCE_REF", "document_refs/transcript/content_hash"),
+            ("E_SOURCE_REF", "subtitle_document/source_transcript_ref"),
+            ("E_SOURCE_REF", "translated_transcript/source_transcript"),
+        ],
+        keep=_LAYERS[0][1],
+        fixture="K-136",
+    )
+    mutate(
+        "IM-203", "같은 artifact_id·hash인데 byte_size가 다르다", "base",
+        lambda d: d[contracts.REF_CONTEXT_KEY]["transcript"].__setitem__("byte_size", 4096),
+        [("E_SOURCE_REF", "document_refs/transcript/byte_size")],
+        keep=_LAYERS[0][1],
+        fixture="K-137",
+    )
+    mutate(
+        "IM-204", "검증 컨텍스트 ref에 계약 밖 필드를 넣었다", "base",
+        lambda d: d[contracts.REF_CONTEXT_KEY]["transcript"].__setitem__("x_extra", 1),
+        [("E_SCHEMA", "document_refs/transcript")],
+        keep=_LAYERS[0][1],
+        fixture="K-138",
+    )
+    mutate(
+        "IM-205", "검증 컨텍스트에 쓰이지 않는 role을 넣었다", "base",
+        lambda d: d[contracts.REF_CONTEXT_KEY].__setitem__(
+            "subtitle_document", copy.deepcopy(d[contracts.REF_CONTEXT_KEY]["transcript"])
+        ),
+        [("E_SCHEMA", "document_refs/subtitle_document")],
+        keep=_LAYERS[0][1],
+        fixture="K-139",
+    )
+    mutate(
+        "IM-206", "검증 컨텍스트 ref가 문서가 아닌 video artifact다", "base",
+        # 같은 artifact를 가리키는 ref를 **전부** video로 바꾼다. metadata 일관성은 유지되므로
+        # 컨텍스트 자체의 문서-종류 결박만 남는다.
+        lambda d: (
+            _set(
+                d[contracts.REF_CONTEXT_KEY],
+                transcript=_as_video(d[contracts.REF_CONTEXT_KEY]["transcript"]),
+            ),
+            _set(
+                d["translated_transcript"],
+                source_transcript=_as_video(d["translated_transcript"]["source_transcript"]),
+            ),
+            _set(
+                d["subtitle_document"],
+                source_transcript_ref=_as_video(
+                    d["subtitle_document"]["source_transcript_ref"]
+                ),
+            ),
+        ),
+        [
+            ("E_SOURCE_REF", "document_refs/transcript/kind"),
+            ("E_SOURCE_REF", "document_refs/transcript/media_type"),
+        ],
+        keep=_LAYERS[0][1],
+        fixture="K-140",
+    )
+
+    # --- REVIEW-025 R-02: 비겹치는 SpeechSegment lineage ---------------------------
+    mutate(
+        "IM-207", "겹치지 않는 입력의 label을 빌려 왔다 (덮는 입력은 unlabeled)", "base",
+        lambda d: (
+            sp(d, "sp-4").pop("speaker_label", None),
+            _set(
+                tr(d, "tr-4"),
+                speaker_label="CH-L",
+                speaker_label_source="input",
+                source_speech_segment_ids=["sp-4", "sp-1"],
+            ),
+        ),
+        [
+            ("E_CAPABILITY_MISMATCH", f"{T0}/2/speaker_label_source"),
+            ("E_TIME_RANGE", f"{T0}/2/source_speech_segment_ids/1"),
+        ],
+        keep=_LAYERS[2][1],
+        fixture="K-141",
+    )
+    mutate(
+        "IM-208", "ASR segment가 겹치지 않는 입력을 lineage로 참조했다", "base",
+        lambda d: _set(tr(d, "tr-4"), source_speech_segment_ids=["sp-4", "sp-1"]),
+        [("E_TIME_RANGE", f"{T0}/2/source_speech_segment_ids/1")],
+        keep=_LAYERS[2][1],
+        fixture="K-142",
+    )
+    mutate(
+        "IM-209", "stream 입력 중 label 없는 것이 있는데 단일 input label을 주장했다", "base",
+        lambda d: (
+            [
+                segment.pop("speaker_label", None)
+                for segment in d["speech_segments"]
+                if segment["segment_id"] in ("sp-3", "sp-4")
+            ],
+            _set(
+                d["transcript"]["streams"][0],
+                speaker_label="CH-L",
+                speaker_label_source="input",
+            ),
+        ),
+        [("E_CAPABILITY_MISMATCH", "transcript/streams/0/speaker_label")],
+        keep=_LAYERS[2][1],
+        fixture="K-143",
+    )
+
+    # --- REVIEW-025 R-03: translation code-switch capability ----------------------
+    mutate(
+        "IM-210", "문장 내 전환이 든 문자열을 한 단위로 번역하면서 code-switching 미지원", "base",
+        lambda d: _set(mt_capability(d), supports_code_switching_input=False),
+        [("E_CAPABILITY_MISMATCH",
+          "translated_transcript/capability_report/supports_code_switching_input")],
+        keep=_LAYERS[1][1],
+        fixture="K-144",
+    )
+    mutate(
+        "IM-211", "언어 경계를 가로지르는 fragment 하나로 번역하면서 code-switching 미지원", "base",
+        lambda d: (
+            _set(mt_capability(d), supports_code_switching_input=False),
+            _split_source_units(d, [(0, 5), (5, 11)]),
+        ),
+        [("E_CAPABILITY_MISMATCH",
+          "translated_transcript/capability_report/supports_code_switching_input")],
+        keep=_LAYERS[1][1],
+        fixture="K-145",
+    )
+
+    # --- REVIEW-025 R-04: 임의 정밀도 JSON 숫자 -------------------------------------
+    mutate(
+        "IM-212", "ASR segment 시작이 임의 정밀도 정수다", "base",
+        lambda d: _set(tr(d, "tr-1"), start_seconds=_HUGE),
+        [("E_TIME_RANGE", f"{T0}/0/end_seconds")],
+        keep=_LAYERS[2][1],
+        fixture="K-146",
+    )
+    mutate(
+        "IM-213", "token confidence가 임의 정밀도 정수다", "base",
+        lambda d: _set(tr(d, "tr-1")["tokens"][0], confidence=_HUGE),
+        [("E_CONFIDENCE", f"{T0}/0/tokens/0/confidence")],
+        keep=_LAYERS[2][1],
+        fixture="K-147",
+    )
+    mutate(
+        "IM-214", "ASR segment 시작이 임의 정밀도 음수다", "base",
+        lambda d: _set(tr(d, "tr-1"), start_seconds=-_HUGE),
+        [("E_SCHEMA", f"{T0}/0/start_seconds")],
+        keep=_LAYERS[2][1],
+        fixture="K-148",
+    )
+    mutate(
+        "IM-215", "SpeechSegment 시작이 임의 정밀도 정수다", "base",
+        lambda d: _set(sp(d, "sp-1"), start_seconds=_HUGE),
+        [("E_TIME_RANGE", f"{S}/0/end_seconds")],
+        keep=_LAYERS[3][1],
+        fixture="K-149",
+    )
+    mutate(
+        "IM-216", "resolved style 숫자가 임의 정밀도 음수다", "base",
+        lambda d: _set(d["subtitle_document"]["resolved_style"], max_cps=-_HUGE),
+        [("E_SCHEMA", "subtitle_document/resolved_style/max_cps")],
+        keep=_LAYERS[0][1],
+        fixture="K-150",
+    )
+    mutate(
+        "IM-217", "번역 source fragment offset이 임의 정밀도 정수다", "base",
+        lambda d: _set(tl(d, "tl-1")["source_fragments"][0], char_end=_HUGE),
+        [
+            ("E_ALIGNMENT", f"{L0}/0/alignment_kind"),
+            ("E_OFFSET_RANGE", f"{L0}/0/source_fragments/0/char_end"),
+            ("E_SOURCE_COVERAGE", f"{T0}/0/text"),
+        ],
+        keep=_LAYERS[1][1],
+        fixture="K-151",
+    )
+    mutate(
+        "IM-218", "cue 종료 시각이 임의 정밀도 정수다", "base",
+        lambda d: _set(cue(d, "cue-1"), end_seconds=_HUGE),
+        [
+            ("E_CUE_OVERLAP", f"{C}/1"),
+            ("E_CUE_OVERLAP", f"{C}/3"),
+            ("E_CUE_OVERLAP", f"{C}/4"),
+        ],
+        keep=_LAYERS[0][1],
+        fixture="K-152",
+    )
+
+    # --- REVIEW-025 R-05: dynamic key location alias --------------------------------
+    mutate(
+        "IM-219", "최상위 key가 실제 경로처럼 보이는 alias다", "base",
+        lambda d: d.__setitem__("transcript/streams", {}),
+        [("E_SCHEMA", "")],
+        keep=("speech_segments", "transcript", "transcript/streams"),
+        fixture="K-153",
+    )
+    mutate(
+        "IM-220", "document_refs key가 실제 경로처럼 보이는 alias다", "base",
+        lambda d: d[contracts.REF_CONTEXT_KEY].__setitem__("transcript/artifact_id", {}),
+        [("E_SCHEMA", "document_refs")],
+        keep=("speech_segments", "transcript"),
+        fixture="K-154",
+    )
+    mutate(
+        "IM-221", "language override key가 ASCII 개인 식별자처럼 보인다", "base",
+        lambda d: _override(d, "patient_name"),
+        [("E_SCHEMA", "subtitle_document/resolved_style/language_overrides")],
+        keep=_LAYERS[0][1],
+        fixture="K-155",
+    )
+    mutate(
+        "IM-222", "language override key가 사람 이름 모양이다", "base",
+        lambda d: _override(d, "John_Doe"),
+        [("E_SCHEMA", "subtitle_document/resolved_style/language_overrides")],
+        keep=_LAYERS[0][1],
+        fixture="K-156",
+    )
+    mutate(
+        "IM-223", "language override key가 실제 nested 경로와 같은 location으로 충돌한다", "base",
+        # 실제 `ko` override의 결함 위치와, 그 위치를 그대로 흉내 낸 key가 함께 있다.
+        # 이어붙인 문자열만 보면 둘을 구분할 수 없다 (REVIEW-025 R-05).
+        lambda d: (
+            d["subtitle_document"]["resolved_style"]["language_overrides"].__setitem__(
+                "ko", {"max_duration_seconds": 1.0, "min_duration_seconds": 2.0}
+            ),
+            _override(d, "ko/max_duration_seconds"),
+        ),
+        [("E_SCHEMA", "subtitle_document/resolved_style/language_overrides")],
+        keep=_LAYERS[0][1],
+        fixture="K-157",
+    )
+    mutate(
+        "IM-225", "und 구간을 사이에 둔 문장 내 전환을 한 단위로 번역했다", "base",
+        # 알려진 언어는 하나(`ja`)뿐이라 "복수 언어" 조건으로는 잡히지 않는다.
+        # fragment 안쪽의 intra-sentential 전환 경계만이 이 반례를 만든다 (REVIEW-025 R-03).
+        lambda d: (
+            _set(
+                tr(d, "tr-1"),
+                language_spans=[
+                    {"char_start": 0, "char_end": 3, "language": "ja", "confidence": 0.95},
+                    {"char_start": 3, "char_end": 8, "language": "und",
+                     "switch_kind": "intra_sentential"},
+                    {"char_start": 8, "char_end": 11, "language": "ja",
+                     "switch_kind": "intra_sentential"},
+                ],
+                needs_review=True,
+                review_reasons=["language_switch", "language_unknown"],
+            ),
+            tr(d, "tr-1").pop("dominant_language", None),
+            _set(mt_capability(d), supports_code_switching_input=False),
+            _split_source_units(d, [(0, 2), (2, 5), (5, 11)]),
+        ),
+        [("E_CAPABILITY_MISMATCH",
+          "translated_transcript/capability_report/supports_code_switching_input")],
+        keep=_LAYERS[1][1],
+        fixture="K-159",
+    )
+    mutate(
+        "IM-224", "language override key가 emoji다", "base",
+        lambda d: _override(d, "\U0001f642"),
+        [("E_SCHEMA", "subtitle_document/resolved_style/language_overrides")],
+        keep=_LAYERS[0][1],
+        fixture="K-158",
     )
 
 
@@ -2085,11 +2432,20 @@ def validator_mutants() -> list[SourceMutant]:
         ),
         SourceMutant(
             "VM-02", "positive duration 검사 제거", target,
-            "    if float(end) <= float(start):", "    if False:", ("IM-24", "IM-25"),
+            """    if end <= start:
+        findings.append(
+            _finding(
+                f"{where}/end_seconds",
+                "E_TIME_RANGE",
+                f"{what}는 positive duration 반개구간이어야 한다",
+            )
+        )
+        return False""",
+            "    if False:\n        return False", ("IM-24", "IM-25"),
         ),
         SourceMutant(
             "VM-03", "calibrated_probability 범위 검사 제거", target,
-            '    if semantics == "calibrated_probability" and not (0.0 <= float(value) <= 1.0):',
+            '    if semantics == "calibrated_probability" and not (0 <= value <= 1):',
             "    if False:", ("IM-52",),
         ),
         SourceMutant(
@@ -2381,7 +2737,7 @@ def validator_mutants() -> list[SourceMutant]:
         ),
         SourceMutant(
             "VM-65", "resolved_style의 max>min 검사 제거", target,
-            "        if not (_finite(low) and _finite(high) and float(high) <= float(low)):\n            return",
+            "        if not (_finite(low) and _finite(high) and high <= low):\n            return",
             "        if True:\n            return", ("IM-96", "IM-98"),
         ),
         SourceMutant(
@@ -2511,7 +2867,12 @@ def validator_mutants() -> list[SourceMutant]:
         SourceMutant(
             "VM-93", "segment-level input speaker evidence 결박 호출 제거", target,
             """        findings.extend(
-            _check_input_label_value(segment.get("speaker_label"), input_labels, where)
+            _check_input_label_value(
+                segment.get("speaker_label"),
+                input_labels,
+                where,
+                unlabeled_evidence=unlabeled_cover,
+            )
         )""",
             "        pass", ("IM-144", "IM-177", "IM-179"),
         ),
@@ -2552,7 +2913,7 @@ def validator_mutants() -> list[SourceMutant]:
         ),
         SourceMutant(
             "VM-106", "half-open 구간의 음수 start 검사 제거", target,
-            """    if float(start) < 0:
+            """    if start < 0:
         findings.append(
             _finding(f"{where}/start_seconds", "E_TIME_RANGE", f"{what} start_seconds가 음수다")
         )
@@ -2578,15 +2939,16 @@ def validator_mutants() -> list[SourceMutant]:
         ),
         # --- REVIEW-024 H-06: location의 dynamic key 정규화 ---------------------------
         SourceMutant(
-            "VM-109", "location 구간의 모양 검사 제거 (민감 key 노출)", target,
-            "        if not _is_safe_segment(segment):\n            break",
-            "        if False:\n            break", ("LOCATION",),
+            "VM-109", "고정 field allowlist를 모양 검사로 되돌린다 (사용자 key 노출)", target,
+            "    if key in declared_segments():\n        return True",
+            '    if key.isascii() and key.replace("_", "").isalnum():\n        return True',
+            ("LOCATION",),
         ),
         SourceMutant(
-            "VM-110", "location 구간의 입력 해석 가능성 검사 제거", target,
-            "            node = _step(node, segment)\n            if node is _MISSING:\n                break",
-            "            node = _step(node, segment)\n            if False:\n                break",
-            ("LOCATION",),
+            "VM-110", "location 구간의 alias 충돌 검사 제거", target,
+            '            if len(matches) != 1 or not _segment_allowed("/".join(kept), matches[0]):',
+            '            if len(matches) < 1 or not _segment_allowed("/".join(kept), matches[0]):',
+            ("IM-223",),
         ),
         SourceMutant(
             "VM-111", "validate_documents의 location 정규화 제거", target,
@@ -2615,8 +2977,8 @@ def validator_mutants() -> list[SourceMutant]:
         ),
         SourceMutant(
             "VM-115", "자막 직접 입력 ref의 identity 검사 제거", target,
-            '        if expected is not None and _ref_identity(subtitle.get("input_document_ref")) != expected:',
-            "        if False:", ("IM-176",),
+            '            if _ref_identity(subtitle.get("input_document_ref")) != expected:',
+            "            if False:", ("IM-176",),
         ),
         SourceMutant(
             "VM-116", "자막 source_transcript_ref의 컨텍스트 identity 검사 제거", target,
@@ -2647,12 +3009,11 @@ def validator_mutants() -> list[SourceMutant]:
             """            findings.extend(
                 _check_input_label_value(
                     stream.get("speaker_label"),
-                    {
-                        entry[3]
-                        for entry in speech_index.values()
-                        if entry[3] is not None and entry[2] == stream_id
-                    },
+                    {value for value in evidence if value is not None},
                     where,
+                    # 한 입력만 label을 갖고 나머지는 없으면 stream 전체의 화자를 그 하나로
+                    # 정당화할 수 없다 (REVIEW-025 R-02).
+                    unlabeled_evidence=any(value is None for value in evidence),
                 )
             )""",
             "            pass", ("IM-178", "IM-180", "IM-181"),
@@ -2685,8 +3046,109 @@ def validator_mutants() -> list[SourceMutant]:
         # --- 검증 컨텍스트 모양 ------------------------------------------------------
         SourceMutant(
             "VM-127", "document_refs 모양 검사 제거", target,
-            "            findings.extend(_check_ref_context(documents[key]))",
+            "            findings.extend(_check_ref_context(documents[key], validator))",
             "            pass", ("IM-196", "IM-197", "IM-198"),
+        ),
+        # --- REVIEW-025 R-01: 컨텍스트 필수화와 ArtifactRef 일관성 --------------------
+        SourceMutant(
+            "VM-128", "컨텍스트 필수 role 판정 제거 (fail-open)", target,
+            """    absent = [
+        (role, location)
+        for role, location in requirements
+        if _ref_identity(refs.get(role)) is None
+    ]""",
+            "    absent = []", ("IM-199", "IM-200"),
+        ),
+        SourceMutant(
+            "VM-129", "번역 문서가 요구하는 컨텍스트 role 선언 제거", target,
+            '        requirements.append(("transcript", "translated_transcript/source_transcript"))',
+            "        pass", ("IM-199",),
+        ),
+        SourceMutant(
+            "VM-130", "자막 원본 ref가 요구하는 컨텍스트 role 선언 제거", target,
+            '            requirements.append(("transcript", "subtitle_document/source_transcript_ref"))',
+            "            pass", ("IM-199",),
+        ),
+        SourceMutant(
+            "VM-131", "Transcript ↔ TranslatedTranscript identity 붕괴 검사 제거", target,
+            "        and transcript_ref == translated_ref", "        and False", ("IM-201",),
+        ),
+        SourceMutant(
+            "VM-132", "같은 artifact_id의 immutable metadata 일치 검사 제거", target,
+            "            if ref.get(field) != original.get(field):", "            if False:",
+            ("IM-202", "IM-203"),
+        ),
+        SourceMutant(
+            "VM-133", "검증 컨텍스트 role 닫기 제거", target,
+            "        if name not in REF_CONTEXT_ROLES:", "        if False:", ("IM-205",),
+        ),
+        SourceMutant(
+            "VM-134", "검증 컨텍스트 ref의 공통 ArtifactRef 계약 검사 제거", target,
+            """            findings.extend(
+                redact_schema_findings(
+                    validator.validate(
+                        value[name], COMMON_SCHEMA_FILE, spot, pointer="/$defs/ArtifactRef"
+                    )
+                )
+            )""",
+            "            pass", ("IM-204",),
+        ),
+        SourceMutant(
+            "VM-135", "검증 컨텍스트 ref의 문서 종류 결박 제거", target,
+            "        findings.extend(_check_document_ref_shape(value[name], spot))",
+            "        pass", ("IM-206",),
+        ),
+        # --- REVIEW-025 R-02: 비겹치는 입력 lineage --------------------------------
+        SourceMutant(
+            "VM-136", "입력 SpeechSegment 시간 겹침 검사 제거", target,
+            "            if valid_time and not _overlaps(start, end, entry[0], entry[1]):",
+            "            if False:", ("IM-207", "IM-208"),
+        ),
+        SourceMutant(
+            "VM-137", "덮는 입력이 unlabeled일 때의 ambiguity 검사 제거", target,
+            "    if unlabeled_evidence:", "    if False:", ("IM-209",),
+        ),
+        # --- REVIEW-025 R-03: translation code-switch --------------------------------
+        SourceMutant(
+            "VM-138", "translation code-switch capability 결박 제거", target,
+            """        if (len(languages) > 1 or switched) and capability.get(
+            "supports_code_switching_input"
+        ) is not True:""",
+            "        if False:", ("IM-210", "IM-211"),
+        ),
+        SourceMutant(
+            "VM-139", "fragment 안쪽 intra-sentential 전환 판정 제거", target,
+            '        if span.get("switch_kind") == "intra_sentential" and start < span_start < end:',
+            "        if False:", ("IM-225",),
+        ),
+        # --- REVIEW-025 R-04: 임의 정밀도 숫자 ----------------------------------------
+        SourceMutant(
+            "VM-140", "int를 float로 강제 변환해 overflow를 되살린다", target,
+            """    if not _is_number(value):
+        return False
+    if isinstance(value, int):
+        return True
+    return math.isfinite(value)""",
+            "    return _is_number(value) and math.isfinite(float(value))",
+            ("IM-212", "IM-213", "IM-215", "IM-218"),
+        ),
+        # --- REVIEW-025 R-05: location alias -----------------------------------------
+        SourceMutant(
+            "VM-141", "location 구간의 선언 어휘 allowlist 제거", target,
+            '            if len(matches) != 1 or not _segment_allowed("/".join(kept), matches[0]):',
+            "            if len(matches) != 1:", ("LOCATION", "IM-221"),
+        ),
+        SourceMutant(
+            "VM-142", "language override 어휘 allowlist를 모든 key로 넓힌다", target,
+            "    return parent_location == LANGUAGE_OVERRIDES_LOCATION and _is_language_tag_subset(key)",
+            "    return parent_location == LANGUAGE_OVERRIDES_LOCATION", ("LOCATION",),
+        ),
+        SourceMutant(
+            "VM-143", "container 조기 반환의 정규화 생략", target,
+            """        # 조기 반환도 **같은 정규화**를 지난다 (REVIEW-025 R-05).
+        return _finalize(container_findings, documents)""",
+            "        return ValidationResult(findings=tuple(sort_findings(container_findings)))",
+            ("LOCATION",),
         ),
     ] + _call_site_mutants(
         [
@@ -2719,18 +3181,56 @@ def _base_documents(fixture_dir: Path) -> dict[str, dict]:
     return {name: by_case[case_id] for name, case_id in BASE_CASES.items()}
 
 
+def safe_pairs(documents: Any, schemas: SchemaSet) -> tuple[tuple[tuple[str, str], ...], str]:
+    """검증을 돌리되 **예외를 그 case의 실패로 기록**한다 (REVIEW-025 R-04).
+
+    validator가 특정 입력에서 예외를 내면 그것은 그 입력의 결함이지 감사 도구가 죽을 일이
+    아니다. 예외를 잡아 두면 (a) 어떤 입력이 터졌는지 정확히 보고되고, (b) 나머지 정상
+    case의 sentinel은 계속 실행돼 판정이 가려지지 않는다.
+    """
+
+    try:
+        return tuple(sorted(validate_documents(documents, schemas).pairs)), ""
+    except Exception as exc:  # noqa: BLE001 - 예외 자체가 결과다
+        return (), f"{type(exc).__name__}: {exc}"[:200]
+
+
+def _safe_result(documents: Any, schemas: SchemaSet) -> tuple[Any, str]:
+    try:
+        return validate_documents(documents, schemas), ""
+    except Exception as exc:  # noqa: BLE001
+        return None, f"{type(exc).__name__}: {exc}"[:200]
+
+
 def run_fixture_pass(schemas: SchemaSet, fixture_dir: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for outcome in run_fixtures(fixture_dir, schemas):
-        fixture = load_fixture(outcome.path)
+    for path in sorted(fixture_dir.glob("k-*.json")):
+        fixture = load_fixture(path)
+        expected = tuple(sorted(
+            (item["code"], item["location"])
+            for item in fixture["expected"].get("findings") or []
+        ))
+        observed, crash = safe_pairs(fixture["documents"], schemas)
+        mismatches: list[str] = []
+        if crash:
+            mismatches.append(f"검증이 예외로 중단됐다: {crash}")
+        else:
+            mismatches.extend(
+                f"누락: {code}@{location}"
+                for code, location in sorted(set(expected) - set(observed))
+            )
+            mismatches.extend(
+                f"초과: {code}@{location}"
+                for code, location in sorted(set(observed) - set(expected))
+            )
         row: dict[str, Any] = {
-            "case_id": outcome.case_id,
-            "passed": outcome.passed,
-            "mismatches": list(outcome.mismatches),
+            "case_id": str(fixture["case_id"]),
+            "passed": not mismatches,
+            "mismatches": mismatches,
         }
         if bool(fixture["expected"].get("valid")):
             # 정상 fixture는 그 자체가 valid-case sentinel이다 — 실제 결과를 센다.
-            row["sentinel_ok"] = not validate_documents(fixture["documents"], schemas).findings
+            row["sentinel_ok"] = not crash and not observed
         rows.append(row)
     return rows
 
@@ -2741,11 +3241,12 @@ def run_input_mutations(schemas: SchemaSet, fixture_dir: Path) -> list[dict[str,
     results: list[dict[str, Any]] = []
     for mutation in MUTATIONS:
         documents = mutation.documents(sources)
-        observed = tuple(sorted(validate_documents(documents, schemas).pairs))
+        observed, crash = safe_pairs(documents, schemas)
         # valid-case sentinel — **변형하지 않은** 같은 문서 부분집합은 깨끗해야 한다.
         # 변형이 아니라 base나 keep 선택이 결함을 만든 경우를 여기서 잡는다.
-        sentinel_documents = mutation.sentinel_documents(sources)
-        sentinel_findings = validate_documents(sentinel_documents, schemas).pairs
+        sentinel_pairs, sentinel_crash = safe_pairs(
+            mutation.sentinel_documents(sources), schemas
+        )
         results.append(
             {
                 "mutation_id": mutation.mutation_id,
@@ -2753,8 +3254,9 @@ def run_input_mutations(schemas: SchemaSet, fixture_dir: Path) -> list[dict[str,
                 "base": BASE_CASES[mutation.base],
                 "expected": [list(pair) for pair in mutation.expected],
                 "observed": [list(pair) for pair in observed],
-                "passed": observed == mutation.expected,
-                "sentinel_ok": not sentinel_findings,
+                "crash": crash,
+                "passed": not crash and observed == mutation.expected,
+                "sentinel_ok": not sentinel_crash and not sentinel_pairs,
             }
         )
     return results
@@ -2833,15 +3335,51 @@ def _leak_hits(documents: Any, findings: Sequence[Any]) -> list[tuple[str, str]]
         elif any(marker in finding.message for marker in _PATH_MARKERS):
             hits.append(("LEAK", f"{where}: message에 절대 경로 노출"))
 
-        segments = finding.location.split("/") if finding.location else []
-        if any(not contracts._is_safe_segment(segment) for segment in segments):
-            hits.append(("LOCATION", f"{where}: location 구간이 입력에서 온 값이다"))
-        elif any(value in finding.location for value in values) or any(
-            marker in finding.location for marker in _PATH_MARKERS
-        ):
-            hits.append(("LOCATION", f"{where}: location에 입력 텍스트·경로 노출"))
-        elif not _resolves(documents, finding.location):
-            hits.append(("LOCATION", f"{where}: location이 실제 입력에서 해석되지 않는다"))
+        hits.extend(_location_hits(documents, finding, values, where))
+    return hits
+
+
+def _location_hits(
+    documents: Any, finding: Any, values: set[str], where: str
+) -> list[tuple[str, str]]:
+    """location이 사용자 제어 key를 담거나 다른 노드로 alias되지 않았는지 (REVIEW-025 R-05).
+
+    구간 모양만 보지 않는다. `patient_name`은 모양이 멀쩡하고, `"a/b"` key는 이어붙인 뒤에는
+    실제 `a.b` 경로와 구분되지 않는다. 그래서 **실제 입력을 따라간 결과**와 비교한다.
+    """
+
+    location = finding.location
+    hits: list[tuple[str, str]] = []
+    if location == "":
+        return hits
+
+    folded = contracts.safe_location(location, documents)
+    if folded != location:
+        hits.append(("LOCATION", f"{where}: dynamic key가 접히지 않은 채 남았다"))
+        return hits
+    # `safe_location`을 다시 부르는 대신 **독립적으로** 같은 규칙을 확인한다.
+    # 남아 있어도 되는 것은 정본이 선언한 고정 field, 배열 index, 그리고 정본이 선언한
+    # 유일한 dynamic 어휘(language tag subset)뿐이다.
+    prefix: list[str] = []
+    for segment in location.split("/"):
+        allowed = (
+            segment.isdigit()
+            or segment in contracts.declared_segments()
+            or (
+                "/".join(prefix) == contracts.LANGUAGE_OVERRIDES_LOCATION
+                and contracts._is_language_tag_subset(segment)
+            )
+        )
+        if not allowed:
+            hits.append(("LOCATION", f"{where}: 정본이 선언하지 않은 구간이 남았다"))
+            return hits
+        prefix.append(segment)
+    if any(value in location for value in values) or any(
+        marker in location for marker in _PATH_MARKERS
+    ):
+        hits.append(("LOCATION", f"{where}: location에 입력 텍스트·경로 노출"))
+    elif not _resolves(documents, location):
+        hits.append(("LOCATION", f"{where}: location이 실제 입력에서 해석되지 않는다"))
     return hits
 
 
@@ -2851,8 +3389,8 @@ def run_leak_scan(schemas: SchemaSet, fixture_dir: Path) -> list[dict[str, Any]]
     rows: list[dict[str, Any]] = []
     for path in sorted(fixture_dir.glob("k-*.json")):
         fixture = load_fixture(path)
-        result = validate_documents(fixture["documents"], schemas)
-        hits = _leak_hits(fixture["documents"], result.findings)
+        result, crash = _safe_result(fixture["documents"], schemas)
+        hits = [] if crash else _leak_hits(fixture["documents"], result.findings)
         row: dict[str, Any] = {
             "leak_id": str(fixture["case_id"]),
             "passed": not hits,
@@ -2861,12 +3399,12 @@ def run_leak_scan(schemas: SchemaSet, fixture_dir: Path) -> list[dict[str, Any]]
         }
         if bool(fixture["expected"].get("valid")):
             # 정상 fixture는 finding이 없어야 한다 — 스캔 자체의 valid-case sentinel.
-            row["sentinel_ok"] = not result.findings
+            row["sentinel_ok"] = not crash and not result.findings
         rows.append(row)
     for mutation in MUTATIONS:
         documents = mutation.documents(sources)
-        result = validate_documents(documents, schemas)
-        hits = _leak_hits(documents, result.findings)
+        result, crash = _safe_result(documents, schemas)
+        hits = [] if crash else _leak_hits(documents, result.findings)
         rows.append(
             {
                 "leak_id": mutation.mutation_id,
@@ -2967,18 +3505,22 @@ def run_depth_probes(schemas: SchemaSet, fixture_dir: Path) -> list[dict[str, An
     sources = _base_documents(fixture_dir)
     rows: list[dict[str, Any]] = []
     for probe in depth_probes():
-        unit_observed = tuple(
-            sorted((finding.code, finding.location) for finding in probe.unit())
-        )
+        try:
+            unit_observed = tuple(
+                sorted((finding.code, finding.location) for finding in probe.unit())
+            )
+        except Exception as exc:  # noqa: BLE001 - depth probe가 터지는 것도 결과다
+            unit_observed = ((type(exc).__name__, str(exc)[:80]),)
         documents = copy.deepcopy(sources[probe.base])
         probe.patch(documents)
         documents = {key: documents[key] for key in probe.keep if key in documents}
-        shadow_observed = tuple(sorted(validate_documents(documents, schemas).pairs))
+        shadow_observed, shadow_crash = safe_pairs(documents, schemas)
         rows.append(
             {
                 "probe_id": probe.probe_id,
                 "title": probe.title,
-                "passed": unit_observed == (probe.unit_expected,)
+                "passed": not shadow_crash
+                and unit_observed == (probe.unit_expected,)
                 and shadow_observed == probe.shadow_expected,
                 "unit_expected": [list(probe.unit_expected)],
                 "unit_observed": [list(pair) for pair in unit_observed],
@@ -3296,22 +3838,22 @@ def unique_transformation_count(schema_dir: Path = SCHEMA_DIR) -> dict[str, int]
 _SELF_TESTS: tuple[tuple[str, str, str, str], ...] = (
     (
         "AS-01", "input mutant sentinel만 실패시킨다",
-        '                "passed": observed == mutation.expected,\n'
-        '                "sentinel_ok": not sentinel_findings,',
-        '                "passed": observed == mutation.expected,\n'
+        '                "passed": not crash and observed == mutation.expected,\n'
+        '                "sentinel_ok": not sentinel_crash and not sentinel_pairs,',
+        '                "passed": not crash and observed == mutation.expected,\n'
         '                "sentinel_ok": False,',
     ),
     (
         "AS-02", "fixture sentinel만 실패시킨다",
         "            # 정상 fixture는 그 자체가 valid-case sentinel이다 — 실제 결과를 센다.\n"
-        '            row["sentinel_ok"] = not validate_documents(fixture["documents"], schemas).findings',
+        '            row["sentinel_ok"] = not crash and not observed',
         "            # 정상 fixture는 그 자체가 valid-case sentinel이다 — 실제 결과를 센다.\n"
         '            row["sentinel_ok"] = False',
     ),
     (
         "AS-03", "leak scan sentinel만 실패시킨다",
         "            # 정상 fixture는 finding이 없어야 한다 — 스캔 자체의 valid-case sentinel.\n"
-        '            row["sentinel_ok"] = not result.findings',
+        '            row["sentinel_ok"] = not crash and not result.findings',
         "            # 정상 fixture는 finding이 없어야 한다 — 스캔 자체의 valid-case sentinel.\n"
         '            row["sentinel_ok"] = False',
     ),
@@ -3360,21 +3902,7 @@ def run_audit_self_tests() -> list[dict[str, Any]]:
 
 
 def _run_check_only_code(root: Path) -> int:
-    proc = subprocess.run(
-        [sys.executable, "scripts/verify_task_029.py", "--check-only"],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        env={
-            "PYTHONPATH": "src",
-            "PATH": "/usr/bin:/bin",
-            "HOME": str(root),
-            "PYTHONDONTWRITEBYTECODE": "1",
-            "PYTHONIOENCODING": "utf-8",
-        },
-        timeout=600,
-    )
-    return proc.returncode
+    return _run_script_code(root, "--check-only")
 
 
 # ---------------------------------------------------------------------------
@@ -3750,6 +4278,27 @@ def run_schema_defense_inventory(fixture_dir: Path, schema_dir: Path) -> list[di
             if not row["sentinel_ok"] and not row["note"]:
                 row["note"] = "약화한 schema에서 정상 fixture가 거부됐다"
             rows.append(row)
+
+    # killable / equivalent 분모를 **고정 allowlist 기준으로** 나눈다.
+    # 단독 kill이 불가능한 방어를 killable 분모에 섞으면 kill rate가 부정확해진다
+    # (REVIEW-025 R-06). allowlist가 조용히 늘거나 줄면 그 자체가 실패다.
+    try:
+        allowlist = {
+            str(entry.get("defense_id"))
+            for entry in (load_defense_manifest().get("equivalent") or [])
+        }
+    except (OSError, json.JSONDecodeError):  # pragma: no cover - MF-00이 따로 보고한다
+        allowlist = set()
+    for row in rows:
+        declared = row["defense_id"] in allowlist
+        row["equivalent"] = declared
+        if declared != bool(row.get("subsumed")):
+            row["passed"] = False
+            row["note"] = (
+                "equivalent allowlist에 있으나 실제로는 단독 kill이 가능하다"
+                if declared
+                else "단독 kill이 불가능한데 equivalent allowlist에 없다"
+            )
     return rows
 
 
@@ -3822,6 +4371,201 @@ def _probe_defense(
     return last or {"note": "이 방어를 깨는 입력 후보를 만들 수 없다"}
 
 
+# ---------------------------------------------------------------------------
+# REVIEW-025 R-06 — schema 방어의 **저장소 밖 고정 기준** (frozen manifest)
+# ---------------------------------------------------------------------------
+
+#: 방어 목록을 production schema에서 다시 만들면, 방어를 지웠을 때 분모도 함께 줄어들어
+#: 감사가 조용히 통과한다. 그래서 현재 방어 ID 집합을 **schema 밖 파일**에 고정한다.
+#: 추가·삭제는 이 파일의 명시적 diff 없이는 audit가 실패한다.
+DEFENSE_MANIFEST_PATH = FIXTURE_DIR / "defense-manifest.json"
+
+
+def _manifest_digest(killable: Sequence[str], equivalent: Sequence[str]) -> str:
+    payload = json.dumps(
+        {"killable": sorted(killable), "equivalent": sorted(equivalent)},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(payload).hexdigest()
+
+
+def load_defense_manifest(path: Path = DEFENSE_MANIFEST_PATH) -> dict[str, Any]:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def run_manifest_check(
+    schema_dir: Path = SCHEMA_DIR, path: Path = DEFENSE_MANIFEST_PATH
+) -> list[dict[str, Any]]:
+    """production 방어 집합이 **고정 manifest와 정확히 같은지** (REVIEW-025 R-06).
+
+    - manifest에 있는데 schema에 없다 → 방어가 삭제됐다. 분모가 줄어드는 것이 아니라 실패다.
+    - schema에 있는데 manifest에 없다 → 새 방어가 검토 없이 들어왔다. 역시 실패다.
+    - digest 불일치 → manifest 자체가 손상되거나 손으로 고쳐졌다.
+
+    고유 transformation 검사도 여기서 함께 한다. audit의 성공 조건이 unit test가 아니라
+    이 결과에 직접 걸리게 하기 위해서다.
+    """
+
+    rows: list[dict[str, Any]] = []
+    try:
+        manifest = load_defense_manifest(path)
+    except (OSError, json.JSONDecodeError) as exc:  # noqa: BLE001
+        return [{
+            "check_id": "MF-00", "title": "defense manifest 읽기",
+            "passed": False, "note": f"manifest를 읽을 수 없다: {exc}",
+        }]
+
+    declared_killable = list(manifest.get("killable") or [])
+    equivalent_entries = list(manifest.get("equivalent") or [])
+    declared_equivalent = [str(entry.get("defense_id")) for entry in equivalent_entries]
+    declared = set(declared_killable) | set(declared_equivalent)
+    observed = {defense.defense_id for defense in collect_schema_defenses(schema_dir)}
+
+    removed = sorted(declared - observed)
+    added = sorted(observed - declared)
+    rows.append({
+        "check_id": "MF-01", "title": "production 방어가 삭제되지 않았다",
+        "passed": not removed,
+        "note": f"manifest에 있으나 schema에 없다: {', '.join(removed[:6])}" if removed else "",
+        "missing": removed,
+    })
+    rows.append({
+        "check_id": "MF-02", "title": "새 방어가 manifest에 등록됐다",
+        "passed": not added,
+        "note": f"schema에 있으나 manifest에 없다: {', '.join(added[:6])}" if added else "",
+        "extra": added,
+    })
+    expected_digest = _manifest_digest(declared_killable, declared_equivalent)
+    rows.append({
+        "check_id": "MF-03", "title": "manifest digest가 목록과 일치한다",
+        "passed": manifest.get("digest") == expected_digest,
+        "note": "" if manifest.get("digest") == expected_digest
+        else f"기대 {expected_digest} / 기록 {manifest.get('digest')}",
+    })
+    rows.append({
+        "check_id": "MF-04", "title": "equivalent allowlist에 근거가 적혀 있다",
+        "passed": all(
+            isinstance(entry.get("reason"), str) and entry["reason"].strip()
+            for entry in equivalent_entries
+        ),
+        "note": "" if all(
+            isinstance(entry.get("reason"), str) and entry["reason"].strip()
+            for entry in equivalent_entries
+        ) else "근거 없는 equivalent 항목이 있다",
+    })
+    duplicates = duplicate_transformations()
+    rows.append({
+        "check_id": "MF-05", "title": "같은 transformation을 두 mutant로 세지 않는다",
+        "passed": not duplicates,
+        "note": f"중복 transformation: {duplicates[:3]}" if duplicates else "",
+    })
+    return rows
+
+
+def write_defense_manifest(
+    schema_dir: Path = SCHEMA_DIR, path: Path = DEFENSE_MANIFEST_PATH
+) -> dict[str, Any]:
+    """manifest를 현재 schema 기준으로 다시 쓴다 (사람이 diff로 검토하는 명시적 갱신)."""
+
+    previous: dict[str, Any] = {}
+    if path.exists():
+        previous = load_defense_manifest(path)
+    equivalent = {
+        str(entry.get("defense_id")): entry
+        for entry in (previous.get("equivalent") or [])
+    }
+    observed = sorted(defense.defense_id for defense in collect_schema_defenses(schema_dir))
+    killable = [defense_id for defense_id in observed if defense_id not in equivalent]
+    entries = [equivalent[defense_id] for defense_id in observed if defense_id in equivalent]
+    manifest = {
+        "note": (
+            "TASK-029 schema 방어의 고정 기준. production schema에서 다시 생성하지 않는다 "
+            "(REVIEW-025 R-06). 갱신은 이 파일의 명시적 diff로만 한다."
+        ),
+        "digest": _manifest_digest(killable, list(equivalent)),
+        "killable": killable,
+        "equivalent": entries,
+    }
+    path.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=1) + "\n", encoding="utf-8"
+    )
+    return manifest
+
+
+#: 임시 사본에서 **production 방어를 삭제**하고 manifest drift가 실제로 gate를 막는지 본다.
+#: REVIEW-024가 지목했던 바로 그 required 필드들이다 (REVIEW-025 R-06 6번).
+_DEFENSE_SELF_TESTS: tuple[tuple[str, str, str], ...] = (
+    ("SD-01", "schemas/speech-segment-v1.schema.json", "source_track_index"),
+    ("SD-02", "schemas/transcript-v1.schema.json", "transcript_id"),
+    ("SD-03", "schemas/adapter-capability-report-v1.schema.json", "network_requirement"),
+    ("SD-04", "schemas/translated-transcript-v1.schema.json", "source_transcript"),
+    ("SD-05", "schemas/subtitle-document-v1.schema.json", "input_document_ref"),
+)
+
+
+def run_defense_drift_self_tests() -> list[dict[str, Any]]:
+    """root required를 지우면 `--manifest-check`가 반드시 exit 1이어야 한다.
+
+    이 검사가 audit의 성공 조건에 직접 걸려 있으므로, 같은 삭제는 `make audit-task-029`와
+    `make verify-task-029`도 exit 1로 만든다.
+    """
+
+    rows: list[dict[str, Any]] = []
+    with tempfile.TemporaryDirectory(prefix="mcs-029-drift-") as tmp:
+        root = Path(tmp) / "tree"
+        shutil.copytree(
+            REPO_ROOT, root, ignore=shutil.ignore_patterns(".git", "__pycache__", "*.pyc")
+        )
+        baseline = _run_script_code(root, "--manifest-check")
+        if baseline != 0:
+            return [{
+                "selftest_id": "BASELINE", "title": "임시 사본 manifest baseline",
+                "passed": False, "note": f"baseline exit={baseline} (0이어야 한다)",
+            }]
+        for selftest_id, relative, field in _DEFENSE_SELF_TESTS:
+            path = root / relative
+            original = path.read_text(encoding="utf-8")
+            document = json.loads(original)
+            if field not in document.get("required", []):
+                rows.append({
+                    "selftest_id": selftest_id, "title": f"{relative}: {field}",
+                    "passed": False, "note": "root required에 그 필드가 없다 — 자기검증 불가",
+                })
+                continue
+            document["required"] = [name for name in document["required"] if name != field]
+            path.write_text(
+                json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
+            code = _run_script_code(root, "--manifest-check")
+            path.write_text(original, encoding="utf-8")
+            rows.append({
+                "selftest_id": selftest_id, "title": f"{relative}의 root required {field} 삭제",
+                "passed": code == 1, "exit_code": code,
+                "note": "" if code == 1 else f"방어를 지웠는데 exit={code} (1이어야 한다)",
+            })
+    return rows
+
+
+def _run_script_code(root: Path, *args: str) -> int:
+    proc = subprocess.run(
+        [sys.executable, "scripts/verify_task_029.py", *args],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        env={
+            "PYTHONPATH": "src",
+            "PATH": "/usr/bin:/bin",
+            "HOME": str(root),
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONIOENCODING": "utf-8",
+        },
+        timeout=600,
+    )
+    return proc.returncode
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="scripts/verify_task_029.py",
@@ -3835,7 +4579,34 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="fixture와 input mutation만 수행한다 (임시 사본 감사에서 쓴다)",
     )
     parser.add_argument("--json", action="store_true", help="결과를 JSON으로 출력한다")
+    parser.add_argument(
+        "--manifest-check",
+        action="store_true",
+        help="고정 defense manifest drift와 transformation 고유성만 확인한다",
+    )
+    parser.add_argument(
+        "--write-manifest",
+        action="store_true",
+        help="현재 schema 기준으로 defense manifest를 다시 쓴다 (명시적 갱신)",
+    )
     args = parser.parse_args(argv)
+
+    if args.write_manifest:
+        manifest = write_defense_manifest(args.schemas)
+        print(
+            f"defense manifest 갱신 — killable {len(manifest['killable'])}건 · "
+            f"equivalent {len(manifest['equivalent'])}건 · digest {manifest['digest']}"
+        )
+        return 0
+
+    if args.manifest_check:
+        rows = run_manifest_check(args.schemas)
+        for row in rows:
+            if not row["passed"]:
+                print(f"DRIFT {row['check_id']}: {row['title']} — {row['note']}")
+        if args.json:
+            print(json.dumps(rows, ensure_ascii=False))
+        return 0 if all(row["passed"] for row in rows) else 1
 
     payload = _check_only(args.fixtures, args.schemas)
     fixture_rows = payload["fixtures"]
@@ -3873,6 +4644,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     audit_schemas = SchemaSet(args.schemas)
     coverage_rows = run_defense_coverage(audit_schemas, args.fixtures)
     inventory_rows = run_schema_defense_inventory(args.fixtures, args.schemas)
+    manifest_rows = run_manifest_check(args.schemas)
+    drift_rows = run_defense_drift_self_tests()
     selftest_rows = run_audit_self_tests()
     schema_rows = run_source_mutants(schema_mutants(), "schema")
     validator_rows = run_source_mutants(validator_mutants(), "validator")
@@ -3883,7 +4656,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         _summary("leak scan", leak_rows, sentinel=False),
         _summary("depth probes", depth_rows, sentinel=False),
         _summary("validator defense sites", coverage_rows, sentinel=False),
-        _summary("schema defense inventory", inventory_rows, sentinel=True),
+        _summary(
+            "schema defense killable",
+            [row for row in inventory_rows if not row.get("equivalent")],
+            sentinel=True,
+        ),
+        _summary(
+            "schema defense equivalent",
+            [row for row in inventory_rows if row.get("equivalent")],
+            sentinel=True,
+        ),
+        _summary("defense manifest", manifest_rows, sentinel=False),
+        _summary("defense drift self-tests", drift_rows, sentinel=False),
         _summary("audit self-tests", selftest_rows, sentinel=False),
         _summary("schema mutants", schema_rows, sentinel=True),
         _summary("validator code mutants", validator_rows, sentinel=True),
@@ -3896,6 +4680,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         "depth_probes": depth_rows,
         "defense_sites": coverage_rows,
         "schema_defense_inventory": inventory_rows,
+        "defense_manifest": manifest_rows,
+        "defense_drift_self_tests": drift_rows,
         "audit_self_tests": selftest_rows,
         "schema_mutants": schema_rows,
         "validator_mutants": validator_rows,
@@ -3911,7 +4697,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(
                     f"SCHEMA-DEFENSE {row['defense_id']}: {row['note']}"
                 )
-        for row in selftest_rows:
+        for row in manifest_rows:
+            if not row["passed"]:
+                print(f"DRIFT {row['check_id']}: {row['title']} — {row['note']}")
+        for row in drift_rows + selftest_rows:
             if not row["passed"]:
                 print(f"SELFTEST {row['selftest_id']}: {row['note']}")
         for row in coverage_rows:
@@ -3942,6 +4731,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         _all_passed(payload)
         and all(row["passed"] for row in coverage_rows)
         and all(row["passed"] for row in inventory_rows)
+        # manifest drift와 transformation 고유성을 audit 성공 조건에 **직접** 건다.
+        and all(row["passed"] for row in manifest_rows)
+        and all(row["passed"] for row in drift_rows)
         and all(row["passed"] for row in selftest_rows)
         and all(row.get("detected") and row.get("sentinel_ok") for row in schema_rows)
         and all(row.get("detected") and row.get("sentinel_ok") for row in validator_rows)

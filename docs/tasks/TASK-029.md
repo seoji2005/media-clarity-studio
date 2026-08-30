@@ -786,10 +786,10 @@ git status --short
   U-18이 미정이므로 style 수치를, U-19가 미정이므로 `norm-v1` 규칙을 만들지 않았다.
 - **Windows 11/NTFS에서 실행하지 않았다.** Linux·Python 3.11/3.12에서만 확인했다.
 
-### 14.10 미해결 교차 계약 모순 (첫 구현 시점 — §16이 갱신한다)
+### 14.10 미해결 교차 계약 모순 (첫 구현 시점 — §16·§17이 갱신한다)
 
-> 이 절의 "발견하지 못했다"는 첫 구현 세션의 기록이다. REVIEW-024 D-02가 실제 모순 하나를
-> 지적했고 **§16.6**이 그것을 해소했다. 현재 상태는 §16을 본다.
+> 이 절의 "발견하지 못했다"는 첫 구현 세션의 기록이다. REVIEW-024 D-02와 REVIEW-025 D-03이
+> 실제 모순을 지적했고 §16.6·**§17.7**이 그것을 해소했다. 현재 상태는 §17을 본다.
 
 **발견하지 못했다.** §5 표로 해결되지 않는 모순은 없었고, 따라서 `Blocked`로 중단하지 않았다.
 `docs/EVALS.md` §4.5(a)가 raw `Transcript`의 `language_spans`에도 `canonical_cue_text` 기준
@@ -1028,6 +1028,7 @@ source 문자 사이 정렬이 없고, `Transcript` token에 문자 오프셋이
 - U-19를 이 TASK에서 임의로 확정하지 않았다.
 - `ARCHITECTURE.md` §3.0.2·§7.12, `EVALS.md` §4.5(a)와 C0 규칙 7·8, 그리고 §14.10·§15.5의
   "결정적 투영 / 미해결 모순 0" 표현을 실제 계약 수준으로 낮췄다.
+  (§16.6이 놓친 EVALS의 잔존 문구는 REVIEW-025 D-03이 지적했고 **§17.7**이 마무리했다.)
 
 ### 16.7 오너 결정이 필요한 항목 (이 TASK에서 정하지 않았다)
 
@@ -1052,4 +1053,157 @@ REVIEW-024 §5와 같다. 후속 producer가 **숨은 정렬 규약**을 만들�
   무관하게 구간 모양을 전수로 검사한다.
 - `CorrectionLedger`·`TermBundle`·`WorkUnitManifest`는 여전히 범위 밖이다.
 - `STATUS.md`·`PLAN.md`·`DECISIONS.md`의 일반 상태 정합화는 Lean Root의 몫이며 여기서 하지 않았다.
+- 이 세션은 **작성자**다. 리뷰도 승인도 하지 않는다 (`AGENTS.md` R8).
+
+---
+
+## 17. REVIEW-025 변경 요청 반영 기록 (같은 브랜치의 세 번째 후속 커밋)
+
+[`docs/reviews/REVIEW-025.md`](../reviews/REVIEW-025.md)의 **변경 요청**(R-01~R-06, D-03)을
+PR #45의 같은 브랜치에 반영했다. §14는 첫 구현, §15는 REVIEW-023, §16은 REVIEW-024 기록이며
+**지우지 않았다.** 현재 저장소 상태의 숫자는 이 절에 있다.
+
+`schema_core.py`·`CACHE_KEY_FIELDS`·`artifact_store.py`·`job_runtime.py`·기존 job/artifact
+schema의 canonical bytes는 그대로다. 신규 dependency·model·network access는 0이고, §8의 안정
+오류 코드 22개 밖의 코드를 만들지 않았다. REVIEW-023/024에서 해소한 방어는 회귀 없이 유지된다.
+
+### 17.1 R-01 — 검증 컨텍스트 fail-open과 ArtifactRef 일관성
+
+**컨텍스트는 더 이상 선택이 아니다.** 계보 identity를 검사해야 하는 문서 조합(번역·자막)에서
+`document_refs`가 없거나 필요한 role이 빠지면 조용히 건너뛰지 않고 `E_SOURCE_REF`로 거부한다.
+"확인하지 못했다"를 `VALID`로 돌려주지 않는다.
+
+| 규칙 | code @ location |
+|---|---|
+| 번역 문서를 검증하려면 `transcript` role이 필요하다 | `E_SOURCE_REF` @ `translated_transcript/source_transcript` |
+| 자막 문서를 검증하려면 직접 입력 role이 필요하다 (target이면 `translated_transcript`) | `E_SOURCE_REF` @ `subtitle_document/input_document_ref` |
+| target 축 자막의 원본 ref를 검증하려면 `transcript` role이 필요하다 | `E_SOURCE_REF` @ `subtitle_document/source_transcript_ref` |
+| Transcript와 TranslatedTranscript가 같은 identity로 붕괴 | `E_SOURCE_REF` @ `document_refs/translated_transcript` |
+| 컨텍스트 ref는 `common-v1.schema.json#/$defs/ArtifactRef`로 검증한다 (느슨한 사본 없음) | `E_SCHEMA` @ `document_refs/<role>` |
+| role은 `transcript`·`translated_transcript` 둘로 닫는다 | `E_SCHEMA` @ `document_refs/<role>` |
+| 같은 `artifact_id`를 가리키는 모든 ref의 immutable metadata가 일치해야 한다 | `E_SOURCE_REF` @ `<ref 위치>/<field>` |
+
+**ArtifactRef equality가 비교하는 정확한 field set** (`subtitle_contracts.py` 상수로 고정).
+
+| 구분 | field | 근거 |
+|---|---|---|
+| **identity** | `artifact_id`, `content_hash` | ARCHITECTURE §2.1 — `artifact_id`는 프로젝트 내 고유, `content_hash`가 같으면 같은 산출물 |
+| **immutable metadata (일치 필수)** | `schema_version`, `content_hash`, `kind`, `media_type`, `byte_size`, `is_estimate` | 바이트가 정해지면 함께 정해지는 값. 같은 ID인데 다르면 둘 중 하나가 거짓이다 |
+| **비교하지 않음 (오너 결정)** | `uri`, `produced_by`, `created_at`, `parent_refs`, `timebase_ref` | 캐시 재사용·외부 입력에서 같은 artifact가 다른 값을 가질 수 있는지 정한 계약이 **없다**. 임의로 정하지 않는다 (§17.8) |
+
+> `uri`의 절대 경로 허용 여부도 같은 이유로 정하지 않았다. `common-v1`은 `uri`를
+> "외부 입력 URI도 표현할 수 있는 불투명 문자열"로 규정하고, TASK-028의 store는 산출물에
+> project-relative 경로를 쓴다. 어느 쪽이 `document_refs`에 적용되는지는 계약에 없다.
+
+### 17.2 R-02 — 비겹치는 SpeechSegment lineage와 화자 근거
+
+- `source_speech_segment_ids`의 각 항목이 그 ASR segment 구간과 **양의 길이로 겹치는지**
+  검사한다. 겹치지 않으면 `E_TIME_RANGE` @ `…/source_speech_segment_ids/<i>`.
+- 화자 근거는 **실제로 구간을 덮는 입력에서만** 모은다. 겹치지 않는 과거·미래 segment의
+  label을 빌려 올 수 없다.
+- 덮는 입력 중 **label이 없는 것이 있으면** 단일 input label을 주장할 수 없다
+  (`E_CAPABILITY_MISMATCH` @ `…/speaker_label`). stream 수준도 같다 — 한 입력만 label을
+  갖고 나머지는 없으면 stream 전체의 화자를 그 하나로 정당화하지 않는다.
+- **비겹치는 참조를 다른 의미로 허용할지는 정하지 않았다.** 지금 계약에서
+  `source_speech_segment_ids`는 "이 인식 결과가 나온 입력"이므로 겹치지 않는 참조는 오류다.
+  context 참조가 필요하다면 별도 field가 필요하며 §17.8 오너 결정 항목이다.
+
+### 17.3 R-03 — translation code-switch capability
+
+한 번역 입력 단위의 언어를 **실제 `source_fragments` 범위와 `Transcript.language_spans`의
+교차**로 계산한다. 전체 Transcript가 아니라 그 단위가 실제로 받은 범위만 본다.
+
+- 한 단위가 **복수 known language** 또는 **fragment 안쪽의 intra-sentential 전환 경계**를
+  담고 있으면 `supports_code_switching_input=true`를 요구한다
+  (`E_CAPABILITY_MISMATCH` @ `translated_transcript/capability_report/supports_code_switching_input`).
+- 언어 경계에 맞춰 나눈 단일언어 단위는 미지원 adapter로도 유효하다 (정상 회귀로 고정).
+- **언어별 분할 호출 후 합성**은 추론하지 않는다. 그 사실을 표현할 provenance/processing
+  계약이 없으므로 §17.8 오너 결정 항목으로 올린다.
+- `supports_independent_channel_input`·`supports_overlap_streams`는 adapter가 전처리 전
+  원본을 받는지 분리된 work unit을 받는지에 따라 의미가 달라지므로 결박하지 않았다 (§17.8).
+
+### 17.4 R-04 — 임의 정밀도 JSON 숫자
+
+`_finite()`가 더 이상 `float()`로 강제 변환하지 않는다. Python `int`는 언제나 finite이므로
+변환 없이 판정하고, 모든 시간·confidence·offset 비교가 원래 타입 그대로 이루어진다.
+strict JSON loader가 받는 401자리 정수도 **crash 대신 안정 finding**을 낸다.
+
+감사한 number 경로: SpeechSegment 시간, Transcript segment·token 시간, token/segment
+confidence, language span offset, 번역 fragment offset, cue 시간, resolved style 숫자.
+CLI fixture 경로가 traceback 없이 끝나는 것도 회귀로 고정했다.
+
+### 17.5 R-05 — dynamic key location의 slash aliasing
+
+**이어붙인 문자열을 사후 split하지 않는다.** 실제 입력을 따라가며 구간을 확정한다.
+
+- 각 단계에서 그 노드의 **실제 key 중 앞부분과 맞는 것**을 찾는다. 둘 이상 맞으면
+  (alias 충돌) 거기서 접는다.
+- 맞는 key가 **정본이 선언한 고정 field**가 아니면 접는다. 모양이 ASCII snake_case라는
+  이유만으로 남기지 않는다 — `patient_name`·`John_Doe`도 같은 모양이다.
+- 유일한 예외는 정본이 선언한 dynamic 어휘, 즉 `language_overrides`의 language tag subset이다.
+  이것은 계약이 정한 vocabulary이지 자유 입력이 아니다.
+- 알 수 없는 최상위 key는 **root**(빈 pointer), 잘못된 `document_refs` key는 `document_refs`,
+  허용되지 않은 language override key는 그 부모로 접힌다.
+- **container 조기 반환 경로도 같은 정규화를 지난다** — 모든 반환이 `_finalize`를 통과한다.
+- leak scan은 message와 location을 **모두** 보며, location은 접힘 결과와의 동일성·선언
+  어휘 여부·입력 해석 가능성을 독립적으로 확인한다.
+
+### 17.6 R-06 — 고정 defense manifest와 killable/equivalent 분리
+
+분모를 production schema에서 다시 만들면 방어를 지웠을 때 분모도 함께 줄어 감사가 조용히
+통과한다. 그래서 현재 방어 ID 집합을 **schema 밖 파일**에 고정했다.
+
+- `tests/fixtures/subtitle_contracts/defense-manifest.json` — killable 목록, equivalent
+  allowlist(근거 포함), 그리고 둘에 대한 digest.
+- 방어가 **삭제되면** `MF-01`, **추가되면** `MF-02`, 목록과 digest가 어긋나면 `MF-03`이
+  실패한다. 갱신은 `--write-manifest`가 만드는 **명시적 diff**로만 한다.
+- `--manifest-check`는 drift와 transformation 고유성만 빠르게 확인하는 모드다.
+  전체 audit의 성공 조건에도 manifest·drift·고유성 검사가 **직접** 걸려 있다.
+- **자기 mutation**: REVIEW-024가 지목한 다섯 root required(`source_track_index`,
+  `transcript_id`, `network_requirement`, `source_transcript`, `input_document_ref`)를
+  임시 사본에서 하나씩 지우고 gate가 실제로 exit 1인지 확인한다 (SD-01~SD-05).
+- **killable / equivalent 분리**: pattern이 minLength를 논리적으로 함의하는 2건은 단독 kill이
+  원리적으로 불가능하다. killable 분모에 섞지 않고 근거가 적힌 frozen allowlist로 관리하며,
+  allowlist가 조용히 늘거나 줄면 그 자체가 실패다. 보고는 `291/291 killable + equivalent 2/2`다.
+
+### 17.7 D-03 — EVALS 잔존 모순과 불가능한 char→time 주장
+
+- C0의 잔존 cue-LID 투영 문구(411~413·432~433·464~465)를 제거했다.
+- `SubtitleDocument` cue LID 미지원 결론은 유지한다.
+- **raw `Transcript`의 intra-segment 문자→시간 투영도 미지원으로 낮췄다.** token에는 문자
+  오프셋이 없고 segment `text`를 정확히 한 번 분할한다는 계약도 없다. §4.5(b)·(c)의 전환
+  지점 지표도 같은 이유로 미지원이며, 정의는 후속 계약을 위해 보존했다.
+- **지원 범위와 불가능 범위를 나눴다.** segment의 text 전체가 gap·`und` 없이 단일 known
+  language로 덮이면 그 segment 구간 전체를 그 언어로 귀속할 수 있다(S1–S3). 그 밖은 분모에서
+  제외하고 그 사실을 보고한다.
+- U-19(`norm-v1`)와 균등 시간 배분, token text partition을 이 TASK에서 확정하지 않았다.
+- ARCHITECTURE·EVALS·TASK의 "결정적 투영 / 미해결 모순 0" 표현을 실제 상태에 맞췄다.
+
+### 17.8 오너 결정이 필요한 항목 (이 TASK에서 정하지 않았다)
+
+§16.7 목록에 REVIEW-025가 남긴 항목을 더한다.
+
+1. 같은 stream 안 Transcript segment의 canonical 시간 순서
+2. 서로 다른 source segment를 참조하는 translation segment의 순서
+3. ASR `source_speech_segment_ids` 배열의 canonical order
+   (각 참조의 **시간 관련성** 검증은 §17.2로 이번에 넣었다)
+4. U-19 `norm-v1` 정규화 규칙과 문자↔시간 mapping 계약
+5. `loads_strict()` duplicate-key 오류 message의 전체 CLI 비식별화 정책
+6. **ArtifactRef의 `uri`·`produced_by`·`created_at`·`parent_refs`·`timebase_ref` 동일성 의미**
+   — 캐시 재사용에서 같은 artifact가 다른 값을 가질 수 있는가. `uri`의 절대 경로 허용 여부 포함
+7. **비겹치는 SpeechSegment를 context로 참조할 필요가 있는가** — 필요하다면
+   `source_speech_segment_ids`가 아닌 별도 field가 필요하다
+8. **언어별 분할 호출 후 합성한 번역**을 표현할 provenance/processing 계약
+9. `supports_independent_channel_input`·`supports_overlap_streams`가 전처리 **전** 원본을
+   뜻하는지 분리된 work unit을 뜻하는지
+
+**추측으로 채우지 않고 미해결로 남긴다** (`AGENTS.md` R5).
+
+### 17.9 남은 한계 (확인하지 않은 것)
+
+- **실제 ASR·번역·diarization·정렬 adapter는 없다.** 이 반영도 계약과 검증만 만든다.
+- **Windows 11/NTFS에서 실행하지 않았다.** WER·RTF·VRAM·사람 수정시간도 측정하지 않았다.
+- `CorrectionLedger`·`TermBundle`·`WorkUnitManifest`는 여전히 범위 밖이다.
+- `STATUS.md`·`PLAN.md`·`DECISIONS.md`의 일반 상태 정합화와 REVIEW-023~025 문서의 통합
+  순서는 Lean Root의 몫이며 여기서 하지 않았다 (REVIEW-025 §4).
 - 이 세션은 **작성자**다. 리뷰도 승인도 하지 않는다 (`AGENTS.md` R8).

@@ -7,7 +7,7 @@
   "findings": [
    {
     "code": "E_SCHEMA",
-    "location": "x_bogus"
+    "location": ""
    }
   ]
  },

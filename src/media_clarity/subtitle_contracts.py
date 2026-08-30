@@ -51,6 +51,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from media_clarity.schema_core import (
+    COMMON_SCHEMA_FILE,
     DEFAULT_SCHEMA_DIR,
     REPO_ROOT,
     SCHEMA_DIALECT,
@@ -86,6 +87,7 @@ __all__ = [
     "UNDETERMINED_LANGUAGE",
     "ValidationResult",
     "check_asr_capability_binding",
+    "check_artifact_consistency",
     "check_document_ref_identity",
     "check_speech_segments",
     "check_subtitle_document",
@@ -203,21 +205,47 @@ TRANSLATION_FEATURE_KEYS = ("segment_alignment", "translation_confidence")
 # ---------------------------------------------------------------------------
 
 
-def _is_safe_segment(segment: str) -> bool:
-    """JSON Pointer 한 구간이 **입력에서 온 값이 아님**이 확실한 모양인지.
+_MISSING = object()
 
-    다섯 정본의 property 이름과 문서 key는 전부 ASCII snake_case이고 배열 index는 숫자다.
-    그 밖의 구간은 producer가 정한 dynamic key(예: `language_overrides`의 language tag)이며
-    사용자 입력이 그대로 들어올 수 있다 (REVIEW-024 H-06).
+
+def _declared_segments() -> frozenset[str]:
+    """다섯 정본이 **선언한 고정 field 이름**의 전수 집합.
+
+    location 구간을 그대로 남겨도 되는 것은 이 allowlist뿐이다. 모양이 ASCII snake_case라는
+    이유만으로는 안전하지 않다 — `patient_name`·`John_Doe`도 같은 모양이다 (REVIEW-025 R-05).
     """
 
-    if not segment or len(segment) > 64:
-        return False
-    return all(character.isascii() and (character.isalnum() or character == "_")
-               for character in segment)
+    names: set[str] = set(DOCUMENT_KEYS)
+    names.add(REF_CONTEXT_KEY)
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == "properties" and isinstance(value, dict):
+                    names.update(value)
+                if key in ("patternProperties",):
+                    continue
+                walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    for name in SCHEMA_FILES:
+        try:
+            walk(load_strict(DEFAULT_SCHEMA_DIR / name))
+        except (JsonInputError, OSError):  # pragma: no cover - 정본이 없으면 allowlist만 줄어든다
+            continue
+    return frozenset(names)
 
 
-_MISSING = object()
+_DECLARED_SEGMENTS: frozenset[str] | None = None
+
+
+def declared_segments() -> frozenset[str]:
+    global _DECLARED_SEGMENTS
+    if _DECLARED_SEGMENTS is None:
+        _DECLARED_SEGMENTS = _declared_segments()
+    return _DECLARED_SEGMENTS
 
 
 def _step(node: Any, segment: str) -> Any:
@@ -233,42 +261,117 @@ def _step(node: Any, segment: str) -> Any:
     return _MISSING
 
 
-def safe_location(location: str, root: Any = None) -> str:
-    """dynamic key 구간을 **안전한 부모 위치**로 잘라낸다.
+#: 정본이 **선언한 dynamic key 어휘**를 가진 유일한 자리.
+#: `patternProperties`의 language tag subset은 계약이 정한 vocabulary이지 자유 입력이 아니다.
+LANGUAGE_OVERRIDES_LOCATION = "subtitle_document/resolved_style/language_overrides"
 
-    `language_overrides["/home/patient/secret.mp4"]`처럼 사용자 제어 key가 location에 그대로
-    실리면 (a) 절대 경로·민감 값이 `Finding.as_line()`으로 새고, (b) `/`·`~`가 escape되지
-    않아 입력에서 해석할 수 없으며, (c) 최상위 key가 `/`로 시작하면 "선행 `/` 없는 pointer"
-    계약도 깨진다 (TASK-029 §8, REVIEW-024 H-06).
 
-    두 단계로 자른다.
+def _is_language_tag_subset(value: str) -> bool:
+    """`^[a-z]{2,8}(-[A-Za-z0-9]{1,8})*$` 부분집합인가 (§4.3의 구조 subset).
 
-    1. **모양** — 다섯 정본의 property 이름과 문서 key는 ASCII snake_case, 배열 index는 숫자다.
-       그 밖의 구간에서 멈춘다.
-    2. **해석 가능성** — `root`를 주면 남은 구간을 실제 입력에서 따라가 본다. `"a/b"` 같은
-       key는 join된 뒤에는 두 구간처럼 보이므로 모양 검사만으로는 걸러지지 않는다. 실제
-       입력에서 따라가지 못하는 순간 거기서 자른다.
-
-    `schema_core`를 고치지 않고 이 경계에서 처리한다. 남은 위치는 언제나 실제 입력에서
-    해석되는 부모를 가리킨다. 어느 key였는지는 잃지만, 그 대가로 location이 입력 값을
-    절대 담지 않는다. 같은 부모의 dynamic key 위반이 여러 개면 같은 finding으로 접힌다.
+    `schema_core`가 쓰는 정규식과 같은 어휘를 표준 라이브러리 문자열 연산으로 확인한다.
     """
 
+    if not value:
+        return False
+    parts = value.split("-")
+    primary = parts[0]
+    if not 2 <= len(primary) <= 8 or not all("a" <= character <= "z" for character in primary):
+        return False
+    return all(
+        1 <= len(part) <= 8
+        and all(character.isascii() and character.isalnum() for character in part)
+        for part in parts[1:]
+    )
+
+
+def _segment_allowed(parent_location: str, key: str) -> bool:
+    """이 구간을 location에 그대로 남겨도 되는가.
+
+    남길 수 있는 것은 (a) 정본이 선언한 고정 field 이름과 (b) 정본이 선언한 dynamic key
+    어휘뿐이다. 모양이 ASCII snake_case라는 이유만으로는 남기지 않는다 (REVIEW-025 R-05).
+    """
+
+    if key in declared_segments():
+        return True
+    return parent_location == LANGUAGE_OVERRIDES_LOCATION and _is_language_tag_subset(key)
+
+
+def _match_keys(node: Mapping[str, Any], remainder: str) -> list[str]:
+    """남은 location 문자열의 **앞부분과 실제로 일치하는 key** 목록.
+
+    `"a/b"`처럼 key 안에 `/`가 있으면 이어붙인 뒤에는 두 구간처럼 보인다. 그래서 구간 단위로
+    자르지 않고, 실제 객체의 key 중 어느 것이 앞부분과 맞는지 본다. 둘 이상 맞으면 alias
+    충돌이므로 어느 쪽인지 알 수 없다 (REVIEW-025 R-05).
+    """
+
+    return [
+        key
+        for key in node
+        if isinstance(key, str) and (remainder == key or remainder.startswith(key + "/"))
+    ]
+
+
+def safe_location(location: str, root: Any = None) -> str:
+    """사용자 제어 key를 location에서 **접는다**. 이어붙인 문자열을 사후 split하지 않는다.
+
+    이전 판은 `/`로 이어붙인 raw location을 다시 split해서 구간 모양만 봤다. 그 시점에는
+    dynamic key 경계가 이미 사라져서 다음이 전부 통과했다 (REVIEW-025 R-05).
+
+    - 최상위 key `"transcript/streams"` → `transcript/streams` (실제 노드처럼 보임)
+    - `document_refs["transcript/artifact_id"]` → `document_refs/transcript/artifact_id`
+    - `language_overrides["a/b"]`가 실제 `a.b` 경로와 같은 location으로 충돌
+    - `patient_name`·`John_Doe` 같은 ASCII 사용자 key가 그대로 노출
+
+    지금은 **실제 입력을 따라가며** 구간을 확정한다. 각 단계에서 그 노드의 실제 key 중
+    앞부분과 맞는 것을 찾고,
+
+    - 맞는 key가 둘 이상이면(alias 충돌) 거기서 접는다,
+    - 맞는 key가 정본이 **선언한 고정 field**가 아니면 거기서 접는다,
+    - 아무 key도 맞지 않으면 거기서 접는다.
+
+    `root`가 없으면 입력을 따라갈 수 없으므로 아무것도 접지 않고 그대로 돌려준다. 최종
+    정규화는 `validate_documents`가 문서 집합을 들고 한 번에 수행한다.
+    """
+
+    if root is None or location == "":
+        return location
+
     kept: list[str] = []
-    node = root
-    for segment in location.split("/"):
-        if not _is_safe_segment(segment):
-            break
-        if root is not None:
-            node = _step(node, segment)
-            if node is _MISSING:
+    node: Any = root
+    remainder = location
+    while remainder:
+        if isinstance(node, Mapping):
+            matches = _match_keys(node, remainder)
+            if len(matches) != 1 or not _segment_allowed("/".join(kept), matches[0]):
                 break
-        kept.append(segment)
+            key = matches[0]
+            node = node[key]
+            kept.append(key)
+            remainder = remainder[len(key) + 1:] if len(remainder) > len(key) else ""
+            continue
+        if isinstance(node, list):
+            segment, _, rest = remainder.partition("/")
+            if not segment.isdigit() or not 0 <= int(segment) < len(node):
+                break
+            node = node[int(segment)]
+            kept.append(segment)
+            remainder = rest
+            continue
+        break
     return "/".join(kept)
 
 
 def _finding(location: str, code: str, message: str) -> Finding:
-    return Finding(location=safe_location(location), code=code, message=message)
+    """location은 여기서 접지 않는다. 문서 집합을 들고 있는 `validate_documents`가 한 번에
+    정규화한다 — container 조기 반환 경로도 같은 경로를 지난다 (REVIEW-025 R-05)."""
+
+    return Finding(location=location, code=code, message=message)
+
+
+#: 검증 대상 숫자는 `int`일 수도 `float`일 수도 있다. 임의 정밀도 `int`를 `float`로
+#: 바꾸면 `OverflowError`가 나므로 원래 타입 그대로 다룬다 (REVIEW-025 R-04).
+_Num = int | float
 
 
 def _is_number(value: Any) -> bool:
@@ -276,7 +379,28 @@ def _is_number(value: Any) -> bool:
 
 
 def _finite(value: Any) -> bool:
-    return _is_number(value) and math.isfinite(float(value))
+    """finite 숫자인가. **`float()`로 강제 변환하지 않는다.**
+
+    strict JSON loader는 401자리 정수 같은 임의 정밀도 `int`를 정상적으로 받는다.
+    `float(10**400)`은 `OverflowError`를 내므로 validator가 finding 대신 crash했다
+    (REVIEW-025 R-04). Python `int`는 언제나 finite이므로 변환 없이 판정한다.
+    """
+
+    if not _is_number(value):
+        return False
+    if isinstance(value, int):
+        return True
+    return math.isfinite(value)
+
+
+def _as_number(value: Any) -> int | float | None:
+    """비교·산술에 쓸 수 있는 finite 숫자면 **원래 타입 그대로** 돌려준다.
+
+    `int`를 `float`로 바꾸지 않는다. Python은 `int`와 `float`를 직접 비교·연산할 수
+    있으므로 변환이 필요 없고, 변환하는 순간 임의 정밀도 입력에서 터진다.
+    """
+
+    return value if _finite(value) else None
 
 
 def _has_surrogate(text: str) -> bool:
@@ -313,12 +437,12 @@ def _check_half_open(
             _finding(f"{where}/end_seconds", "E_TIME_RANGE", f"{what} 시간이 finite 숫자가 아니다")
         )
         return False
-    if float(start) < 0:
+    if start < 0:
         findings.append(
             _finding(f"{where}/start_seconds", "E_TIME_RANGE", f"{what} start_seconds가 음수다")
         )
         return False
-    if float(end) <= float(start):
+    if end <= start:
         findings.append(
             _finding(
                 f"{where}/end_seconds",
@@ -330,7 +454,7 @@ def _check_half_open(
     return True
 
 
-def _overlaps(a_start: float, a_end: float, b_start: float, b_end: float) -> bool:
+def _overlaps(a_start: _Num, a_end: _Num, b_start: _Num, b_end: _Num) -> bool:
     """반개구간 [start, end) 끼리의 실제 겹침."""
 
     return a_start < b_end and b_start < a_end
@@ -344,7 +468,7 @@ def _check_confidence_value(
     if not _finite(value):
         findings.append(_finding(location, "E_CONFIDENCE", "confidence가 finite 숫자가 아니다"))
         return
-    if semantics == "calibrated_probability" and not (0.0 <= float(value) <= 1.0):
+    if semantics == "calibrated_probability" and not (0 <= value <= 1):
         findings.append(
             _finding(
                 location,
@@ -555,7 +679,7 @@ def check_speech_segments(segments: Sequence[Any], location: str = "speech_segme
         stream_id = segment.get("stream_id")
         concurrent = segment.get("concurrent_stream_ids")
         if valid_time and isinstance(stream_id, str) and isinstance(concurrent, list):
-            ranges.append((segment_id or "", stream_id, float(start), float(end), concurrent, index))
+            ranges.append((segment_id or "", stream_id, start, end, concurrent, index))
 
         _check_channel_semantics(segment, where, findings)
         _check_speech_confidence(segment, where, findings)
@@ -819,7 +943,7 @@ def check_transcript(
         ):
             label = segment.get("speaker_label")
             speech_index[segment_id] = (
-                float(start), float(end), stream_id, label if isinstance(label, str) else None
+                start, end, stream_id, label if isinstance(label, str) else None
             )
 
     # 원본 시간축 결박 — 하류 문서만 다른 timebase를 쓰는 것을 막는다.
@@ -850,15 +974,17 @@ def check_transcript(
         if stream.get("speaker_label_source") == "input":
             # stream 수준 input label도 그 stream의 **실제 입력 label 근거**와 결박한다.
             # 근거는 같은 stream_id를 가진 입력 SpeechSegment의 speaker_label이다.
+            evidence = [
+                entry[3] for entry in speech_index.values() if entry[2] == stream_id
+            ]
             findings.extend(
                 _check_input_label_value(
                     stream.get("speaker_label"),
-                    {
-                        entry[3]
-                        for entry in speech_index.values()
-                        if entry[3] is not None and entry[2] == stream_id
-                    },
+                    {value for value in evidence if value is not None},
                     where,
+                    # 한 입력만 label을 갖고 나머지는 없으면 stream 전체의 화자를 그 하나로
+                    # 정당화할 수 없다 (REVIEW-025 R-02).
+                    unlabeled_evidence=any(value is None for value in evidence),
                 )
             )
 
@@ -900,7 +1026,7 @@ def _check_speaker_label_pair(
 
 
 def _check_input_label_value(
-    label: Any, input_labels: set[str], where: str
+    label: Any, input_labels: set[str], where: str, *, unlabeled_evidence: bool = False
 ) -> list[Finding]:
     """`speaker_label_source="input"`은 **실제 입력 label 값**과 결박한다 (REVIEW-024 H-02).
 
@@ -919,6 +1045,17 @@ def _check_input_label_value(
                 f"{where}/speaker_label_source",
                 "E_CAPABILITY_MISMATCH",
                 "speaker_label_source=input인데 참조한 입력에 speaker_label이 없다",
+            )
+        )
+        return findings
+    if unlabeled_evidence:
+        # 구간을 덮는 입력 중 label이 없는 것이 있으면 "입력에서 복사했다"가 성립하지 않는다.
+        # 옆에 있는 labelled 입력의 값을 빌려 오는 것을 막는다 (REVIEW-025 R-02).
+        findings.append(
+            _finding(
+                f"{where}/speaker_label",
+                "E_CAPABILITY_MISMATCH",
+                "이 구간을 덮는 입력 중 speaker_label이 없는 것이 있어 input label을 단일 값으로 정할 수 없다",
             )
         )
         return findings
@@ -960,8 +1097,9 @@ def _check_transcript_segment(
 
     # 입력 SpeechSegment lineage — 존재·단일 stream·시간 포함.
     sources = segment.get("source_speech_segment_ids")
-    intervals: list[tuple[float, float]] = []
+    intervals: list[tuple[_Num, _Num]] = []
     input_labels: set[str] = set()
+    unlabeled_cover = False
     if isinstance(sources, list):
         streams: set[str] = set()
         for position, source_id in enumerate(sources):
@@ -977,7 +1115,20 @@ def _check_transcript_segment(
                 continue
             intervals.append((entry[0], entry[1]))
             streams.add(entry[2])
-            if entry[3] is not None:
+            # 이 ASR 구간과 **실제로 겹치는** 입력만 lineage이자 화자 근거다.
+            # 겹치지 않는 과거·미래 segment의 label을 빌려 오는 것을 막는다 (REVIEW-025 R-02).
+            if valid_time and not _overlaps(start, end, entry[0], entry[1]):
+                findings.append(
+                    _finding(
+                        f"{where}/source_speech_segment_ids/{position}",
+                        "E_TIME_RANGE",
+                        "참조한 입력 SpeechSegment가 이 ASR segment 구간과 겹치지 않는다",
+                    )
+                )
+                continue
+            if entry[3] is None:
+                unlabeled_cover = True
+            else:
                 input_labels.add(entry[3])
         if len(streams) > 1:
             findings.append(
@@ -996,7 +1147,7 @@ def _check_transcript_segment(
                 )
             )
         if valid_time and intervals and len(intervals) == len(sources):
-            findings.extend(_check_within_union(float(start), float(end), intervals, where))
+            findings.extend(_check_within_union(start, end, intervals, where))
 
     # speaker evidence 결박 — adapter는 diarization 능력, input은 실제 입력 label이 근거다.
     label_source = segment.get("speaker_label_source")
@@ -1010,7 +1161,12 @@ def _check_transcript_segment(
         )
     if label_source == "input":
         findings.extend(
-            _check_input_label_value(segment.get("speaker_label"), input_labels, where)
+            _check_input_label_value(
+                segment.get("speaker_label"),
+                input_labels,
+                where,
+                unlabeled_evidence=unlabeled_cover,
+            )
         )
 
     findings.extend(_check_tokens(segment, where, valid_time, capability))
@@ -1021,7 +1177,7 @@ def _check_transcript_segment(
 
 
 def _check_within_union(
-    start: float, end: float, intervals: Sequence[tuple[float, float]], where: str
+    start: _Num, end: _Num, intervals: Sequence[tuple[_Num, _Num]], where: str
 ) -> list[Finding]:
     """ASR segment 구간 **전체**가 입력 구간 합집합에 빈틈 없이 들어가는지 (§4.2 R2).
 
@@ -1072,7 +1228,7 @@ def _check_tokens(
         return findings
 
     semantics = capability.get("token_confidence_semantics")
-    previous: tuple[float, float] | None = None
+    previous: tuple[_Num, _Num] | None = None
     for index, token in enumerate(tokens):
         if not isinstance(token, dict):
             continue
@@ -1096,13 +1252,12 @@ def _check_tokens(
                     _finding(f"{spot}/end_seconds", "E_TIME_RANGE", "token 시간이 finite 숫자가 아니다")
                 )
             else:
-                start, end = float(start), float(end)
                 if end < start:
                     findings.append(
                         _finding(f"{spot}/end_seconds", "E_TIME_RANGE", "token 시간이 역전됐다")
                     )
                 if valid_time:
-                    lower, upper = float(segment["start_seconds"]), float(segment["end_seconds"])
+                    lower, upper = segment["start_seconds"], segment["end_seconds"]
                     if start < lower:
                         findings.append(
                             _finding(
@@ -2112,6 +2267,97 @@ def _check_coverage_partition(
     return findings
 
 
+def _language_spans_by_segment(
+    transcript: Mapping[str, Any]
+) -> dict[str, list[Mapping[str, Any]]]:
+    spans: dict[str, list[Mapping[str, Any]]] = {}
+    for stream in transcript.get("streams") or []:
+        if not isinstance(stream, dict):
+            continue
+        for segment in stream.get("segments") or []:
+            if not isinstance(segment, dict):
+                continue
+            segment_id = segment.get("segment_id")
+            if not isinstance(segment_id, str) or segment_id in spans:
+                continue
+            spans[segment_id] = [
+                span for span in (segment.get("language_spans") or []) if isinstance(span, dict)
+            ]
+    return spans
+
+
+def _fragment_language_evidence(
+    fragment: Mapping[str, Any], spans: Sequence[Mapping[str, Any]]
+) -> tuple[set[str], bool]:
+    """한 source fragment **범위 안에** 실제로 들어 있는 언어와 intra-sentential 전환.
+
+    전체 Transcript가 아니라 **그 번역 단위가 실제로 받은 범위**만 본다 (REVIEW-025 R-03).
+    """
+
+    start, end = fragment.get("char_start"), fragment.get("char_end")
+    if not isinstance(start, int) or not isinstance(end, int) or isinstance(start, bool):
+        return set(), False
+    languages: set[str] = set()
+    switched = False
+    for span in spans:
+        span_start, span_end = span.get("char_start"), span.get("char_end")
+        if not isinstance(span_start, int) or not isinstance(span_end, int):
+            continue
+        if not _overlaps(start, end, span_start, span_end):
+            continue
+        language = span.get("language")
+        if isinstance(language, str) and language != UNDETERMINED_LANGUAGE:
+            languages.add(language)
+        # 전환 경계가 이 fragment **안쪽**에 있으면 한 번의 입력에 전환이 들어 있다.
+        if span.get("switch_kind") == "intra_sentential" and start < span_start < end:
+            switched = True
+    return languages, switched
+
+
+def _check_code_switching_input(
+    document: Mapping[str, Any],
+    transcript: Mapping[str, Any],
+    capability: Mapping[str, Any],
+    capability_location: str,
+    location: str,
+) -> list[Finding]:
+    """한 번의 번역 입력 단위가 code-switching을 담고 있으면 그 능력을 요구한다.
+
+    이전 판은 `supports_code_switching_input`을 실제 입력과 결박하지 않아, JA/EN 문장 내
+    전환이 있는 문자열 전체를 한 단위로 번역하면서 `false`라고 보고해도 통과했다
+    (REVIEW-025 R-03).
+
+    **언어별로 분할 호출한 뒤 합성한 경우**는 여기서 추론하지 않는다. 그 사실을 표현할
+    provenance/processing 계약이 아직 없으므로 §16.7의 오너 결정 항목으로 남긴다.
+    """
+
+    spans_by_segment = _language_spans_by_segment(transcript)
+    for segment in _translation_segments(document, location):
+        languages: set[str] = set()
+        switched = False
+        for fragment in segment.node.get("source_fragments") or []:
+            if not isinstance(fragment, dict):
+                continue
+            spans = spans_by_segment.get(fragment.get("source_segment_id"))
+            if not spans:
+                continue
+            fragment_languages, fragment_switch = _fragment_language_evidence(fragment, spans)
+            languages |= fragment_languages
+            switched = switched or fragment_switch
+        if (len(languages) > 1 or switched) and capability.get(
+            "supports_code_switching_input"
+        ) is not True:
+            return [
+                _finding(
+                    f"{capability_location}/supports_code_switching_input",
+                    "E_CAPABILITY_MISMATCH",
+                    "한 번역 입력 단위가 여러 언어 또는 문장 내 전환을 담고 있는데 "
+                    "supports_code_switching_input=false다",
+                )
+            ]
+    return []
+
+
 def check_translation_capability_binding(
     document: Mapping[str, Any],
     location: str = "translated_transcript",
@@ -2141,6 +2387,11 @@ def check_translation_capability_binding(
                 _transcript_languages(transcript),
                 f"{capability_location}/supported_source_languages",
                 subject="번역 입력",
+            )
+        )
+        findings.extend(
+            _check_code_switching_input(
+                document, transcript, capability, capability_location, location
             )
         )
 
@@ -2209,13 +2460,38 @@ def check_translation_capability_binding(
 DOCUMENT_REF_KIND = "text"
 DOCUMENT_REF_MEDIA_TYPE = "application/json"
 
-#: 검증 입력 집합에 함께 넣을 수 있는 **문서 자신의 ArtifactRef**.
+#: 검증 입력 집합에 함께 넣는 **문서 자신의 ArtifactRef**.
 #:
 #: 문서 안에 self ArtifactRef를 둘 수는 없다. `content_hash`는 그 문서 바이트의 해시라서
 #: 문서 안에 적으면 순환이 된다. 그래서 "이 문서가 실제로 어떤 artifact인가"는 문서가 아니라
-#: **검증 컨텍스트**로 받는다. 주면 직접 입력 ref의 identity까지 검사하고, 주지 않으면
-#: 그 검사만 건너뛴다 (임의 ID를 지어내지 않는다).
+#: **검증 컨텍스트**로 받는다.
+#:
+#: **선택이 아니다.** 계보 identity를 검사해야 하는 문서 조합(번역·자막)에서는 필수이며,
+#: 없거나 불완전하면 조용히 건너뛰지 않고 `E_SOURCE_REF`로 거부한다 (REVIEW-025 R-01).
 REF_CONTEXT_KEY = "document_refs"
+
+#: 컨텍스트가 담을 수 있는 role. 다른 문서 종류의 self ref는 이 계약에서 쓰이지 않는다.
+REF_CONTEXT_ROLES = ("transcript", "translated_transcript")
+
+#: **identity** — 이 두 field가 "같은 artifact인가"를 정한다 (ARCHITECTURE §2.1).
+ARTIFACT_IDENTITY_FIELDS = ("artifact_id", "content_hash")
+
+#: 같은 `artifact_id`를 가리키는 모든 ref가 **반드시 일치해야 하는** immutable metadata.
+#: 바이트가 정해지면 함께 정해지는 값들이다. 하나라도 어긋나면 같은 ID가 서로 다른
+#: artifact를 가리키는 것이고, 그 순간 `artifact_id` 유일성(§2.1)이 깨진다.
+ARTIFACT_IMMUTABLE_FIELDS = (
+    "schema_version",
+    "content_hash",
+    "kind",
+    "media_type",
+    "byte_size",
+    "is_estimate",
+)
+
+#: **비교하지 않는 field.** 캐시 재사용·외부 입력에서 같은 artifact가 다른 값을 가질 수
+#: 있는지 정한 계약이 아직 없다. 임의로 정하지 않고 오너 결정으로 남긴다
+#: (TASK-029 §17.7, REVIEW-025 R-01 8번).
+ARTIFACT_UNCOMPARED_FIELDS = ("uri", "produced_by", "created_at", "parent_refs", "timebase_ref")
 
 
 def _ref_identity(ref: Any) -> tuple[str, str] | None:
@@ -2256,19 +2532,66 @@ def _check_document_ref_shape(ref: Any, location: str) -> list[Finding]:
     return findings
 
 
+def required_ref_roles(documents: Mapping[str, Any]) -> set[str]:
+    """이 문서 조합에서 **반드시 있어야 하는** 컨텍스트 role.
+
+    번역·자막 문서를 검증하려면 "이 Transcript가 어떤 artifact인가"를 알아야 한다.
+    모르면 계보 identity를 확인할 방법이 없고, 확인하지 못한 것을 통과로 보고할 수 없다
+    (REVIEW-025 R-01).
+    """
+
+    roles: set[str] = set()
+    subtitle = documents.get("subtitle_document")
+    if isinstance(documents.get("translated_transcript"), Mapping):
+        roles.add("transcript")
+    if isinstance(subtitle, Mapping):
+        if subtitle.get("text_axis") == "target":
+            roles.update(("transcript", "translated_transcript"))
+        else:
+            roles.add("transcript")
+    return roles
+
+
 def check_document_ref_identity(
     documents: Mapping[str, Any], refs: Mapping[str, Any]
 ) -> list[Finding]:
     """직접 입력 ref가 **실제로 제공된 문서**를 가리키는지 (REVIEW-024 H-01 3~5).
 
-    `refs`는 검증 컨텍스트다. 없는 항목은 검사하지 않는다 — 모르는 것을 지어내지 않는다.
+    컨텍스트가 없거나 필요한 role이 빠졌으면 조용히 건너뛰지 않고 그 사실 자체를
+    `E_SOURCE_REF`로 보고한다. "검증하지 못했다"를 `VALID`로 돌려주지 않는다
+    (REVIEW-025 R-01). 위치는 언제나 그 검사가 붙는 실제 문서 field다.
     """
 
     findings: list[Finding] = []
     transcript_ref = _ref_identity(refs.get("transcript"))
     translated_ref = _ref_identity(refs.get("translated_transcript"))
-
     translated = documents.get("translated_transcript")
+    subtitle = documents.get("subtitle_document")
+    axis = subtitle.get("text_axis") if isinstance(subtitle, Mapping) else None
+
+    # 어떤 문서 field가 어떤 컨텍스트 role을 필요로 하는지 **한 곳에** 모은다.
+    requirements: list[tuple[str, str]] = []
+    if isinstance(translated, Mapping):
+        requirements.append(("transcript", "translated_transcript/source_transcript"))
+    if isinstance(subtitle, Mapping):
+        requirements.append(
+            (
+                "translated_transcript" if axis == "target" else "transcript",
+                "subtitle_document/input_document_ref",
+            )
+        )
+        if axis == "target" and "source_transcript_ref" in subtitle:
+            requirements.append(("transcript", "subtitle_document/source_transcript_ref"))
+
+    missing = "검증 컨텍스트(document_refs)에 필요한 문서 identity가 없어 계보를 확인할 수 없다"
+    absent = [
+        (role, location)
+        for role, location in requirements
+        if _ref_identity(refs.get(role)) is None
+    ]
+    for _role, location in absent:
+        findings.append(_finding(location, "E_SOURCE_REF", missing))
+
     if isinstance(translated, Mapping) and transcript_ref is not None:
         if _ref_identity(translated.get("source_transcript")) != transcript_ref:
             findings.append(
@@ -2279,22 +2602,21 @@ def check_document_ref_identity(
                 )
             )
 
-    subtitle = documents.get("subtitle_document")
     if isinstance(subtitle, Mapping):
-        axis = subtitle.get("text_axis")
         expected = translated_ref if axis == "target" else transcript_ref
-        if expected is not None and _ref_identity(subtitle.get("input_document_ref")) != expected:
-            findings.append(
-                _finding(
-                    "subtitle_document/input_document_ref",
-                    "E_SOURCE_REF",
-                    "자막 문서의 input_document_ref가 실제 직접 입력 문서를 가리키지 않는다",
+        if expected is not None:
+            if _ref_identity(subtitle.get("input_document_ref")) != expected:
+                findings.append(
+                    _finding(
+                        "subtitle_document/input_document_ref",
+                        "E_SOURCE_REF",
+                        "자막 문서의 input_document_ref가 실제 직접 입력 문서를 가리키지 않는다",
+                    )
                 )
-            )
         if (
             axis == "target"
-            and transcript_ref is not None
             and "source_transcript_ref" in subtitle
+            and transcript_ref is not None
             and _ref_identity(subtitle.get("source_transcript_ref")) != transcript_ref
         ):
             findings.append(
@@ -2304,6 +2626,72 @@ def check_document_ref_identity(
                     "자막 문서의 source_transcript_ref가 실제 검증 대상 Transcript를 가리키지 않는다",
                 )
             )
+
+    # 서로 다른 문서가 같은 artifact로 붕괴하면 계보가 무너진다 (REVIEW-025 R-01 7번).
+    if (
+        transcript_ref is not None
+        and translated_ref is not None
+        and transcript_ref == translated_ref
+    ):
+        findings.append(
+            _finding(
+                f"{REF_CONTEXT_KEY}/translated_transcript",
+                "E_SOURCE_REF",
+                "Transcript와 TranslatedTranscript가 같은 artifact identity로 붕괴했다",
+            )
+        )
+    return findings
+
+
+def _collect_artifact_refs(
+    node: Any, location: str, found: list[tuple[str, Mapping[str, Any]]]
+) -> None:
+    """문서 집합 어디에 있든 ArtifactRef처럼 생긴 객체를 위치와 함께 모은다."""
+
+    if isinstance(node, Mapping):
+        if all(field in node for field in ARTIFACT_IDENTITY_FIELDS) and "kind" in node:
+            found.append((location, node))
+        for key, value in node.items():
+            _collect_artifact_refs(value, f"{location}/{key}" if location else str(key), found)
+    elif isinstance(node, list):
+        for index, item in enumerate(node):
+            _collect_artifact_refs(item, f"{location}/{index}", found)
+
+
+def check_artifact_consistency(documents: Mapping[str, Any]) -> list[Finding]:
+    """같은 `artifact_id`는 같은 artifact여야 한다 (ARCHITECTURE §2.1).
+
+    `artifact_id`는 프로젝트 안에서 고유하므로 같은 ID를 쓰는 모든 ref는 immutable
+    metadata가 일치해야 한다. 같은 ID·같은 hash인데 `byte_size`가 다르면 둘 중 하나는
+    거짓이다 (REVIEW-025 R-01 6번).
+
+    `uri`·`produced_by`·`created_at`·`parent_refs`·`timebase_ref`는 **비교하지 않는다.**
+    캐시 재사용에서 같은 artifact가 다른 값을 가질 수 있는지 정한 계약이 없다
+    (§17.7 오너 결정).
+    """
+
+    collected: list[tuple[str, Mapping[str, Any]]] = []
+    _collect_artifact_refs(documents, "", collected)
+
+    findings: list[Finding] = []
+    first: dict[str, tuple[str, Mapping[str, Any]]] = {}
+    for location, ref in collected:
+        artifact_id = ref.get("artifact_id")
+        if not isinstance(artifact_id, str):
+            continue
+        if artifact_id not in first:
+            first[artifact_id] = (location, ref)
+            continue
+        _, original = first[artifact_id]
+        for field in ARTIFACT_IMMUTABLE_FIELDS:
+            if ref.get(field) != original.get(field):
+                findings.append(
+                    _finding(
+                        f"{location}/{field}",
+                        "E_SOURCE_REF",
+                        "같은 artifact_id를 가리키는 ArtifactRef의 immutable metadata가 다르다",
+                    )
+                )
     return findings
 
 
@@ -2518,7 +2906,7 @@ def _check_resolved_style(document: Mapping[str, Any], location: str) -> list[Fi
 
         low = effective.get("min_duration_seconds")
         high = effective.get("max_duration_seconds")
-        if not (_finite(low) and _finite(high) and float(high) <= float(low)):
+        if not (_finite(low) and _finite(high) and high <= low):
             return
         for field in ("max_duration_seconds", "min_duration_seconds"):
             if field in present:
@@ -2565,7 +2953,7 @@ def _check_cue_times(document: Mapping[str, Any], location: str) -> list[Finding
         concurrent = cue.get("concurrent_cue_ids")
         if not isinstance(cue_id, str) or not isinstance(stream_id, str) or not isinstance(concurrent, list):
             continue
-        usable.append((index, cue_id, stream_id, float(start), float(end), concurrent))
+        usable.append((index, cue_id, stream_id, start, end, concurrent))
         if cue.get("overlap_kind") == "none" and concurrent:
             findings.append(
                 _finding(
@@ -2945,38 +3333,61 @@ def dedupe_findings(findings: Sequence[Finding]) -> list[Finding]:
     return kept
 
 
-def _check_ref_context(value: Any) -> list[Finding]:
-    """검증 컨텍스트의 모양만 본다. 없는 항목은 검사하지 않는다."""
+def _check_ref_context(value: Any, validator: Any = None) -> list[Finding]:
+    """검증 컨텍스트의 모양. **role을 닫고, 값은 공통 ArtifactRef 계약으로 검사한다.**
+
+    이전 판은 `artifact_id`·`content_hash`가 문자열인지만 봤다. 그래서 `kind=video`,
+    임의 추가 field, 쓰이지 않는 role이 모두 통과했다 (REVIEW-025 R-01). 지금은
+    `common-v1.schema.json#/$defs/ArtifactRef`를 그대로 재사용한다 — 느슨한 사본을 두지 않는다.
+    """
 
     if not isinstance(value, Mapping):
         return [_finding(REF_CONTEXT_KEY, "E_SCHEMA", f"{REF_CONTEXT_KEY}는 객체여야 한다")]
     findings: list[Finding] = []
     for name in sorted(value):
-        if name not in DOCUMENT_KEYS or name == "speech_segments":
+        spot = f"{REF_CONTEXT_KEY}/{name}"
+        if name not in REF_CONTEXT_ROLES:
             findings.append(
                 _finding(
-                    f"{REF_CONTEXT_KEY}/{name}",
+                    spot,
                     "E_SCHEMA",
-                    f"{REF_CONTEXT_KEY}의 key는 단일 문서 key여야 한다",
+                    f"{REF_CONTEXT_KEY}의 role은 {' | '.join(REF_CONTEXT_ROLES)}뿐이다",
                 )
             )
             continue
-        if _ref_identity(value[name]) is None:
-            findings.append(
-                _finding(
-                    f"{REF_CONTEXT_KEY}/{name}",
-                    "E_SCHEMA",
-                    "ArtifactRef의 artifact_id와 content_hash가 문자열이어야 한다",
+        if validator is not None:
+            findings.extend(
+                redact_schema_findings(
+                    validator.validate(
+                        value[name], COMMON_SCHEMA_FILE, spot, pointer="/$defs/ArtifactRef"
+                    )
                 )
             )
+        # 상류 문서 ref와 같은 종류 결박 — 문서가 아닌 artifact를 문서 identity로 쓸 수 없다.
+        findings.extend(_check_document_ref_shape(value[name], spot))
     return findings
 
 
-def _check_containers(documents: Mapping[str, Any]) -> list[Finding]:
+def _finalize(findings: Sequence[Finding], documents: Mapping[str, Any]) -> ValidationResult:
+    """모든 반환 경로가 지나는 **단일 정규화 지점**.
+
+    location에서 사용자 제어 key를 접고, 정렬한 뒤 같은 `(location, code)`를 하나로 모은다.
+    조기 반환 경로가 이 단계를 건너뛰면 dynamic key가 그대로 새어 나간다 (REVIEW-025 R-05).
+    """
+
+    resolved = [
+        Finding(location=safe_location(finding.location, documents), code=finding.code,
+                message=finding.message)
+        for finding in findings
+    ]
+    return ValidationResult(findings=tuple(dedupe_findings(sort_findings(resolved))))
+
+
+def _check_containers(documents: Mapping[str, Any], validator: Any = None) -> list[Finding]:
     findings: list[Finding] = []
     for key in sorted(documents):
         if key == REF_CONTEXT_KEY:
-            findings.extend(_check_ref_context(documents[key]))
+            findings.extend(_check_ref_context(documents[key], validator))
             continue
         if key not in DOCUMENT_KEYS:
             findings.append(_finding(key, "E_SCHEMA", "알 수 없는 문서 key다"))
@@ -2997,9 +3408,10 @@ def validate_documents(documents: Mapping[str, Any], schemas: SchemaSet) -> Vali
     쌓지 않기 위해서다 (기존 TASK-006·TASK-028 validator와 같은 방침).
     """
 
-    container_findings = _check_containers(documents)
+    container_findings = _check_containers(documents, SchemaValidator(schemas))
     if container_findings:
-        return ValidationResult(findings=tuple(dedupe_findings(sort_findings(container_findings))))
+        # 조기 반환도 **같은 정규화**를 지난다 (REVIEW-025 R-05).
+        return _finalize(container_findings, documents)
 
     validator = SchemaValidator(schemas)
     findings: list[Finding] = []
@@ -3051,15 +3463,12 @@ def validate_documents(documents: Mapping[str, Any], schemas: SchemaSet) -> Vali
         )
 
     refs = documents.get(REF_CONTEXT_KEY)
-    if isinstance(refs, Mapping):
-        findings.extend(check_document_ref_identity(documents, refs))
+    findings.extend(
+        check_document_ref_identity(documents, refs if isinstance(refs, Mapping) else {})
+    )
+    findings.extend(check_artifact_consistency(documents))
 
-    resolved = [
-        Finding(location=safe_location(finding.location, documents), code=finding.code,
-                message=finding.message)
-        for finding in findings
-    ]
-    return ValidationResult(findings=tuple(dedupe_findings(sort_findings(resolved))))
+    return _finalize(findings, documents)
 
 
 # ---------------------------------------------------------------------------
@@ -3130,7 +3539,7 @@ def run_fixtures(directory: Path, schemas: SchemaSet) -> list[FixtureOutcome]:
 
 
 #: fixture 디렉터리에 반드시 있어야 하는 case ID. 조용한 누락을 막는다.
-EXPECTED_CASE_IDS = tuple(f"K-{index:02d}" for index in range(1, 133))
+EXPECTED_CASE_IDS = tuple(f"K-{index:02d}" for index in range(1, 160))
 
 
 def main(argv: Sequence[str] | None = None) -> int:

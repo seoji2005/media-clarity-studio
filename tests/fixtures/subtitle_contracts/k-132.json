@@ -8,6 +8,10 @@
    {
     "code": "E_SCHEMA",
     "location": "document_refs/transcript"
+   },
+   {
+    "code": "E_SOURCE_REF",
+    "location": "document_refs/transcript"
    }
   ]
  },
