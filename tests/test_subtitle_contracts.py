@@ -377,13 +377,19 @@ class FixtureTests(ContractCase):
             self.assertEqual(first, second, path.name)
 
     def test_locations_are_resolvable_json_pointers(self) -> None:
-        """모든 finding 위치는 선행 `/` 없이 실제 입력에서 해석돼야 한다."""
+        """모든 finding 위치는 선행 `/` 없이 실제 입력에서 해석돼야 한다.
+
+        빈 문자열은 RFC 6901의 **root pointer**이며 문서 집합 전체를 가리킨다. 사용자 제어
+        최상위 key가 안전하지 않을 때만 나온다 (REVIEW-024 H-06).
+        """
 
         for path in discover_fixtures(FIXTURE_DIR):
             documents = load_fixture(path)["documents"]
             for finding in validate_documents(documents, self.schemas).findings:
                 with self.subTest(case=path.name, location=finding.location):
                     self.assertFalse(finding.location.startswith("/"))
+                    if finding.location == "":
+                        continue
                     node: Any = documents
                     for token in finding.location.split("/"):
                         if isinstance(node, list):
@@ -683,6 +689,249 @@ class LineageBindingTests(ContractCase):
             fragment["line_index"] = highest - fragment["line_index"]
         codes = {code for code, _ in validate_documents(documents, self.schemas).pairs}
         self.assertTrue(codes, "줄 순서를 뒤집었는데 아무 결함도 보고되지 않았다")
+
+
+# ---------------------------------------------------------------------------
+# REVIEW-024 H-06 — dynamic key가 error location으로 새지 않는다
+# ---------------------------------------------------------------------------
+
+
+class LocationSafetyTests(ContractCase):
+    def _with_override(self, key: str) -> Any:
+        documents = load_fixture(FIXTURE_DIR / "k-01.json")["documents"]
+        documents["subtitle_document"]["resolved_style"]["language_overrides"][key] = {}
+        return validate_documents(documents, self.schemas)
+
+    def test_dynamic_keys_never_reach_the_location(self) -> None:
+        for key in (
+            "/home/patient/secret.mp4",
+            "C:\\Users\\patient\\secret.mp4",
+            "a/b",
+            "~0",
+            "~1",
+            "日",
+            "환",
+        ):
+            with self.subTest(key=key):
+                result = self._with_override(key)
+                self.assertEqual(
+                    result.pairs,
+                    (("E_SCHEMA", "subtitle_document/resolved_style/language_overrides"),),
+                )
+                for finding in result.findings:
+                    self.assertNotIn(key, finding.location)
+                    self.assertNotIn(key, finding.message)
+
+    def test_safe_ascii_keys_stay_in_the_location(self) -> None:
+        """입력에서 온 값이라도 안전한 ASCII 식별자는 진단에 필요한 좌표다."""
+
+        for key in ("x", "X9"):
+            with self.subTest(key=key):
+                self.assertEqual(
+                    self._with_override(key).pairs,
+                    (
+                        (
+                            "E_SCHEMA",
+                            f"subtitle_document/resolved_style/language_overrides/{key}",
+                        ),
+                    ),
+                )
+
+    def test_unknown_top_level_key_never_starts_with_a_slash(self) -> None:
+        result = validate_documents({"/home/patient/secret.mp4": {}}, self.schemas)
+        self.assertEqual(result.pairs, (("E_SCHEMA", ""),))
+        for finding in result.findings:
+            self.assertFalse(finding.location.startswith("/"))
+            self.assertNotIn("/home/", finding.as_line())
+
+    def test_every_finding_location_resolves_in_the_input(self) -> None:
+        from media_clarity.subtitle_contracts import _MISSING, _step
+
+        for path in discover_fixtures(FIXTURE_DIR):
+            documents = load_fixture(path)["documents"]
+            for finding in validate_documents(documents, self.schemas).findings:
+                node: Any = documents
+                if finding.location == "":
+                    continue
+                for segment in finding.location.split("/"):
+                    node = _step(node, segment)
+                    self.assertIsNot(
+                        node, _MISSING, f"{path.name}: {finding.location}"
+                    )
+
+
+# ---------------------------------------------------------------------------
+# REVIEW-024 H-01·H-02·H-03 — 계보·label 값·capability 내부 논리
+# ---------------------------------------------------------------------------
+
+
+class BindingTests(ContractCase):
+    def _base(self) -> Any:
+        return load_fixture(FIXTURE_DIR / "k-01.json")["documents"]
+
+    def test_subtitle_source_ref_must_match_the_translation_source(self) -> None:
+        documents = self._base()
+        documents["subtitle_document"]["source_transcript_ref"]["artifact_id"] = "art-other"
+        self.assertIn(
+            ("E_SOURCE_REF", "subtitle_document/source_transcript_ref"),
+            validate_documents(documents, self.schemas).pairs,
+        )
+
+    def test_upstream_refs_must_point_at_document_artifacts(self) -> None:
+        documents = self._base()
+        documents["translated_transcript"]["source_transcript"]["kind"] = "video"
+        documents["translated_transcript"]["source_transcript"]["media_type"] = "video/mp4"
+        pairs = validate_documents(documents, self.schemas).pairs
+        self.assertIn(("E_SOURCE_REF", "translated_transcript/source_transcript/kind"), pairs)
+        self.assertIn(
+            ("E_SOURCE_REF", "translated_transcript/source_transcript/media_type"), pairs
+        )
+
+    def test_direct_input_ref_identity_needs_validation_context(self) -> None:
+        """컨텍스트가 없으면 identity를 **추측하지 않는다.** 있으면 강제한다."""
+
+        from media_clarity.subtitle_contracts import REF_CONTEXT_KEY
+
+        documents = self._base()
+        documents["subtitle_document"]["input_document_ref"]["artifact_id"] = "art-other"
+        without = dict(documents)
+        without.pop(REF_CONTEXT_KEY)
+        self.assertNotIn(
+            ("E_SOURCE_REF", "subtitle_document/input_document_ref"),
+            validate_documents(without, self.schemas).pairs,
+        )
+        self.assertIn(
+            ("E_SOURCE_REF", "subtitle_document/input_document_ref"),
+            validate_documents(documents, self.schemas).pairs,
+        )
+
+    def test_input_speaker_label_must_equal_the_actual_input_label(self) -> None:
+        documents = self._base()
+        segment = documents["transcript"]["streams"][0]["segments"][0]
+        segment["speaker_label_source"] = "input"
+        segment["speaker_label"] = "SPK-B"
+        self.assertIn(
+            ("E_CAPABILITY_MISMATCH", "transcript/streams/0/segments/0/speaker_label"),
+            validate_documents(documents, self.schemas).pairs,
+        )
+
+    def test_ambiguous_input_labels_are_not_silently_resolved(self) -> None:
+        documents = self._base()
+        stream = documents["transcript"]["streams"][0]
+        stream["speaker_label"] = "CH-L"
+        stream["speaker_label_source"] = "input"
+        for segment in documents["speech_segments"]:
+            if segment["segment_id"] == "sp-3":
+                segment["speaker_label"] = "CH-Z"
+        self.assertIn(
+            ("E_CAPABILITY_MISMATCH", "transcript/streams/0/speaker_label"),
+            validate_documents(documents, self.schemas).pairs,
+        )
+
+    def test_capability_internal_implications(self) -> None:
+        mini = load_fixture(FIXTURE_DIR / "k-02.json")["documents"]
+        cases = (
+            ({"supports_intra_sentential_lid": True}, "supports_intra_sentential_lid"),
+            ({"language_confidence_semantics": "model_score"}, "language_confidence_semantics"),
+            ({"nbest_score_semantics": "model_score"}, "nbest_score_semantics"),
+        )
+        for patch, field in cases:
+            with self.subTest(field=field):
+                documents = json.loads(json.dumps(mini))
+                documents["transcript"]["capability_report"].update(patch)
+                self.assertIn(
+                    ("E_CAPABILITY_MISMATCH", f"transcript/capability_report/{field}"),
+                    validate_documents(documents, self.schemas).pairs,
+                )
+
+    def test_empty_supported_languages_needs_an_explicit_limitation(self) -> None:
+        documents = load_fixture(FIXTURE_DIR / "k-02.json")["documents"]
+        documents["transcript"]["capability_report"]["supported_languages"] = []
+        documents["transcript"]["capability_report"]["limitations"] = []
+        self.assertIn(
+            ("E_CAPABILITY_MISMATCH", "transcript/capability_report/supported_languages"),
+            validate_documents(documents, self.schemas).pairs,
+        )
+
+    def test_emitted_languages_must_be_declared(self) -> None:
+        documents = self._base()
+        documents["transcript"]["capability_report"]["supported_languages"] = ["en"]
+        self.assertIn(
+            ("E_CAPABILITY_MISMATCH", "transcript/capability_report/supported_languages"),
+            validate_documents(documents, self.schemas).pairs,
+        )
+
+
+# ---------------------------------------------------------------------------
+# REVIEW-024 H-04·H-05 — 감사 분모의 완전성과 exit 조건
+# ---------------------------------------------------------------------------
+
+
+class AuditGateTests(ContractCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.verify = _load_verify_script()
+
+    def test_every_schema_defense_is_covered_by_a_real_mutation(self) -> None:
+        rows = self.verify.run_schema_defense_inventory(FIXTURE_DIR, SCHEMA_DIR)
+        self.assertGreaterEqual(len(rows), 250)
+        failures = [f"{row['defense_id']}: {row['note']}" for row in rows if not row["passed"]]
+        self.assertEqual(failures, [])
+        self.assertTrue(any(row["root_required"] for row in rows))
+
+    def test_no_two_mutants_declare_the_same_transformation(self) -> None:
+        self.assertEqual(self.verify.duplicate_transformations(), [])
+        counts = self.verify.unique_transformation_count(SCHEMA_DIR)
+        self.assertEqual(counts["schema_declared"], counts["schema_unique"])
+        self.assertEqual(counts["validator_declared"], counts["validator_unique"])
+        self.assertEqual(counts["defense_declared"], counts["defense_unique"])
+        self.assertEqual(counts["duplicate_groups"], 0)
+
+    def test_every_root_required_field_has_a_killing_mutation(self) -> None:
+        """새 root required 필드가 생기면 분모가 늘고, 죽이지 못하면 감사가 실패한다."""
+
+        defenses = self.verify.collect_schema_defenses(SCHEMA_DIR)
+        root_required = [defense for defense in defenses if defense.is_root_required]
+        self.assertGreaterEqual(len(root_required), 40)
+        for name in self.verify.INVENTORY_FILES:
+            document = json.loads((SCHEMA_DIR / name).read_text(encoding="utf-8"))
+            declared = {
+                defense.kind.split(":", 1)[1]
+                for defense in root_required
+                if defense.schema_file == name
+            }
+            self.assertEqual(declared, set(document["required"]), name)
+
+    def test_sentinel_failures_are_part_of_the_success_predicate(self) -> None:
+        """JSON 출력의 sentinel 수치와 process 성공 조건이 같은 predicate를 쓴다."""
+
+        payload = {
+            "fixtures": [{"case_id": "K-01", "passed": True, "sentinel_ok": True}],
+            "mutations": [{"mutation_id": "IM-01", "passed": True, "sentinel_ok": True}],
+            "leaks": [{"leak_id": "K-01", "passed": True, "sentinel_ok": True}],
+            "depth_probes": [{"probe_id": "DP-01", "passed": True}],
+        }
+        self.assertTrue(self.verify._all_passed(payload))
+        self.assertEqual(self.verify.bad_sentinels(payload), [])
+
+        payload["mutations"][0]["sentinel_ok"] = False
+        self.assertEqual(self.verify.bad_sentinels(payload), ["mutations:IM-01"])
+        self.assertFalse(self.verify._all_passed(payload))
+
+        payload["mutations"][0]["sentinel_ok"] = True
+        payload["depth_probes"][0]["passed"] = False
+        self.assertFalse(self.verify._all_passed(payload))
+
+    def test_depth_probes_run_inside_the_check_only_payload(self) -> None:
+        """depth 방어를 지운 mutant가 죽으려면 depth probe가 사본에서도 돌아야 한다."""
+
+        payload = self.verify._check_only(FIXTURE_DIR, SCHEMA_DIR)
+        self.assertIn("depth_probes", payload)
+        self.assertTrue(payload["depth_probes"])
+        self.assertTrue(all(row["passed"] for row in payload["depth_probes"]))
+        self.assertIn("leaks", payload)
+        self.assertTrue(all(row["passed"] for row in payload["leaks"]))
 
 
 if __name__ == "__main__":

@@ -431,13 +431,13 @@ canonical_cue_text = norm-v1(raw_cue_text)
    남은 SPACE)도 **grapheme 시퀀스의 일부**입니다. 별도로 건너뛰지 않습니다.
 6. **문자 중앙 시각·무음 귀속·`language_spans` 시간 투영이 모두 같은
    `canonical_cue_text`를 사용**합니다. 지표마다 다른 결합 방식을 쓰지 않습니다.
-7. 줄 단위 언어 구간을 결합 오프셋으로 바꿀 때는 **앞선 줄들의 길이
+7. 줄 단위 구간을 결합 오프셋으로 바꾸는 지표는 **앞선 줄들의 길이
    합 + 그 사이 삽입된 구분자 수**를 더합니다. 예: `canonical_cue_text` 안에서
    2번째 줄의 시작 오프셋은 `len(정규화된 line[0]) + 1`입니다 (+1은 삽입된 SPACE).
-   **cue에는 저장된 `language_spans`가 없습니다** ([`ARCHITECTURE.md`](ARCHITECTURE.md)
-   §3.0.2 L-2). 여기서 말하는 줄 단위 구간은 `lineage_fragments[]`를 따라
-   `Transcript.language_spans`를 투영해 **계산한 값**이며, 그 결과를 문서에 되쓰지 않습니다.
-8. **삽입된 줄 구분자 자체는 어느 언어 구간에도 자동으로 포함되지
+   **cue에는 저장된 `language_spans`가 없고, 계보를 따라 계산하지도 않습니다**
+   ([`ARCHITECTURE.md`](ARCHITECTURE.md) §3.0.2 L-2, §4.5(a)). 이 규칙은 줄 단위 구간을
+   쓰는 **다른** 지표를 위한 공통 오프셋 규약입니다.
+8. **삽입된 줄 구분자 자체는 어느 구간에도 자동으로 포함되지
    않습니다.** 구분자 위치는 인접 줄 어느 쪽에도 귀속시키지 않고 비워 둡니다.
    구분자는 표시용 인공 문자이며 upstream 원문 증거가 아니기 때문입니다.
 9. 이 규칙은 **공통 규칙**입니다. 다른 지표가 줄을 서로 다른 구분자로 결합하는 것을
@@ -660,16 +660,17 @@ CER의 단위가 정의되지 않습니다 (REVIEW-002 M-06 ⑤). 그래서 표�
 | 단위 | 고정 격자 (제안: 100ms 프레임) |
 | 범위 | **정답 발화 구간만.** 무음은 제외 (무음에 언어가 없음) |
 | 분모 | 정답 발화 구간의 격자 수 |
-| 계산 | 격자별 정답 언어 vs 가설 언어 일치율. 가설 쪽 언어의 단일 출처는 **`Transcript.language_spans`** 하나이며([`ARCHITECTURE.md`](ARCHITECTURE.md) §3.0.2 L-1) **문자 오프셋** 기반이므로 아래 투영식으로 시간으로 옮깁니다 |
+| 계산 | 격자별 정답 언어 vs 가설 언어 일치율. 가설 쪽 언어의 단일 출처는 **`Transcript.language_spans`** 하나이며([`ARCHITECTURE.md`](ARCHITECTURE.md) §3.0.2 L-1) **문자 오프셋** 기반이므로 아래 투영식으로 시간으로 옮깁니다. `SubtitleDocument` 가설에는 **적용하지 않습니다**(아래 D-02) |
 | 보고 | 언어별 혼동 행렬 |
 
-**문자 오프셋 → 시간 투영 (결정적)**
+**문자 오프셋 → 시간 투영 (원문 축 `Transcript/v1` 가설 전용)**
 
 ```
-가설 language_span이 문자 오프셋 [c_start, c_end) 를 가리킬 때:
+Transcript segment의 language_span이 그 segment의 exact stored text 기준
+문자 오프셋 [c_start, c_end) 를 가리킬 때:
 
-P1. 그 span이 속한 cue의 canonical_cue_text(알고리즘 C0) 기준으로 각 문자에
-    시각을 부여한다.                                      ← 알고리즘 C (동일 규칙)
+P1. ASR이 직접 보고한 segment/token timing으로 각 문자에 시각을 부여한다.
+    timing이 없으면 이 지표는 그 실행에서 **미지원**이다.
 P2. 투영 구간 = [ 문자 c_start 구간의 시작 시각,
                   문자 (c_end - 1) 구간의 종료 시각 )
 P3. 격자 g의 가설 언어 = g의 중앙 시각을 포함하는 투영 구간의 언어.
@@ -677,44 +678,46 @@ P3. 격자 g의 가설 언어 = g의 중앙 시각을 포함하는 투영 구간
     그래도 같으면 c_start가 작은 쪽.
 ```
 
-- **P1은 §4.1·§4.4가 쓰는 알고리즘 C와 같은 규칙이며, `c_start`/`c_end`는
-  `canonical_cue_text`(줄 결합 후 정규화된 텍스트) 기준 오프셋입니다.** 지표마다
-  다른 파생이나 다른 결합 텍스트를 쓰지 않습니다.
+- `c_start`/`c_end`는 그 ASR segment의 **exact stored `text`** 기준 Unicode scalar offset입니다.
+  raw `Transcript`에는 `lines[]`도 cue 경계도 없으므로 `canonical_cue_text`를 만들 수 없습니다.
 - `c_end ≤ c_start`인 빈 span은 투영하지 않고 그 사실을 보고합니다.
-
-**두 text space를 구분합니다 (TASK-029).** 위 P1의 `canonical_cue_text` 기준은
-**`SubtitleDocument` 가설에만** 적용됩니다. 가설이 raw `Transcript/v1`이면 `language_spans`의
-`char_start`/`char_end`는 그 ASR segment의 **exact stored `text`** 기준 Unicode scalar offset이고,
-시간은 `canonical_cue_text` 균등 배분이 아니라 **ASR segment/token timing**으로 투영합니다.
-raw Transcript에는 `lines[]`도 cue 경계도 없으므로 `canonical_cue_text`를 만들 수 없습니다.
+- **`canonical_cue_text` 기준 문자 시각 부여(알고리즘 C)는 §4.1·§4.4의 자막 지표가 씁니다.**
+  이 언어 지표에는 쓰지 않습니다 — cue 문자 범위에 배정할 원문 언어 구간 자체가 없기
+  때문입니다 (아래 D-02).
 
 | 가설 산출물 | 언어 구간을 어디서 얻나 | offset 기준 text | 시간 파생 |
 |---|---|---|---|
 | `Transcript/v1` (원문 축) | 문서에 저장된 `segments[].language_spans[]` | ASR segment의 exact `text` (Unicode scalar index) | ASR이 직접 보고한 segment/token timing. 없으면 그 지표는 **미지원** |
-| `SubtitleDocument/v1` | **저장된 값 없음.** `lineage_fragments[]`를 따라 원문 span을 투영해 **계산**합니다 (아래 L1–L3) | `canonical_cue_text = norm-v1(lines.join(U+0020))` (알고리즘 C0) | 알고리즘 C |
+| `SubtitleDocument/v1` | **없음 — 이 지표는 미지원입니다** (아래) | — | — |
 
-**cue 언어 구간의 결정적 투영 (`SubtitleDocument` 가설 전용)**
+**cue 문자 범위 LID는 현재 계약으로 계산할 수 없습니다 (REVIEW-024 D-02)**
 
-`SubtitleDocument`에는 `language_spans`도 `dominant_language`도 없습니다
-([`ARCHITECTURE.md`](ARCHITECTURE.md) §3.0.2 L-2). cue 수준 언어가 필요하면 계보를 따라
-계산하며, 저장하지 않습니다.
+`SubtitleDocument`에는 `language_spans`도 `dominant_language`도 없고
+([`ARCHITECTURE.md`](ARCHITECTURE.md) §3.0.2 L-2), 계보를 따라 **결정적으로 투영할 수도
+없습니다.** 없는 대응을 있다고 쓰지 않기 위해 이 지표를 `SubtitleDocument` 가설에서
+**미지원**으로 둡니다.
 
-```
-L1. cue의 lineage_fragments[]는 각 표시 줄의 scalar 범위를 upstream 입력 segment의
-    exact 범위에 정확히 한 번 대응시킨다 (ARCHITECTURE §7.4·§7.12).
-    target 축이면 대응 대상은 TranslatedTranscript의 target_text이고,
-    그 segment의 source_fragments[]가 다시 원문 Transcript segment 범위로 잇는다.
-L2. 각 fragment가 가리키는 원문 범위와 Transcript.language_spans의 교집합을 취해
-    fragment 안의 언어 구간을 만든다. 교집합이 비면 그 fragment는 "unknown"이다.
-L3. 알고리즘 C0의 오프셋 규칙(위 규칙 7)으로 fragment 구간을
-    canonical_cue_text 오프셋으로 옮긴 뒤 P1–P3을 그대로 적용한다.
-    삽입된 줄 구분자는 어느 구간에도 귀속시키지 않는다 (규칙 8).
-```
+계산할 수 없는 이유는 다음과 같습니다.
 
-- 원문 축(`text_axis: "source"`) cue는 L1의 중간 단계 없이 곧바로 `Transcript` 범위에 닿습니다.
-- 계보가 끊긴 cue는 계약 검증에서 이미 실패하므로 이 투영의 입력이 되지 않습니다.
-- **번역 결과의 언어를 이 지표로 재지 않습니다** (§4.5 머리말). L1–L3은 target 축 cue에서도
-  **원문 언어**를 얻기 위한 경로입니다.
+- target 축 cue의 `lineage_fragments[]`는 `TranslatedTranscript.target_text`의 scalar 범위만
+  가리킵니다. 원문 범위가 아닙니다.
+- 번역 segment의 `source_fragments[]`는 **그 segment 전체**의 원문 범위를 줍니다.
+  target 문자와 source 문자 사이의 정렬은 계약에 없습니다.
+- 그래서 merged·split·어순이 바뀐 번역에서 특정 한국어 cue 조각을 특정 원문 language span에
+  배정할 방법이 없습니다.
+- `Transcript`의 token은 **선택 필드이고 문자 오프셋이 없습니다.** 문자 단위 LID를 시간으로
+  옮기는 일반 규칙이 없습니다.
+- 원문 축 cue도 `norm-v1`이 **U-19로 미정**이라 정규화 전후 offset mapping이 확정되지
+  않았습니다. 이 TASK에서 U-19를 임의로 정하지 않습니다.
+
+**대신 지금 보장하는 것은 segment 수준 추적 가능성입니다.** cue → 입력 segment ID →
+(번역이면) `source_fragments[].source_segment_id` → 원문 Transcript segment까지 ID로
+추적되고, 그 segment의 `language_spans`는 그대로 읽을 수 있습니다. 다만 그것을 cue의
+**문자 범위**에 배정하지 않습니다.
+
+명시적 source↔target 문자 정렬과 문자↔시간 매핑을 정의하는 후속 TASK가 생기면 그때
+이 지표를 `SubtitleDocument` 가설로 확장합니다. 그 전에는 **원문 축 `Transcript` 가설**에만
+적용합니다.
 
 `lines[]` 결합에 넣는 **U+0020 구분자는 표시 문자열을 만들기 위한 인공 구분자이며 upstream 원문
 증거가 아닙니다.** cue의 원문 계보는 `lineage_fragments[]`의 exact scalar 범위가 담습니다

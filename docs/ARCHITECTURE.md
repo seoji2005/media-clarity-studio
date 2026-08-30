@@ -311,13 +311,17 @@ ReferenceBundle/v1:
 | # | 규칙 |
 |---|---|
 | **L-1** | 가설 쪽 언어 판단의 정본은 `Transcript.language_spans[]` 하나입니다. `dominant_language`는 그 파생 편의 필드이며 정답으로 쓰지 않습니다 (§7.3) |
-| **L-2** | `SubtitleDocument`는 **자체 LID를 주장하지 않습니다.** cue 수준 언어가 필요한 평가·표시는 `lineage_fragments[]`의 exact scalar 범위를 따라 `Transcript.language_spans`를 **결정적으로 투영**해 얻습니다. 투영 결과는 파생값이며 문서에 저장하지 않습니다 |
+| **L-2** | `SubtitleDocument`는 **자체 LID를 주장하지 않습니다.** cue 수준 **문자 범위** 언어는 현재 계약으로 계산할 수 없으므로 **미지원**입니다(REVIEW-024 D-02). cue는 `lineage_fragments[]`로 입력 segment까지, 번역이면 그 segment의 `source_fragments[]`로 원문 segment까지 **segment 수준으로 추적**됩니다. 그 이상은 후속 TASK가 source↔target 문자 정렬과 문자↔시간 매핑을 정의한 뒤의 일입니다 |
 | **L-3** | cue의 `review_reasons`에 남는 `language_switch`는 **검토 신호**이지 언어 정답이 아닙니다 |
 | **L-4** | `supports_language_id=false`이면 `language_spans`도 `dominant_language`도 **부재**여야 합니다. 설정에서 받은 후보 언어를 결과처럼 기록하지 않습니다 |
 
-> 투영식(문자 오프셋 → 시간, cue → 원문 lineage)은 [`EVALS.md`](EVALS.md) §4.5(a)에 있습니다.
-> 저장 위치를 늘리지 않고 **계보를 따라 계산**하는 쪽을 택한 이유는, 같은 사실을 두 곳에
-> 적으면 둘이 갈라졌을 때 어느 쪽이 정답인지 정할 방법이 없기 때문입니다.
+> 원문 축 `Transcript` 가설의 문자 오프셋 → 시간 투영은 [`EVALS.md`](EVALS.md) §4.5(a)에 있습니다.
+> 저장 위치를 늘리지 않는 쪽을 택한 이유는, 같은 사실을 두 곳에 적으면 둘이 갈라졌을 때
+> 어느 쪽이 정답인지 정할 방법이 없기 때문입니다.
+>
+> **cue 문자 범위 LID를 "결정적으로 투영한다"고 쓰지 않습니다.** 현재 계약에는 번역
+> target 문자와 원문 문자 사이의 정렬이 없고, `Transcript` token에는 문자 오프셋이 없으며,
+> `norm-v1`(U-19)도 미정입니다. 없는 대응을 있다고 쓰는 것이 저장 중복보다 나쁩니다.
 
 ### 3.1 부분 번들 (Partial Bundle)
 
@@ -1066,7 +1070,7 @@ TranslationCapabilityReport:
 | target Subtitle에 언어가 없음 | `text_axis="target"`이면 `target_language="ko"`와 원본 Transcript ref가 필수 |
 | document-level `unsupported_features[]` 문자열 | `cue_id`·`feature_kind`·`feature_identifier`·`reason_code`·`action`을 갖는 구조형 record. cue 비율을 계산할 수 있음 |
 | inline `style_profile` 숫자가 U-18과 충돌 가능 | `style_profile_id`/`style_profile_version` + `resolved_style` snapshot. schema에 기본 숫자를 두지 않음 |
-| cue `language_spans[]`·`dominant_language?` | **정본에서 제외.** 가설 쪽 LID의 단일 출처는 `Transcript.language_spans`이고(§3.0.2 L-1), `SubtitleDocument`는 독립 LID 가설을 갖지 않습니다(L-2). cue 수준 언어가 필요하면 `lineage_fragments[]`를 따라 원문 span을 결정적으로 투영합니다(EVALS §4.5(a)). cue의 `review_reasons`에 남는 `language_switch`는 검토 신호이지 정답이 아닙니다 |
+| cue `language_spans[]`·`dominant_language?` | **정본에서 제외.** 가설 쪽 LID의 단일 출처는 `Transcript.language_spans`이고(§3.0.2 L-1), `SubtitleDocument`는 독립 LID 가설을 갖지 않습니다(L-2). cue 수준 **문자 범위** 언어는 현재 계약으로 계산할 수 없어 **미지원**이며(EVALS §4.5(a), REVIEW-024 D-02) cue는 segment 수준으로만 원문까지 추적됩니다. cue의 `review_reasons`에 남는 `language_switch`는 검토 신호이지 정답이 아닙니다 |
 | cue `confidence?`·`speaker_label?` | **정본에서 제외.** 결박할 capability 축이 자막 계층에 없어 근거 없는 숫자·label이 되기 때문입니다. 신뢰도 신호는 upstream 문서와 `needs_review`/`review_reasons`가, 화자 표시는 `stream_id`와 lineage가 담당하며 표시 형식은 후속 export/QC TASK의 몫입니다 |
 
 **정본 안에서 한 번만 정의하는 것과, 한 번 더 나타나는 것**

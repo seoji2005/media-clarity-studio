@@ -703,8 +703,9 @@ capability 축이 없어 근거 없는 값이 되기 때문이다. 산문은 지
 
 > **§3.0과 §3.0.2를 섞어 읽지 않는다** (REVIEW-023 D-01). §3.0은 **정답(`ReferenceBundle`)**
 > 안에서 `language_spans[]`가 정답이라는 규정이고, §3.0.2는 **가설 산출물** 쪽 authority다.
-> cue 수준 언어가 필요하면 `lineage_fragments[]`를 따라 원문 span을 결정적으로 투영한다
-> (`EVALS.md` §4.5(a) L1–L3). 투영 결과는 파생값이며 문서에 저장하지 않는다.
+> cue는 `lineage_fragments[]`로 입력 segment까지, 번역이면 그 segment의 `source_fragments[]`로
+> 원문 segment까지 **segment 수준으로 추적**된다. cue 문자 범위 LID는 현재 계약으로 계산할 수
+> 없어 **미지원**이다 (§16.6, REVIEW-024 D-02, `EVALS.md` §4.5(a)).
 
 ### 14.6 fixture (57건 — 첫 구현 시점)
 
@@ -785,7 +786,10 @@ git status --short
   U-18이 미정이므로 style 수치를, U-19가 미정이므로 `norm-v1` 규칙을 만들지 않았다.
 - **Windows 11/NTFS에서 실행하지 않았다.** Linux·Python 3.11/3.12에서만 확인했다.
 
-### 14.10 미해결 교차 계약 모순
+### 14.10 미해결 교차 계약 모순 (첫 구현 시점 — §16이 갱신한다)
+
+> 이 절의 "발견하지 못했다"는 첫 구현 세션의 기록이다. REVIEW-024 D-02가 실제 모순 하나를
+> 지적했고 **§16.6**이 그것을 해소했다. 현재 상태는 §16을 본다.
 
 **발견하지 못했다.** §5 표로 해결되지 않는 모순은 없었고, 따라서 `Blocked`로 중단하지 않았다.
 `docs/EVALS.md` §4.5(a)가 raw `Transcript`의 `language_spans`에도 `canonical_cue_text` 기준
@@ -865,13 +869,14 @@ cue에 독립 `language_spans`를 **다시 넣지 않았다.** 대신 세 자리
 |---|---|
 | `ReferenceBundle.language_spans[]` | 평가 정답 (ground truth) — `ARCHITECTURE.md` §3.0 |
 | `Transcript…language_spans[]` | 가설 쪽 LID의 단일 출처 — `ARCHITECTURE.md` §3.0.2 L-1 |
-| `SubtitleDocument` | 독립 LID 가설 없음. 필요하면 `lineage_fragments[]`를 따라 **결정적으로 투영** — L-2, `EVALS.md` §4.5(a) L1–L3 |
+| `SubtitleDocument` | 독립 LID 가설 없음 — L-2. (이 절이 처음 쓴 "결정적 투영"은 **§16.6에서 철회**했다) |
 
 - `ARCHITECTURE.md` §3.0.2를 **추가**했다 (기존 산문은 지우지 않았다). §7.12 표의 근거를
   §3.0에서 §3.0.2로 고쳤다.
 - `EVALS.md` C0 규칙 7·8과 §4.5(a)의 두 text space 표를 위 정의에 맞췄고, cue 언어 구간의
-  투영식 L1–L3을 명시했다.
-- **미해결 모순 0건.** 남은 모순을 찾지 못했다.
+  투영식 L1–L3을 명시했다. **이 투영식은 §16.6에서 철회했다** — 현재 계약으로 성립하지 않는다.
+- **미해결 모순 0건**이라고 적었으나, REVIEW-024 D-02가 이 절의 "결정적 투영" 주장 자체가
+  현재 계약으로 성립하지 않는 모순임을 지적했다. **§16.6**에서 철회하고 정합화했다.
 
 **원문과 번역문이 문자열상 같다는 사실만으로 구조 오류를 만들지 않았다.** validator에 그런 검사는
 없다(`grep`으로 확인). 동일 문자열은 QC 신호 후보이지 계약 무효 조건이 아니다.
@@ -912,6 +917,139 @@ git status --short
 
 - **실제 ASR·번역·diarization·정렬 adapter는 없다.** 이 반영도 계약과 검증만 만든다.
 - **Windows 11/NTFS에서 실행하지 않았다.** WER·RTF·VRAM·사람 수정시간도 측정하지 않았다.
+- `CorrectionLedger`·`TermBundle`·`WorkUnitManifest`는 여전히 범위 밖이다.
+- `STATUS.md`·`PLAN.md`·`DECISIONS.md`의 일반 상태 정합화는 Lean Root의 몫이며 여기서 하지 않았다.
+- 이 세션은 **작성자**다. 리뷰도 승인도 하지 않는다 (`AGENTS.md` R8).
+
+---
+
+## 16. REVIEW-024 변경 요청 반영 기록 (같은 브랜치의 두 번째 후속 커밋)
+
+[`docs/reviews/REVIEW-024.md`](../reviews/REVIEW-024.md)의 **변경 요청**(H-01~H-06, D-02)을
+PR #45의 같은 브랜치에 반영했다. §14는 첫 구현, §15는 REVIEW-023 반영 기록이며 **지우지 않았다.**
+현재 저장소 상태의 숫자는 이 절에 있다.
+
+`schema_core.py`·`CACHE_KEY_FIELDS`·artifact store·job runtime·기존 job/artifact schema의
+canonical bytes는 그대로다. 신규 dependency·model·network access는 0이고, §8의 안정 오류 코드
+22개 밖의 코드를 만들지 않았다.
+
+### 16.1 H-01 — ArtifactRef 계보 결박
+
+세 층으로 나눠 강제한다.
+
+| 층 | 무엇을 검사하나 | code / location |
+|---|---|---|
+| 문서 집합 안 | target 축 자막의 `source_transcript_ref` == 번역 문서의 `source_transcript` | `E_SOURCE_REF` @ `subtitle_document/source_transcript_ref` |
+| ref 자체 | 상류 문서 ref가 실제 **문서 artifact**인가 (`kind="text"`, `media_type="application/json"`) | `E_SOURCE_REF` @ `…/kind`, `…/media_type` |
+| 검증 컨텍스트 | 직접 입력 ref가 **실제로 제공된 문서**인가 | `E_SOURCE_REF` @ `translated_transcript/source_transcript`, `subtitle_document/input_document_ref`, `subtitle_document/source_transcript_ref` |
+
+**API 확장은 최소 한 곳이다.** 검증 입력 집합에 `document_refs`라는 **검증 컨텍스트** key를
+받는다. 문서가 아니라 "지금 검증하는 이 문서가 어떤 artifact인가"를 담는다.
+
+- **문서 안에 self ArtifactRef를 둘 수 없다.** `content_hash`는 그 문서 바이트의 해시라서
+  문서 안에 적으면 순환이 된다. 그래서 schema에 self-ref 필드를 추가하는 선택지는 성립하지
+  않는다. identity는 store가 아는 사실이고, validator는 그것을 **컨텍스트로 받아야** 한다.
+- 컨텍스트를 주지 않으면 identity 검사만 건너뛴다. **임의 ID를 지어내지 않는다** (R5).
+- `validate_documents`의 시그니처는 바뀌지 않았다. 입력 집합의 선택 key 하나가 늘었을 뿐이라
+  기존 호출자와 fixture는 그대로 동작한다.
+- TASK 범위 판단: 변경 파일은 `subtitle_contracts.py`와 TASK-029 fixture뿐이다. §6이 허용한
+  파일 밖을 건드리지 않으므로 **범위 안**으로 판단했고 blocker로 올리지 않았다.
+
+`kind="text"`·`media_type="application/json"` 요구는 새 계약이 아니라 §4.4·§4.5가 말하는
+"입력 Transcript / 직접 입력 TranslatedTranscript"가 JSON 문서라는 사실의 기계화다.
+
+### 16.2 H-02 — `speaker_label_source="input"`의 값 결박
+
+- segment 수준 `input` label은 참조한 SpeechSegment의 **실제 label 값**과 같아야 한다.
+- stream 수준 `input` label은 그 `stream_id`를 가진 입력 SpeechSegment의 label과 같아야 한다.
+- 입력에 label이 하나도 없으면 `input`을 주장할 수 없다.
+- 입력 label이 **여러 개**면 어느 것을 복사했는지 계약이 정하지 않았으므로 조용히 고르지 않고
+  계약 위반으로 보고한다. 임의 선택은 근거 없는 값을 만든다.
+- `adapter`는 기존 diarization capability 결박을 그대로 유지한다.
+- 정상 fixture(K-19/IM-35)도 upstream과 **동일한 실제 label**을 쓰도록 고쳤다.
+
+### 16.3 H-03 — capability 내부 논리와 실제 evidence
+
+| 규칙 | code |
+|---|---|
+| `supports_intra_sentential_lid=true` → `supports_language_id=true` | `E_CAPABILITY_MISMATCH` |
+| `language_confidence_semantics != "none"` → `supports_language_id=true` | `E_CAPABILITY_MISMATCH` |
+| `supports_nbest=false` → `nbest_score_semantics="none"` | `E_CAPABILITY_MISMATCH` |
+| 실제 산출 언어 ⊆ 선언한 지원 언어 (`und` 제외) | `E_CAPABILITY_MISMATCH` |
+| 번역한 원문 언어 ⊆ `supported_source_languages` | `E_CAPABILITY_MISMATCH` |
+
+**빈 지원 언어 목록의 의미를 계약대로 고정했다.** §4.3은 "알 수 없으면 빈 배열과 명시적
+limitation"이라고 정했다. 따라서 빈 배열은 **미상**이고, `limitations`가 비어 있으면 계약
+위반이다. "모든 언어 지원"이나 "미지원"으로 읽는 것을 허용하지 않는다.
+
+### 16.4 H-04 — schema 방어 분모의 완전성
+
+수동 표본 22개를 유지하되, 그와 **별개로** 기계 수집 inventory를 새 분모로 만들었다.
+
+- 다섯 정본에서 `required`·`enum`·범위·닫힌 객체·`pattern`·`uniqueItems`를 **전수 수집**한다
+  (사람이 고른 목록이 아니다). 새 `required` 필드가 생기면 이 목록이 저절로 늘고, 대응
+  mutation이 없으면 감사가 실패한다.
+- 각 방어마다 세 가지를 함께 요구한다. ① 위반 입력이 production schema에서 실제로 거부된다,
+  ② **그 방어만** 약화하면 더 이상 거부되지 않는다(다른 방어에 가려지지 않았다),
+  ③ 약화한 schema에서도 정상 fixture는 통과한다(valid-case sentinel).
+- 위반 입력과 약화 patch는 schema 좌표에서 **기계적으로 생성**한다. 저장소 밖 임시 schema
+  디렉터리에서만 수행하며 저장소 파일은 바꾸지 않는다.
+- 방어가 적용되는 instance를 정상 fixture에서 찾는다. base 세 건에 없는 선택 필드를 위해
+  **네 번째 정상 fixture K-105(coverage)** 를 추가했다. 선택 필드를 모두 켠 정직한 문서다.
+- 같은 노드의 다른 keyword가 그 방어를 **수학적으로 함의**하는 경우(예: `^[a-z]{2,8}…$`
+  pattern이 `minLength: 2`를 이미 보장)는 어떤 입력으로도 분리할 수 없다. 감사 공백이 아니라
+  중복 선언이므로 `subsumed`로 분류해 그 수를 함께 보고한다.
+
+### 16.5 H-05 — sentinel을 exit gate에 연결
+
+`_all_passed()`가 `passed`뿐 아니라 `sentinel_ok`도 본다. `--check-only`와 전체 audit가 같은
+predicate를 쓰고, source mutant 실행도 관측된 input sentinel 실패를 그 mutant의 sentinel 실패로
+센다. **감사 자체를 감사하는 자기검증**을 새 분모로 추가했다 — 임시 사본에서 sentinel만
+실패시키고 `--check-only`가 exit 1인지 확인한다 (fixture·input·leak 각각).
+
+### 16.6 H-06 / D-02 — location 안전성과 LID 주장 축소
+
+**H-06.** schema finding의 location에 사용자 제어 dynamic key가 그대로 실리던 문제를
+`schema_core`를 고치지 않고 TASK-029 경계에서 해결했다. location을 두 단계로 자른다.
+① 구간 모양(ASCII snake_case/숫자가 아니면 중단), ② **실제 입력에서의 해석 가능성**
+(`"a/b"`처럼 join 뒤 두 구간처럼 보이는 key를 거른다). 남은 위치는 언제나 입력에서 해석되는
+부모를 가리키고 입력 값을 담지 않는다. 안전한 짧은 ASCII key는 진단 좌표로 남긴다.
+누출 스캔이 message와 **location을 모두** 검사하도록 넓혔고, 길이와 무관하게 구간 모양을
+전수로 본다.
+
+**D-02.** cue 문자 범위 LID의 "결정적 투영" 주장을 **철회**했다. 현재 계약에는 target 문자와
+source 문자 사이 정렬이 없고, `Transcript` token에 문자 오프셋이 없으며, `norm-v1`(U-19)도
+미정이다. 없는 대응을 있다고 쓰지 않는다.
+
+- LID authority 3축(§3.0.2 L-1/L-2/L-3/L-4)은 **유지**한다.
+- cue에 독립 `language_spans`를 **다시 넣지 않았다.**
+- `SubtitleDocument` 가설의 cue 문자 범위 LID는 **미지원**이며, 지금 보장하는 것은
+  **segment 수준 추적 가능성**이다.
+- U-19를 이 TASK에서 임의로 확정하지 않았다.
+- `ARCHITECTURE.md` §3.0.2·§7.12, `EVALS.md` §4.5(a)와 C0 규칙 7·8, 그리고 §14.10·§15.5의
+  "결정적 투영 / 미해결 모순 0" 표현을 실제 계약 수준으로 낮췄다.
+
+### 16.7 오너 결정이 필요한 항목 (이 TASK에서 정하지 않았다)
+
+REVIEW-024 §5와 같다. 후속 producer가 **숨은 정렬 규약**을 만들기 전에 오너가 정해야 한다.
+
+1. 같은 stream 안 Transcript segment의 canonical 시간 순서
+2. 서로 다른 source segment를 참조하는 translation segment의 순서
+3. ASR `source_speech_segment_ids` 배열의 canonical order
+4. U-19 `norm-v1` 정규화 규칙
+5. `loads_strict()` duplicate-key 오류 message의 전체 CLI 비식별화 정책
+
+이 다섯은 계약이 아직 규정하지 않았고, 임의로 정하면 producer가 그 선택에 묶인다.
+**추측으로 채우지 않고 미해결로 남긴다** (`AGENTS.md` R5).
+
+### 16.8 남은 한계 (확인하지 않은 것)
+
+- **실제 ASR·번역·diarization·정렬 adapter는 없다.** 이 반영도 계약과 검증만 만든다.
+- **Windows 11/NTFS에서 실행하지 않았다.** WER·RTF·VRAM·사람 수정시간도 측정하지 않았다.
+- `document_refs` 컨텍스트를 **주지 않으면** identity 검사는 수행되지 않는다. 실제 producer가
+  store에서 그 값을 넘기도록 만드는 것은 후속 실행 TASK의 몫이다.
+- 누출 스캔의 message 판정은 3 scalar 이상 저장 텍스트를 대상으로 한다. location은 길이와
+  무관하게 구간 모양을 전수로 검사한다.
 - `CorrectionLedger`·`TermBundle`·`WorkUnitManifest`는 여전히 범위 밖이다.
 - `STATUS.md`·`PLAN.md`·`DECISIONS.md`의 일반 상태 정합화는 Lean Root의 몫이며 여기서 하지 않았다.
 - 이 세션은 **작성자**다. 리뷰도 승인도 하지 않는다 (`AGENTS.md` R8).

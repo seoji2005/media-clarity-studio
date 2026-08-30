@@ -74,6 +74,7 @@ __all__ = [
     "EXPECTED_CASE_IDS",
     "Finding",
     "JsonInputError",
+    "REF_CONTEXT_KEY",
     "REPO_ROOT",
     "SCHEMA_DIALECT",
     "SCHEMA_FILES",
@@ -85,14 +86,17 @@ __all__ = [
     "UNDETERMINED_LANGUAGE",
     "ValidationResult",
     "check_asr_capability_binding",
+    "check_document_ref_identity",
     "check_speech_segments",
     "check_subtitle_document",
     "check_transcript",
     "check_translated_transcript",
     "check_translation_capability_binding",
     "discover_fixtures",
+    "dedupe_findings",
     "redact_schema_findings",
     "redact_schema_message",
+    "safe_location",
     "speech_timebase",
     "evaluate_fixture",
     "load_fixture",
@@ -199,8 +203,72 @@ TRANSLATION_FEATURE_KEYS = ("segment_alignment", "translation_confidence")
 # ---------------------------------------------------------------------------
 
 
+def _is_safe_segment(segment: str) -> bool:
+    """JSON Pointer 한 구간이 **입력에서 온 값이 아님**이 확실한 모양인지.
+
+    다섯 정본의 property 이름과 문서 key는 전부 ASCII snake_case이고 배열 index는 숫자다.
+    그 밖의 구간은 producer가 정한 dynamic key(예: `language_overrides`의 language tag)이며
+    사용자 입력이 그대로 들어올 수 있다 (REVIEW-024 H-06).
+    """
+
+    if not segment or len(segment) > 64:
+        return False
+    return all(character.isascii() and (character.isalnum() or character == "_")
+               for character in segment)
+
+
+_MISSING = object()
+
+
+def _step(node: Any, segment: str) -> Any:
+    """JSON Pointer 한 구간을 실제 입력에서 따라간다. 못 따라가면 `_MISSING`."""
+
+    if isinstance(node, Mapping):
+        return node[segment] if segment in node else _MISSING
+    if isinstance(node, list):
+        if not segment.isdigit():
+            return _MISSING
+        index = int(segment)
+        return node[index] if 0 <= index < len(node) else _MISSING
+    return _MISSING
+
+
+def safe_location(location: str, root: Any = None) -> str:
+    """dynamic key 구간을 **안전한 부모 위치**로 잘라낸다.
+
+    `language_overrides["/home/patient/secret.mp4"]`처럼 사용자 제어 key가 location에 그대로
+    실리면 (a) 절대 경로·민감 값이 `Finding.as_line()`으로 새고, (b) `/`·`~`가 escape되지
+    않아 입력에서 해석할 수 없으며, (c) 최상위 key가 `/`로 시작하면 "선행 `/` 없는 pointer"
+    계약도 깨진다 (TASK-029 §8, REVIEW-024 H-06).
+
+    두 단계로 자른다.
+
+    1. **모양** — 다섯 정본의 property 이름과 문서 key는 ASCII snake_case, 배열 index는 숫자다.
+       그 밖의 구간에서 멈춘다.
+    2. **해석 가능성** — `root`를 주면 남은 구간을 실제 입력에서 따라가 본다. `"a/b"` 같은
+       key는 join된 뒤에는 두 구간처럼 보이므로 모양 검사만으로는 걸러지지 않는다. 실제
+       입력에서 따라가지 못하는 순간 거기서 자른다.
+
+    `schema_core`를 고치지 않고 이 경계에서 처리한다. 남은 위치는 언제나 실제 입력에서
+    해석되는 부모를 가리킨다. 어느 key였는지는 잃지만, 그 대가로 location이 입력 값을
+    절대 담지 않는다. 같은 부모의 dynamic key 위반이 여러 개면 같은 finding으로 접힌다.
+    """
+
+    kept: list[str] = []
+    node = root
+    for segment in location.split("/"):
+        if not _is_safe_segment(segment):
+            break
+        if root is not None:
+            node = _step(node, segment)
+            if node is _MISSING:
+                break
+        kept.append(segment)
+    return "/".join(kept)
+
+
 def _finding(location: str, code: str, message: str) -> Finding:
-    return Finding(location=location, code=code, message=message)
+    return Finding(location=safe_location(location), code=code, message=message)
 
 
 def _is_number(value: Any) -> bool:
@@ -779,6 +847,20 @@ def check_transcript(
                     "supports_diarization=false인 adapter가 adapter-produced speaker label을 냈다",
                 )
             )
+        if stream.get("speaker_label_source") == "input":
+            # stream 수준 input label도 그 stream의 **실제 입력 label 근거**와 결박한다.
+            # 근거는 같은 stream_id를 가진 입력 SpeechSegment의 speaker_label이다.
+            findings.extend(
+                _check_input_label_value(
+                    stream.get("speaker_label"),
+                    {
+                        entry[3]
+                        for entry in speech_index.values()
+                        if entry[3] is not None and entry[2] == stream_id
+                    },
+                    where,
+                )
+            )
 
         for segment_index, segment in enumerate(stream.get("segments") or []):
             if not isinstance(segment, dict):
@@ -815,6 +897,49 @@ def _check_speaker_label_pair(
                 "speaker_label_source는 speaker_label이 있을 때만 쓴다",
             )
         )
+
+
+def _check_input_label_value(
+    label: Any, input_labels: set[str], where: str
+) -> list[Finding]:
+    """`speaker_label_source="input"`은 **실제 입력 label 값**과 결박한다 (REVIEW-024 H-02).
+
+    이전 판은 "참조한 입력 중 label이 하나라도 있는가"만 봤다. 그래서 입력이 `SPK-A`인데
+    Transcript가 `SPK-B/source=input`이라고 주장해도 통과했다. `input`은 "입력에서 복사했다"는
+    뜻이므로 값이 같아야 한다.
+
+    입력 label이 여러 개면 단일 값을 **조용히 고르지 않는다.** 어느 것을 복사했는지 계약이
+    정하지 않았으므로 계약 위반으로 보고한다 (임의 선택은 근거 없는 값을 만든다).
+    """
+
+    findings: list[Finding] = []
+    if not input_labels:
+        findings.append(
+            _finding(
+                f"{where}/speaker_label_source",
+                "E_CAPABILITY_MISMATCH",
+                "speaker_label_source=input인데 참조한 입력에 speaker_label이 없다",
+            )
+        )
+        return findings
+    if len(input_labels) > 1:
+        findings.append(
+            _finding(
+                f"{where}/speaker_label",
+                "E_CAPABILITY_MISMATCH",
+                "참조한 입력의 speaker_label이 여러 개여서 input label을 단일 값으로 정할 수 없다",
+            )
+        )
+        return findings
+    if isinstance(label, str) and label not in input_labels:
+        findings.append(
+            _finding(
+                f"{where}/speaker_label",
+                "E_CAPABILITY_MISMATCH",
+                "speaker_label_source=input인데 값이 실제 입력 speaker_label과 다르다",
+            )
+        )
+    return findings
 
 
 def _check_transcript_segment(
@@ -883,13 +1008,9 @@ def _check_transcript_segment(
                 "supports_diarization=false인 adapter가 adapter-produced speaker label을 냈다",
             )
         )
-    if label_source == "input" and not input_labels:
-        findings.append(
-            _finding(
-                f"{where}/speaker_label_source",
-                "E_CAPABILITY_MISMATCH",
-                "speaker_label_source=input인데 참조한 SpeechSegment에 speaker_label이 없다",
-            )
+    if label_source == "input":
+        findings.extend(
+            _check_input_label_value(segment.get("speaker_label"), input_labels, where)
         )
 
     findings.extend(_check_tokens(segment, where, valid_time, capability))
@@ -1265,6 +1386,114 @@ def _check_language_coverage(
     return findings
 
 
+def _check_capability_implications(
+    capability: Mapping[str, Any], location: str
+) -> list[Finding]:
+    """capability **내부** 함의. 결과 필드를 보기 전에 선언 자체가 모순이면 거부한다.
+
+    `supports_language_id=false`인 adapter가 intra-sentential LID를 지원한다고 말하거나
+    LID confidence semantics를 주장하는 것은 실행 결과와 무관하게 이미 모순이다
+    (REVIEW-024 H-03). 이전 판은 결과 필드가 없으면 이 모순을 통과시켰다.
+    """
+
+    findings: list[Finding] = []
+    language_id = capability.get("supports_language_id") is True
+
+    if capability.get("supports_intra_sentential_lid") is True and not language_id:
+        findings.append(
+            _finding(
+                f"{location}/supports_intra_sentential_lid",
+                "E_CAPABILITY_MISMATCH",
+                "supports_language_id=false인 adapter가 intra-sentential LID를 지원한다고 보고했다",
+            )
+        )
+    if capability.get("language_confidence_semantics") not in (None, "none") and not language_id:
+        findings.append(
+            _finding(
+                f"{location}/language_confidence_semantics",
+                "E_CAPABILITY_MISMATCH",
+                "supports_language_id=false인 adapter가 language confidence semantics를 주장했다",
+            )
+        )
+    if capability.get("supports_nbest") is not True and capability.get(
+        "nbest_score_semantics"
+    ) not in (None, "none"):
+        findings.append(
+            _finding(
+                f"{location}/nbest_score_semantics",
+                "E_CAPABILITY_MISMATCH",
+                "supports_nbest=false이면 nbest_score_semantics는 none이어야 한다",
+            )
+        )
+    return findings
+
+
+def _check_empty_supported_list(
+    capability: Mapping[str, Any], location: str, field: str
+) -> list[Finding]:
+    """빈 지원 언어 목록의 의미를 계약대로 고정한다 (§4.3).
+
+    §4.3은 "알 수 없으면 빈 배열과 **명시적 limitation**"이라고 정했다. 빈 배열만 두면
+    "모든 언어 지원"인지 "미상"인지 "미지원"인지 읽는 쪽이 고를 수 있게 된다.
+    빈 배열은 **미상**이며 그 사실을 `limitations`에 적어야 한다 (REVIEW-024 H-03).
+    """
+
+    value = capability.get(field)
+    if not isinstance(value, list) or value:
+        return []
+    limitations = capability.get("limitations")
+    if isinstance(limitations, list) and limitations:
+        return []
+    return [
+        _finding(
+            f"{location}/{field}",
+            "E_CAPABILITY_MISMATCH",
+            "빈 지원 언어 목록은 '미상'이며 명시적 limitation이 함께 있어야 한다",
+        )
+    ]
+
+
+def _transcript_languages(transcript: Mapping[str, Any]) -> set[str]:
+    """Transcript가 **실제로 낸** 언어 증거. `und`는 명시적 미상이라 제외한다."""
+
+    languages: set[str] = set()
+    for stream in transcript.get("streams") or []:
+        if not isinstance(stream, dict):
+            continue
+        for segment in stream.get("segments") or []:
+            if not isinstance(segment, dict):
+                continue
+            dominant = segment.get("dominant_language")
+            if isinstance(dominant, str):
+                languages.add(dominant)
+            for span in segment.get("language_spans") or []:
+                if isinstance(span, dict) and isinstance(span.get("language"), str):
+                    languages.add(span["language"])
+    return {language for language in languages if language != UNDETERMINED_LANGUAGE}
+
+
+def _check_declared_languages(
+    supported: Any, emitted: set[str], location: str, *, subject: str
+) -> list[Finding]:
+    """실제 산출 언어가 선언한 지원 언어 밖이면 거부한다 (REVIEW-024 H-03).
+
+    빈 목록은 `_check_empty_supported_list`가 다루는 '미상'이므로 여기서는 판정하지 않는다.
+    """
+
+    if not isinstance(supported, list) or not supported:
+        return []
+    unsupported = sorted(emitted - {tag for tag in supported if isinstance(tag, str)})
+    if not unsupported:
+        return []
+    return [
+        _finding(
+            location,
+            "E_CAPABILITY_MISMATCH",
+            f"{subject} 결과에 선언한 지원 언어 밖의 언어가 있다",
+        )
+    ]
+
+
 def check_asr_capability_binding(
     transcript: Mapping[str, Any], location: str = "transcript"
 ) -> list[Finding]:
@@ -1282,6 +1511,20 @@ def check_asr_capability_binding(
     findings.extend(
         _check_capability_provenance(
             capability, transcript.get("provenance"), capability_location
+        )
+    )
+    findings.extend(_check_capability_implications(capability, capability_location))
+    findings.extend(
+        _check_empty_supported_list(
+            capability, capability_location, "supported_languages"
+        )
+    )
+    findings.extend(
+        _check_declared_languages(
+            capability.get("supported_languages"),
+            _transcript_languages(transcript),
+            f"{capability_location}/supported_languages",
+            subject="ASR",
         )
     )
 
@@ -1503,7 +1746,12 @@ def check_translated_transcript(
             )
         )
 
-    findings.extend(check_translation_capability_binding(document, location))
+    findings.extend(
+        _check_document_ref_shape(
+            document.get("source_transcript"), f"{location}/source_transcript"
+        )
+    )
+    findings.extend(check_translation_capability_binding(document, location, transcript))
 
     if transcript is None:
         findings.append(
@@ -1865,9 +2113,14 @@ def _check_coverage_partition(
 
 
 def check_translation_capability_binding(
-    document: Mapping[str, Any], location: str = "translated_transcript"
+    document: Mapping[str, Any],
+    location: str = "translated_transcript",
+    transcript: Mapping[str, Any] | None = None,
 ) -> list[Finding]:
-    """TranslationCapabilityReport ↔ feature_status ↔ 결과 필드 결박 (§4.4)."""
+    """TranslationCapabilityReport ↔ feature_status ↔ 결과 필드 결박 (§4.4).
+
+    `transcript`를 주면 **실제 번역한 원문 언어**를 선언한 지원 언어와 대조한다.
+    """
 
     findings: list[Finding] = []
     capability = document.get("capability_report")
@@ -1877,9 +2130,19 @@ def check_translation_capability_binding(
 
     for key in ("supported_source_languages", "supported_target_languages"):
         _check_language_tags(capability.get(key), f"{capability_location}/{key}", findings)
+        findings.extend(_check_empty_supported_list(capability, capability_location, key))
     findings.extend(
         _check_capability_provenance(capability, document.get("provenance"), capability_location)
     )
+    if transcript is not None:
+        findings.extend(
+            _check_declared_languages(
+                capability.get("supported_source_languages"),
+                _transcript_languages(transcript),
+                f"{capability_location}/supported_source_languages",
+                subject="번역 입력",
+            )
+        )
 
     targets = capability.get("supported_target_languages")
     if not isinstance(targets, list) or TARGET_LANGUAGE not in targets:
@@ -1937,6 +2200,113 @@ def check_translation_capability_binding(
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# ArtifactRef 계보 결박 (REVIEW-024 H-01)
+# ---------------------------------------------------------------------------
+
+#: 이 계약의 상류 입력(Transcript·TranslatedTranscript)은 전부 JSON 문서다.
+#: `kind=video`처럼 문서가 아닌 artifact를 "입력 transcript"로 가리키는 것은 계보 위반이다.
+DOCUMENT_REF_KIND = "text"
+DOCUMENT_REF_MEDIA_TYPE = "application/json"
+
+#: 검증 입력 집합에 함께 넣을 수 있는 **문서 자신의 ArtifactRef**.
+#:
+#: 문서 안에 self ArtifactRef를 둘 수는 없다. `content_hash`는 그 문서 바이트의 해시라서
+#: 문서 안에 적으면 순환이 된다. 그래서 "이 문서가 실제로 어떤 artifact인가"는 문서가 아니라
+#: **검증 컨텍스트**로 받는다. 주면 직접 입력 ref의 identity까지 검사하고, 주지 않으면
+#: 그 검사만 건너뛴다 (임의 ID를 지어내지 않는다).
+REF_CONTEXT_KEY = "document_refs"
+
+
+def _ref_identity(ref: Any) -> tuple[str, str] | None:
+    if not isinstance(ref, Mapping):
+        return None
+    artifact_id, content_hash = ref.get("artifact_id"), ref.get("content_hash")
+    if isinstance(artifact_id, str) and isinstance(content_hash, str):
+        return (artifact_id, content_hash)
+    return None
+
+
+def _check_document_ref_shape(ref: Any, location: str) -> list[Finding]:
+    """상류 문서 ArtifactRef가 실제로 **문서 artifact**를 가리키는지."""
+
+    if not isinstance(ref, Mapping):
+        return []
+    findings: list[Finding] = []
+    if ref.get("kind") != DOCUMENT_REF_KIND:
+        findings.append(
+            _finding(
+                f"{location}/kind",
+                "E_SOURCE_REF",
+                f"상류 문서 ArtifactRef의 kind는 {DOCUMENT_REF_KIND!r}여야 한다",
+            )
+        )
+    media_type = ref.get("media_type")
+    essence = (
+        media_type.split(";")[0].strip().lower() if isinstance(media_type, str) else None
+    )
+    if essence != DOCUMENT_REF_MEDIA_TYPE:
+        findings.append(
+            _finding(
+                f"{location}/media_type",
+                "E_SOURCE_REF",
+                f"상류 문서 ArtifactRef의 media_type은 {DOCUMENT_REF_MEDIA_TYPE!r}여야 한다",
+            )
+        )
+    return findings
+
+
+def check_document_ref_identity(
+    documents: Mapping[str, Any], refs: Mapping[str, Any]
+) -> list[Finding]:
+    """직접 입력 ref가 **실제로 제공된 문서**를 가리키는지 (REVIEW-024 H-01 3~5).
+
+    `refs`는 검증 컨텍스트다. 없는 항목은 검사하지 않는다 — 모르는 것을 지어내지 않는다.
+    """
+
+    findings: list[Finding] = []
+    transcript_ref = _ref_identity(refs.get("transcript"))
+    translated_ref = _ref_identity(refs.get("translated_transcript"))
+
+    translated = documents.get("translated_transcript")
+    if isinstance(translated, Mapping) and transcript_ref is not None:
+        if _ref_identity(translated.get("source_transcript")) != transcript_ref:
+            findings.append(
+                _finding(
+                    "translated_transcript/source_transcript",
+                    "E_SOURCE_REF",
+                    "번역 문서의 source_transcript가 실제 검증 대상 Transcript를 가리키지 않는다",
+                )
+            )
+
+    subtitle = documents.get("subtitle_document")
+    if isinstance(subtitle, Mapping):
+        axis = subtitle.get("text_axis")
+        expected = translated_ref if axis == "target" else transcript_ref
+        if expected is not None and _ref_identity(subtitle.get("input_document_ref")) != expected:
+            findings.append(
+                _finding(
+                    "subtitle_document/input_document_ref",
+                    "E_SOURCE_REF",
+                    "자막 문서의 input_document_ref가 실제 직접 입력 문서를 가리키지 않는다",
+                )
+            )
+        if (
+            axis == "target"
+            and transcript_ref is not None
+            and "source_transcript_ref" in subtitle
+            and _ref_identity(subtitle.get("source_transcript_ref")) != transcript_ref
+        ):
+            findings.append(
+                _finding(
+                    "subtitle_document/source_transcript_ref",
+                    "E_SOURCE_REF",
+                    "자막 문서의 source_transcript_ref가 실제 검증 대상 Transcript를 가리키지 않는다",
+                )
+            )
+    return findings
+
+
 def check_subtitle_document(
     document: Mapping[str, Any],
     transcript: Mapping[str, Any] | None,
@@ -1949,6 +2319,29 @@ def check_subtitle_document(
     axis = document.get("text_axis")
 
     findings.extend(_check_axis(document, axis, transcript, translated, location))
+    findings.extend(
+        _check_document_ref_shape(
+            document.get("input_document_ref"), f"{location}/input_document_ref"
+        )
+    )
+    findings.extend(
+        _check_document_ref_shape(
+            document.get("source_transcript_ref"), f"{location}/source_transcript_ref"
+        )
+    )
+    # target 축 자막의 원본 Transcript ref는 번역 문서가 실제로 입력받은 것과 같아야 한다.
+    # 문서 집합 안에서 확인 가능한 동일성이므로 컨텍스트 없이도 강제한다.
+    if axis == "target" and isinstance(translated, Mapping) and "source_transcript_ref" in document:
+        if _ref_identity(document.get("source_transcript_ref")) != _ref_identity(
+            translated.get("source_transcript")
+        ):
+            findings.append(
+                _finding(
+                    f"{location}/source_transcript_ref",
+                    "E_SOURCE_REF",
+                    "자막 문서의 source_transcript_ref가 번역 문서의 source_transcript와 다르다",
+                )
+            )
     findings.extend(_check_resolved_style(document, location))
     findings.extend(_check_cue_times(document, location))
     findings.extend(_check_unsupported_features(document, location))
@@ -2516,18 +2909,75 @@ def redact_schema_message(message: str) -> str:
 
 
 def redact_schema_findings(findings: Sequence[Finding]) -> list[Finding]:
-    """schema validator가 낸 finding의 code·location은 유지하고 message만 정규화한다."""
+    """schema validator가 낸 finding의 `code`는 그대로 두고 message·location을 정규화한다.
+
+    location도 대상이다. `schema_core`는 dynamic key를 pointer 구간에 그대로 넣으므로
+    message만 씻으면 같은 값이 location으로 샌다 (REVIEW-024 H-06).
+    """
 
     return [
-        Finding(location=finding.location, code=finding.code,
+        Finding(location=safe_location(finding.location), code=finding.code,
                 message=redact_schema_message(finding.message))
         for finding in findings
     ]
 
 
+def dedupe_findings(findings: Sequence[Finding]) -> list[Finding]:
+    """같은 `(location, code)`를 여러 번 보고하지 않는다.
+
+    판정 계약은 `(code, location)`이므로 같은 쌍을 두 번 내는 것은 소비자에게 정보가 아니라
+    잡음이다. 두 경로가 같은 결함을 서로 다른 문장으로 설명할 수 있는데(예: 문서 집합 안의
+    동일성 검사와 검증 컨텍스트 identity 검사), 계약 축에서는 구분되지 않는다.
+    `sort_findings` 뒤에 적용하므로 남는 쪽이 결정적이다.
+
+    같은 부모 아래 dynamic key 위반이 여러 개일 때 `safe_location`이 같은 위치로 접는 것도
+    여기서 하나로 모인다 (REVIEW-024 H-06).
+    """
+
+    seen: set[tuple[str, str]] = set()
+    kept: list[Finding] = []
+    for finding in findings:
+        key = (finding.location, finding.code)
+        if key in seen:
+            continue
+        seen.add(key)
+        kept.append(finding)
+    return kept
+
+
+def _check_ref_context(value: Any) -> list[Finding]:
+    """검증 컨텍스트의 모양만 본다. 없는 항목은 검사하지 않는다."""
+
+    if not isinstance(value, Mapping):
+        return [_finding(REF_CONTEXT_KEY, "E_SCHEMA", f"{REF_CONTEXT_KEY}는 객체여야 한다")]
+    findings: list[Finding] = []
+    for name in sorted(value):
+        if name not in DOCUMENT_KEYS or name == "speech_segments":
+            findings.append(
+                _finding(
+                    f"{REF_CONTEXT_KEY}/{name}",
+                    "E_SCHEMA",
+                    f"{REF_CONTEXT_KEY}의 key는 단일 문서 key여야 한다",
+                )
+            )
+            continue
+        if _ref_identity(value[name]) is None:
+            findings.append(
+                _finding(
+                    f"{REF_CONTEXT_KEY}/{name}",
+                    "E_SCHEMA",
+                    "ArtifactRef의 artifact_id와 content_hash가 문자열이어야 한다",
+                )
+            )
+    return findings
+
+
 def _check_containers(documents: Mapping[str, Any]) -> list[Finding]:
     findings: list[Finding] = []
     for key in sorted(documents):
+        if key == REF_CONTEXT_KEY:
+            findings.extend(_check_ref_context(documents[key]))
+            continue
         if key not in DOCUMENT_KEYS:
             findings.append(_finding(key, "E_SCHEMA", "알 수 없는 문서 key다"))
             continue
@@ -2549,7 +2999,7 @@ def validate_documents(documents: Mapping[str, Any], schemas: SchemaSet) -> Vali
 
     container_findings = _check_containers(documents)
     if container_findings:
-        return ValidationResult(findings=tuple(sort_findings(container_findings)))
+        return ValidationResult(findings=tuple(dedupe_findings(sort_findings(container_findings))))
 
     validator = SchemaValidator(schemas)
     findings: list[Finding] = []
@@ -2600,7 +3050,16 @@ def validate_documents(documents: Mapping[str, Any], schemas: SchemaSet) -> Vali
             )
         )
 
-    return ValidationResult(findings=tuple(sort_findings(findings)))
+    refs = documents.get(REF_CONTEXT_KEY)
+    if isinstance(refs, Mapping):
+        findings.extend(check_document_ref_identity(documents, refs))
+
+    resolved = [
+        Finding(location=safe_location(finding.location, documents), code=finding.code,
+                message=finding.message)
+        for finding in findings
+    ]
+    return ValidationResult(findings=tuple(dedupe_findings(sort_findings(resolved))))
 
 
 # ---------------------------------------------------------------------------
@@ -2671,7 +3130,7 @@ def run_fixtures(directory: Path, schemas: SchemaSet) -> list[FixtureOutcome]:
 
 
 #: fixture 디렉터리에 반드시 있어야 하는 case ID. 조용한 누락을 막는다.
-EXPECTED_CASE_IDS = tuple(f"K-{index:02d}" for index in range(1, 105))
+EXPECTED_CASE_IDS = tuple(f"K-{index:02d}" for index in range(1, 133))
 
 
 def main(argv: Sequence[str] | None = None) -> int:
