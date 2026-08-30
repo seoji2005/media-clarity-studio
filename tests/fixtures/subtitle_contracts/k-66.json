@@ -1,13 +1,13 @@
 {
- "case_id": "K-34",
- "title": "partial 번역인데 uncovered로도 덮이지 않은 gap이 남았다",
- "mutation_id": "IM-68",
+ "case_id": "K-66",
+ "title": "Transcript segment_id가 중복이다",
+ "mutation_id": "IM-132",
  "expected": {
   "valid": false,
   "findings": [
    {
-    "code": "E_SOURCE_COVERAGE",
-    "location": "transcript/streams/0/segments/1/text"
+    "code": "E_SCHEMA",
+    "location": "transcript/streams/0/segments/3/segment_id"
    }
   ]
  },
@@ -303,7 +303,7 @@
        "review_reasons": []
       },
       {
-       "segment_id": "tr-5",
+       "segment_id": "tr-4",
        "source_speech_segment_ids": [
         "sp-4"
        ],
@@ -420,180 +420,6 @@
     "adapter_version": "0.0.1",
     "params_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
     "seed": 7
-   }
-  },
-  "translated_transcript": {
-   "schema_version": "1.0.0",
-   "translated_transcript_id": "tl-base",
-   "timebase_ref": "tb-source",
-   "source_transcript": {
-    "schema_version": "1.0.0",
-    "artifact_id": "art-tx-base",
-    "kind": "text",
-    "uri": "jobs/job-029/transcript.json",
-    "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-    "byte_size": 1024,
-    "media_type": "application/json",
-    "produced_by": {
-     "stage_id": "stage-synthetic",
-     "job_id": "job-029"
-    },
-    "created_at": "2026-08-29T00:00:00Z",
-    "parent_refs": [],
-    "is_estimate": false
-   },
-   "target_language": "ko",
-   "streams": [
-    {
-     "stream_id": "s-main",
-     "segments": [
-      {
-       "segment_id": "tl-1",
-       "source_fragments": [
-        {
-         "source_segment_id": "tr-1",
-         "char_start": 0,
-         "char_end": 11,
-         "source_text": "今日はsunnyですね"
-        }
-       ],
-       "target_text": "오늘은 맑네요",
-       "alignment_kind": "one_to_one",
-       "alignment_evidence_source": "adapter",
-       "confidence": 0.82,
-       "is_low_confidence": false,
-       "needs_review": false,
-       "review_reasons": []
-      },
-      {
-       "segment_id": "tl-2",
-       "source_fragments": [
-        {
-         "source_segment_id": "tr-2",
-         "char_start": 0,
-         "char_end": 5,
-         "source_text": "Hello"
-        }
-       ],
-       "target_text": "안녕",
-       "alignment_kind": "split",
-       "alignment_evidence_source": "orchestrator",
-       "is_low_confidence": false,
-       "needs_review": false,
-       "review_reasons": []
-      },
-      {
-       "segment_id": "tl-5",
-       "source_fragments": [
-        {
-         "source_segment_id": "tr-4",
-         "char_start": 0,
-         "char_end": 3,
-         "source_text": "Yes"
-        },
-        {
-         "source_segment_id": "tr-5",
-         "char_start": 0,
-         "char_end": 2,
-         "source_text": "No"
-        }
-       ],
-       "target_text": "네 아니요",
-       "alignment_kind": "merged",
-       "alignment_evidence_source": "orchestrator",
-       "is_low_confidence": false,
-       "needs_review": false,
-       "review_reasons": []
-      }
-     ]
-    },
-    {
-     "stream_id": "s-alt",
-     "segments": [
-      {
-       "segment_id": "tl-4",
-       "source_fragments": [
-        {
-         "source_segment_id": "tr-3",
-         "char_start": 0,
-         "char_end": 7,
-         "source_text": "Mmm hmm"
-        }
-       ],
-       "target_text": "",
-       "alignment_kind": "dropped",
-       "alignment_evidence_source": "orchestrator",
-       "is_low_confidence": false,
-       "needs_review": true,
-       "review_reasons": [
-        "untranslated_span"
-       ]
-      },
-      {
-       "segment_id": "tl-6",
-       "source_fragments": [
-        {
-         "source_segment_id": "tr-6",
-         "char_start": 0,
-         "char_end": 2,
-         "source_text": "Ah"
-        }
-       ],
-       "target_text": "아é👍",
-       "alignment_kind": "unknown",
-       "alignment_evidence_source": "orchestrator",
-       "is_low_confidence": false,
-       "needs_review": true,
-       "review_reasons": [
-        "source_ambiguous"
-       ]
-      }
-     ]
-    }
-   ],
-   "coverage_status": "partial",
-   "uncovered_source_fragments": [
-    {
-     "source_segment_id": "tr-2",
-     "char_start": 7,
-     "char_end": 11,
-     "source_text": "orld",
-     "needs_review": true,
-     "review_reasons": [
-      "untranslated_span"
-     ]
-    }
-   ],
-   "feature_status": {
-    "segment_alignment": "produced",
-    "translation_confidence": "produced"
-   },
-   "capability_report": {
-    "adapter_id": "mt-synthetic",
-    "adapter_version": "0.0.1",
-    "supported_source_languages": [
-     "en",
-     "ja"
-    ],
-    "supported_target_languages": [
-     "ko"
-    ],
-    "supports_segment_alignment": true,
-    "supports_document_context": true,
-    "supports_code_switching_input": true,
-    "translation_confidence_semantics": "calibrated_probability",
-    "network_requirement": "none",
-    "requires_gpu": false,
-    "determinism_tier": "T2",
-    "limitations": [
-     "합성 fixture adapter"
-    ]
-   },
-   "provenance": {
-    "adapter_id": "mt-synthetic",
-    "adapter_version": "0.0.1",
-    "params_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
-    "seed": 11
    }
   }
  }

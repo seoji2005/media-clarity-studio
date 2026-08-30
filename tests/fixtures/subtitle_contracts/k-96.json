@@ -1,13 +1,21 @@
 {
- "case_id": "K-34",
- "title": "partial 번역인데 uncovered로도 덮이지 않은 gap이 남았다",
- "mutation_id": "IM-68",
+ "case_id": "K-96",
+ "title": "번역 source fragment가 빈 scalar 범위다",
+ "mutation_id": "IM-163",
  "expected": {
   "valid": false,
   "findings": [
    {
+    "code": "E_ALIGNMENT",
+    "location": "translated_transcript/streams/0/segments/0/alignment_kind"
+   },
+   {
+    "code": "E_OFFSET_RANGE",
+    "location": "translated_transcript/streams/0/segments/0/source_fragments/0/char_end"
+   },
+   {
     "code": "E_SOURCE_COVERAGE",
-    "location": "transcript/streams/0/segments/1/text"
+    "location": "transcript/streams/0/segments/0/text"
    }
   ]
  },
@@ -452,8 +460,8 @@
        "source_fragments": [
         {
          "source_segment_id": "tr-1",
-         "char_start": 0,
-         "char_end": 11,
+         "char_start": 2,
+         "char_end": 2,
          "source_text": "今日はsunnyですね"
         }
        ],
@@ -481,6 +489,25 @@
        "is_low_confidence": false,
        "needs_review": false,
        "review_reasons": []
+      },
+      {
+       "segment_id": "tl-3",
+       "source_fragments": [
+        {
+         "source_segment_id": "tr-2",
+         "char_start": 5,
+         "char_end": 11,
+         "source_text": " world"
+        }
+       ],
+       "target_text": " 세계",
+       "alignment_kind": "split",
+       "alignment_evidence_source": "orchestrator",
+       "is_low_confidence": false,
+       "needs_review": true,
+       "review_reasons": [
+        "alignment_uncertain"
+       ]
       },
       {
        "segment_id": "tl-5",
@@ -551,19 +578,8 @@
      ]
     }
    ],
-   "coverage_status": "partial",
-   "uncovered_source_fragments": [
-    {
-     "source_segment_id": "tr-2",
-     "char_start": 7,
-     "char_end": 11,
-     "source_text": "orld",
-     "needs_review": true,
-     "review_reasons": [
-      "untranslated_span"
-     ]
-    }
-   ],
+   "coverage_status": "complete",
+   "uncovered_source_fragments": [],
    "feature_status": {
     "segment_alignment": "produced",
     "translation_confidence": "produced"

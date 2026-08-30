@@ -1,13 +1,13 @@
 {
- "case_id": "K-34",
- "title": "partial 번역인데 uncovered로도 덮이지 않은 gap이 남았다",
- "mutation_id": "IM-68",
+ "case_id": "K-84",
+ "title": "TranslatedTranscript root에 미지의 필드를 붙였다",
+ "mutation_id": "IM-151",
  "expected": {
   "valid": false,
   "findings": [
    {
-    "code": "E_SOURCE_COVERAGE",
-    "location": "transcript/streams/0/segments/1/text"
+    "code": "E_SCHEMA",
+    "location": "translated_transcript/x_unknown_root"
    }
   ]
  },
@@ -483,6 +483,25 @@
        "review_reasons": []
       },
       {
+       "segment_id": "tl-3",
+       "source_fragments": [
+        {
+         "source_segment_id": "tr-2",
+         "char_start": 5,
+         "char_end": 11,
+         "source_text": " world"
+        }
+       ],
+       "target_text": " 세계",
+       "alignment_kind": "split",
+       "alignment_evidence_source": "orchestrator",
+       "is_low_confidence": false,
+       "needs_review": true,
+       "review_reasons": [
+        "alignment_uncertain"
+       ]
+      },
+      {
        "segment_id": "tl-5",
        "source_fragments": [
         {
@@ -551,19 +570,8 @@
      ]
     }
    ],
-   "coverage_status": "partial",
-   "uncovered_source_fragments": [
-    {
-     "source_segment_id": "tr-2",
-     "char_start": 7,
-     "char_end": 11,
-     "source_text": "orld",
-     "needs_review": true,
-     "review_reasons": [
-      "untranslated_span"
-     ]
-    }
-   ],
+   "coverage_status": "complete",
+   "uncovered_source_fragments": [],
    "feature_status": {
     "segment_alignment": "produced",
     "translation_confidence": "produced"
@@ -594,7 +602,8 @@
     "adapter_version": "0.0.1",
     "params_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
     "seed": 11
-   }
+   },
+   "x_unknown_root": 1
   }
  }
 }

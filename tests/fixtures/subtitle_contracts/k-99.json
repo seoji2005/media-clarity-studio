@@ -1,17 +1,13 @@
 {
- "case_id": "K-48",
- "title": "같은 scalar 범위를 두 fragment가 중복해서 덮는다",
- "mutation_id": "IM-94",
+ "case_id": "K-99",
+ "title": "source 축 자막인데 Transcript가 문서 집합에 없다",
+ "mutation_id": "IM-166",
  "expected": {
   "valid": false,
   "findings": [
    {
-    "code": "E_LINEAGE",
-    "location": "subtitle_document/cues/0/lineage_fragments/2/char_start"
-   },
-   {
-    "code": "E_LINEAGE",
-    "location": "subtitle_document/cues/0/lines/0"
+    "code": "E_TEXT_AXIS",
+    "location": "subtitle_document/text_axis"
    }
   ]
  },
@@ -138,95 +134,6 @@
     }
    }
   ],
-  "transcript": {
-   "schema_version": "1.0.0",
-   "transcript_id": "tx-mini",
-   "timebase_ref": "tb-source",
-   "token_unit": "provider_token",
-   "streams": [
-    {
-     "stream_id": "s-1",
-     "segments": [
-      {
-       "segment_id": "tm-1",
-       "source_speech_segment_ids": [
-        "sp-m1"
-       ],
-       "start_seconds": 0.0,
-       "end_seconds": 2.0,
-       "text": "日本語",
-       "is_low_confidence": false,
-       "needs_review": false,
-       "review_reasons": []
-      },
-      {
-       "segment_id": "tm-2",
-       "source_speech_segment_ids": [
-        "sp-m2"
-       ],
-       "start_seconds": 2.0,
-       "end_seconds": 4.0,
-       "text": "aé👍b",
-       "is_low_confidence": false,
-       "needs_review": false,
-       "review_reasons": []
-      },
-      {
-       "segment_id": "tm-3",
-       "source_speech_segment_ids": [
-        "sp-m3"
-       ],
-       "start_seconds": 4.0,
-       "end_seconds": 6.0,
-       "text": "Good morning",
-       "is_low_confidence": false,
-       "needs_review": false,
-       "review_reasons": []
-      }
-     ]
-    }
-   ],
-   "feature_status": {
-    "token_timing": "unsupported",
-    "token_confidence": "unsupported",
-    "segment_confidence": "unsupported",
-    "language_id": "unsupported",
-    "language_confidence": "unsupported",
-    "speaker_diarization": "unsupported",
-    "nbest": "unsupported"
-   },
-   "capability_report": {
-    "schema_version": "1.0.0",
-    "adapter_id": "asr-bare",
-    "adapter_version": "0.0.1",
-    "supported_languages": [],
-    "token_timing_units": [],
-    "supports_word_timing": false,
-    "token_confidence_semantics": "none",
-    "segment_confidence_semantics": "none",
-    "supports_language_id": false,
-    "supports_intra_sentential_lid": false,
-    "language_confidence_semantics": "none",
-    "supports_diarization": false,
-    "supports_independent_channel_input": false,
-    "supports_overlap_streams": false,
-    "supports_nbest": false,
-    "nbest_score_semantics": "none",
-    "restricts_candidate_languages": false,
-    "term_injection_modes": [],
-    "network_requirement": "none",
-    "requires_gpu": false,
-    "determinism_tier": "T1",
-    "limitations": [
-     "timing·confidence·language id를 지원하지 않는다 — 없는 값을 채우지 않고 생략한다"
-    ]
-   },
-   "provenance": {
-    "adapter_id": "asr-bare",
-    "adapter_version": "0.0.1",
-    "params_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
-   }
-  },
   "subtitle_document": {
    "schema_version": "1.0.0",
    "document_id": "sub-source",
@@ -272,13 +179,6 @@
        "char_start": 1,
        "char_end": 3,
        "text": "本語"
-      },
-      {
-       "line_index": 0,
-       "input_segment_id": "tm-1",
-       "char_start": 0,
-       "char_end": 1,
-       "text": "日"
       }
      ],
      "line_break_whitespace": [],

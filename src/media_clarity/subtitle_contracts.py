@@ -91,6 +91,9 @@ __all__ = [
     "check_translated_transcript",
     "check_translation_capability_binding",
     "discover_fixtures",
+    "redact_schema_findings",
+    "redact_schema_message",
+    "speech_timebase",
     "evaluate_fixture",
     "load_fixture",
     "load_strict",
@@ -328,6 +331,27 @@ def _check_review_state(
         )
 
 
+def _check_duplicate_ids(
+    entries: Sequence[tuple[Any, str]], findings: list[Finding], *, what: str
+) -> set[str]:
+    """`(id, location)` 목록의 중복을 **index 구축 전에** 보고한다.
+
+    dict 인덱스는 last-write-wins라 중복 ID가 조용히 lineage를 바꿔치기한다
+    (REVIEW-023 B-01). 그래서 인덱스를 만들기 전에 여기서 먼저 거른다.
+    """
+
+    seen: set[str] = set()
+    for identifier, location in entries:
+        if not isinstance(identifier, str):
+            continue
+        if identifier in seen:
+            findings.append(
+                _finding(location, "E_SCHEMA", f"{what}가 문서 집합 안에서 중복이다")
+            )
+        seen.add(identifier)
+    return seen
+
+
 def _check_language_tags(
     tags: Any, location: str, findings: list[Finding]
 ) -> None:
@@ -351,16 +375,19 @@ def _check_language_tags(
 class _Range:
     """partition 검사용 범위 한 칸. `location`은 실제 입력에서 해석 가능해야 한다.
 
-    `group`은 **같은 배열에서 나온 범위 묶음**이다. 서로 다른 배열(visible fragment와
-    line_break_whitespace, covered fragment와 uncovered fragment)은 문서 안에서 나란히
-    놓이지 않으므로 appearance order를 섞어 비교하지 않는다. partition 자체(gap·중복)는
-    group과 무관하게 함께 본다.
+    `order`는 **문서에 나타나는 순서**가 아니라 **실제로 소비·렌더링되는 순서**의 정렬
+    키다. cue lineage에서는 `(cue index, 줄 위치, 줄 안 위치)`이므로 배열 순서만 맞추고
+    `line_index`를 바꿔치기한 문서도 순서 위반으로 잡힌다 (REVIEW-023 B-01).
+
+    `group`은 **같은 배열에서 나온 범위 묶음**이다. covered fragment와 uncovered
+    fragment는 문서 안에서 나란히 놓이지 않으므로 순서를 섞어 비교하지 않는다.
+    partition 자체(gap·중복)는 group과 무관하게 함께 본다.
     """
 
     start: int
     end: int
     location: str
-    order: int
+    order: tuple[int, ...]
     group: str
 
 
@@ -373,6 +400,7 @@ def _check_partition(
     subject: str,
     findings: list[Finding],
 ) -> None:
+    # `subject`는 계약 문구(고정 문자열)만 받는다. 식별자·원문을 message에 넣지 않는다.
     """`entries`가 `[0, text_length)`를 gap·중복·겹침 없이 정확히 한 번 partition하는지.
 
     appearance order(`order`)가 원문 순서와 어긋나면 `E_OFFSET_ORDER`를 먼저 낸다.
@@ -432,24 +460,26 @@ def check_speech_segments(segments: Sequence[Any], location: str = "speech_segme
     """같은 실행의 ordered SpeechSegment 집합 불변식 (TASK-029 §4.1)."""
 
     findings: list[Finding] = []
-    seen_ids: set[str] = set()
     ranges: list[tuple[str, str, float, float, list[str], int]] = []
+
+    # 인덱스를 만들기 전에 ID 중복부터 거른다 (REVIEW-023 B-01).
+    _check_duplicate_ids(
+        [
+            (segment.get("segment_id"), f"{location}/{index}/segment_id")
+            for index, segment in enumerate(segments)
+            if isinstance(segment, dict)
+        ],
+        findings,
+        what="SpeechSegment segment_id",
+    )
+    timebases = _check_single_timebase(segments, location, findings)
+    del timebases
 
     for index, segment in enumerate(segments):
         where = f"{location}/{index}"
         if not isinstance(segment, dict):
             continue
         segment_id = segment.get("segment_id")
-        if isinstance(segment_id, str):
-            if segment_id in seen_ids:
-                findings.append(
-                    _finding(
-                        f"{where}/segment_id",
-                        "E_SCHEMA",
-                        "segment_id가 문서 집합 안에서 중복이다",
-                    )
-                )
-            seen_ids.add(segment_id)
 
         start, end = segment.get("start_seconds"), segment.get("end_seconds")
         valid_time = _check_half_open(start, end, where, findings, what="segment")
@@ -462,9 +492,55 @@ def check_speech_segments(segments: Sequence[Any], location: str = "speech_segme
         _check_channel_semantics(segment, where, findings)
         _check_speech_confidence(segment, where, findings)
         _scalar_text(segment.get("speaker_label"), f"{where}/speaker_label", findings)
+        if segment.get("overlap_kind") == "none" and segment.get("concurrent_stream_ids"):
+            findings.append(
+                _finding(
+                    f"{where}/overlap_kind",
+                    "E_STREAM_REF",
+                    "overlap_kind=none인 segment는 concurrent stream을 선언하지 않는다",
+                )
+            )
 
     findings.extend(_check_concurrent_streams(ranges, location))
     return findings
+
+
+def _check_single_timebase(
+    segments: Sequence[Any], location: str, findings: list[Finding]
+) -> str | None:
+    """한 실행의 SpeechSegment는 하나의 원본 시간축을 공유한다 (REVIEW-023 B-01).
+
+    첫 segment의 `timebase_ref`를 기준으로 삼고, 다른 값을 쓰는 segment를 거부한다.
+    downstream 문서는 이 값에 결박된다.
+    """
+
+    baseline: str | None = None
+    for index, segment in enumerate(segments):
+        if not isinstance(segment, dict):
+            continue
+        timebase = segment.get("timebase_ref")
+        if not isinstance(timebase, str):
+            continue
+        if baseline is None:
+            baseline = timebase
+        elif timebase != baseline:
+            findings.append(
+                _finding(
+                    f"{location}/{index}/timebase_ref",
+                    "E_SOURCE_REF",
+                    "같은 실행의 SpeechSegment가 서로 다른 원본 시간축을 쓴다",
+                )
+            )
+    return baseline
+
+
+def speech_timebase(segments: Sequence[Any]) -> str | None:
+    """SpeechSegment 집합이 선언한 원본 시간축. 하류 문서 결박의 기준이다."""
+
+    for segment in segments:
+        if isinstance(segment, dict) and isinstance(segment.get("timebase_ref"), str):
+            return segment["timebase_ref"]
+    return None
 
 
 def _check_channel_semantics(
@@ -629,44 +705,88 @@ def check_transcript(
     capability = transcript.get("capability_report")
     capability = capability if isinstance(capability, dict) else {}
 
-    speech_index: dict[str, tuple[float, float, str]] = {}
+    # index 구축 **전에** 중복 ID를 거른다. dict는 last-write-wins라 중복이 조용히
+    # lineage를 바꿔치기한다 (REVIEW-023 B-01).
+    streams = [
+        (index, stream)
+        for index, stream in enumerate(transcript.get("streams") or [])
+        if isinstance(stream, dict)
+    ]
+    _check_duplicate_ids(
+        [
+            (stream.get("stream_id"), f"{location}/streams/{index}/stream_id")
+            for index, stream in streams
+        ],
+        findings,
+        what="Transcript stream_id",
+    )
+    _check_duplicate_ids(
+        [
+            (
+                segment.get("segment_id"),
+                f"{location}/streams/{index}/segments/{position}/segment_id",
+            )
+            for index, stream in streams
+            for position, segment in enumerate(stream.get("segments") or [])
+            if isinstance(segment, dict)
+        ],
+        findings,
+        what="Transcript segment_id",
+    )
+
+    #: 첫 등장이 이긴다 — 중복은 위에서 이미 보고했고, 조용한 재결박을 막는다.
+    speech_index: dict[str, tuple[float, float, str, str | None]] = {}
     for segment in speech_segments:
         if not isinstance(segment, dict):
             continue
         segment_id = segment.get("segment_id")
         start, end = segment.get("start_seconds"), segment.get("end_seconds")
         stream_id = segment.get("stream_id")
-        if isinstance(segment_id, str) and _finite(start) and _finite(end) and isinstance(stream_id, str):
-            speech_index[segment_id] = (float(start), float(end), stream_id)
+        if (
+            isinstance(segment_id, str)
+            and segment_id not in speech_index
+            and _finite(start)
+            and _finite(end)
+            and isinstance(stream_id, str)
+        ):
+            label = segment.get("speaker_label")
+            speech_index[segment_id] = (
+                float(start), float(end), stream_id, label if isinstance(label, str) else None
+            )
 
-    seen_streams: set[str] = set()
-    seen_segments: set[str] = set()
+    # 원본 시간축 결박 — 하류 문서만 다른 timebase를 쓰는 것을 막는다.
+    source_timebase = speech_timebase(speech_segments)
+    if source_timebase is not None and transcript.get("timebase_ref") != source_timebase:
+        findings.append(
+            _finding(
+                f"{location}/timebase_ref",
+                "E_SOURCE_REF",
+                "Transcript의 timebase_ref가 입력 SpeechSegment의 원본 시간축과 다르다",
+            )
+        )
 
-    for stream_index, stream in enumerate(transcript.get("streams") or []):
-        if not isinstance(stream, dict):
-            continue
+    for stream_index, stream in streams:
         where = f"{location}/streams/{stream_index}"
         stream_id = stream.get("stream_id")
-        if isinstance(stream_id, str):
-            if stream_id in seen_streams:
-                findings.append(
-                    _finding(f"{where}/stream_id", "E_SCHEMA", "stream_id가 중복이다")
-                )
-            seen_streams.add(stream_id)
         _check_speaker_label_pair(stream, where, findings)
+        if stream.get("speaker_label_source") == "adapter" and capability.get(
+            "supports_diarization"
+        ) is not True:
+            findings.append(
+                _finding(
+                    f"{where}/speaker_label_source",
+                    "E_CAPABILITY_MISMATCH",
+                    "supports_diarization=false인 adapter가 adapter-produced speaker label을 냈다",
+                )
+            )
 
         for segment_index, segment in enumerate(stream.get("segments") or []):
             if not isinstance(segment, dict):
                 continue
             spot = f"{where}/segments/{segment_index}"
-            segment_id = segment.get("segment_id")
-            if isinstance(segment_id, str):
-                if segment_id in seen_segments:
-                    findings.append(
-                        _finding(f"{spot}/segment_id", "E_SCHEMA", "segment_id가 중복이다")
-                    )
-                seen_segments.add(segment_id)
-            findings.extend(_check_transcript_segment(segment, spot, speech_index, capability))
+            findings.extend(
+                _check_transcript_segment(segment, spot, speech_index, capability, stream_id)
+            )
 
     findings.extend(check_asr_capability_binding(transcript, location))
     return findings
@@ -700,8 +820,9 @@ def _check_speaker_label_pair(
 def _check_transcript_segment(
     segment: Mapping[str, Any],
     where: str,
-    speech_index: Mapping[str, tuple[float, float, str]],
+    speech_index: Mapping[str, tuple[float, float, str, str | None]],
     capability: Mapping[str, Any],
+    stream_id: Any = None,
 ) -> list[Finding]:
     findings: list[Finding] = []
 
@@ -715,6 +836,7 @@ def _check_transcript_segment(
     # 입력 SpeechSegment lineage — 존재·단일 stream·시간 포함.
     sources = segment.get("source_speech_segment_ids")
     intervals: list[tuple[float, float]] = []
+    input_labels: set[str] = set()
     if isinstance(sources, list):
         streams: set[str] = set()
         for position, source_id in enumerate(sources):
@@ -730,6 +852,8 @@ def _check_transcript_segment(
                 continue
             intervals.append((entry[0], entry[1]))
             streams.add(entry[2])
+            if entry[3] is not None:
+                input_labels.add(entry[3])
         if len(streams) > 1:
             findings.append(
                 _finding(
@@ -738,8 +862,35 @@ def _check_transcript_segment(
                     "서로 다른 stream의 입력을 한 segment lineage로 섞었다",
                 )
             )
+        elif streams and isinstance(stream_id, str) and stream_id not in streams:
+            findings.append(
+                _finding(
+                    f"{where}/source_speech_segment_ids",
+                    "E_STREAM_REF",
+                    "ASR segment의 stream이 참조한 입력 SpeechSegment의 stream과 다르다",
+                )
+            )
         if valid_time and intervals and len(intervals) == len(sources):
             findings.extend(_check_within_union(float(start), float(end), intervals, where))
+
+    # speaker evidence 결박 — adapter는 diarization 능력, input은 실제 입력 label이 근거다.
+    label_source = segment.get("speaker_label_source")
+    if label_source == "adapter" and capability.get("supports_diarization") is not True:
+        findings.append(
+            _finding(
+                f"{where}/speaker_label_source",
+                "E_CAPABILITY_MISMATCH",
+                "supports_diarization=false인 adapter가 adapter-produced speaker label을 냈다",
+            )
+        )
+    if label_source == "input" and not input_labels:
+        findings.append(
+            _finding(
+                f"{where}/speaker_label_source",
+                "E_CAPABILITY_MISMATCH",
+                "speaker_label_source=input인데 참조한 SpeechSegment에 speaker_label이 없다",
+            )
+        )
 
     findings.extend(_check_tokens(segment, where, valid_time, capability))
     findings.extend(_check_segment_confidence(segment, where, capability))
@@ -751,7 +902,12 @@ def _check_transcript_segment(
 def _check_within_union(
     start: float, end: float, intervals: Sequence[tuple[float, float]], where: str
 ) -> list[Finding]:
-    """ASR segment 시간이 참조한 입력 구간들의 합집합 안에 있는지 (§4.2 R2)."""
+    """ASR segment 구간 **전체**가 입력 구간 합집합에 빈틈 없이 들어가는지 (§4.2 R2).
+
+    양 끝점만 보면 `[0,2)`·`[3,4)` 입력에 대해 `[0,3.5)` 같은 구간이 통과한다 — 중간
+    `[2,3)`은 입력에 없는데도 ASR 증거 구간으로 주장하게 된다 (REVIEW-023 B-01).
+    그래서 끝점이 아니라 `start`를 포함하는 **하나의 연속 구간**이 `end`까지 덮는지 본다.
+    """
 
     merged: list[list[float]] = []
     for low, high in sorted(intervals):
@@ -760,11 +916,9 @@ def _check_within_union(
         else:
             merged.append([low, high])
 
-    def covered(point: float) -> bool:
-        return any(low <= point <= high for low, high in merged)
-
     findings: list[Finding] = []
-    if not covered(start):
+    holder = next((span for span in merged if span[0] <= start <= span[1]), None)
+    if holder is None:
         findings.append(
             _finding(
                 f"{where}/start_seconds",
@@ -772,12 +926,14 @@ def _check_within_union(
                 "ASR segment 시작이 참조한 입력 SpeechSegment 범위의 합집합 밖이다",
             )
         )
-    if not covered(end):
+        return findings
+    if end > holder[1]:
         findings.append(
             _finding(
                 f"{where}/end_seconds",
                 "E_TIME_RANGE",
-                "ASR segment 끝이 참조한 입력 SpeechSegment 범위의 합집합 밖이다",
+                "ASR segment 구간이 입력 SpeechSegment 합집합의 연속 구간 안에 "
+                "빈틈 없이 들어가지 않는다",
             )
         )
     return findings
@@ -953,6 +1109,16 @@ def _check_language_spans(
                 )
             )
     if not isinstance(spans, list) or not spans:
+        # 파생값은 근거가 있어야 한다. spans가 아예 없으면 dominant_language도 없다
+        # (REVIEW-023 B-02). 빈 배열은 schema의 minItems 1이 먼저 거른다.
+        if has_dominant and capability.get("supports_language_id") is True:
+            findings.append(
+                _finding(
+                    f"{where}/dominant_language",
+                    "E_LANGUAGE_GAP_REVIEW",
+                    "language_spans 없이 dominant_language를 파생할 수 없다",
+                )
+            )
         return findings
 
     language_semantics = capability.get("language_confidence_semantics")
@@ -1113,6 +1279,11 @@ def check_asr_capability_binding(
     _check_language_tags(
         capability.get("supported_languages"), f"{capability_location}/supported_languages", findings
     )
+    findings.extend(
+        _check_capability_provenance(
+            capability, transcript.get("provenance"), capability_location
+        )
+    )
 
     units = capability.get("token_timing_units")
     units = units if isinstance(units, list) else []
@@ -1156,8 +1327,13 @@ def check_asr_capability_binding(
             for span in (segment.node.get("language_spans") or [])
         ),
         # independent channel의 stream 귀속·input label은 adapter diarization이 아니다.
+        # stream-level label도 adapter가 낸 것이면 같은 증거로 센다 (REVIEW-023 B-02).
         "speaker_diarization": any(
             segment.node.get("speaker_label_source") == "adapter" for segment in segments
+        )
+        or any(
+            isinstance(stream, dict) and stream.get("speaker_label_source") == "adapter"
+            for stream in (transcript.get("streams") or [])
         ),
         "nbest": any(bool(segment.node.get("alternatives")) for segment in segments),
     }
@@ -1192,6 +1368,32 @@ def check_asr_capability_binding(
                 "token timing이 있으면 token_unit이 capability의 token_timing_units에 있어야 한다",
             )
         )
+    return findings
+
+
+def _check_capability_provenance(
+    capability: Mapping[str, Any], provenance: Any, capability_location: str
+) -> list[Finding]:
+    """capability snapshot은 **그 실행을 낸 adapter의 것**이어야 한다 (REVIEW-023 B-02).
+
+    snapshot과 provenance의 adapter identity가 어긋나면 다른 adapter의 능력으로 결과를
+    정당화하게 된다.
+    """
+
+    findings: list[Finding] = []
+    if not isinstance(provenance, dict):
+        return findings
+    for field in ("adapter_id", "adapter_version"):
+        if field not in capability or field not in provenance:
+            continue
+        if capability[field] != provenance[field]:
+            findings.append(
+                _finding(
+                    f"{capability_location}/{field}",
+                    "E_CAPABILITY_MISMATCH",
+                    f"capability snapshot의 {field}가 산출물 provenance와 다르다",
+                )
+            )
     return findings
 
 
@@ -1322,12 +1524,46 @@ def check_translated_transcript(
             )
         )
 
+    # index 구축 **전에** 번역 stream/segment ID 중복을 거른다 (REVIEW-023 B-01).
+    translated_streams = [
+        (index, stream)
+        for index, stream in enumerate(document.get("streams") or [])
+        if isinstance(stream, dict)
+    ]
+    _check_duplicate_ids(
+        [
+            (stream.get("stream_id"), f"{location}/streams/{index}/stream_id")
+            for index, stream in translated_streams
+        ],
+        findings,
+        what="TranslatedTranscript stream_id",
+    )
+    _check_duplicate_ids(
+        [
+            (
+                segment.get("segment_id"),
+                f"{location}/streams/{index}/segments/{position}/segment_id",
+            )
+            for index, stream in translated_streams
+            for position, segment in enumerate(stream.get("segments") or [])
+            if isinstance(segment, dict)
+        ],
+        findings,
+        what="TranslatedTranscript segment_id",
+    )
+
     source_segments = _transcript_segments(transcript, "transcript")
-    source_index = {segment.segment_id: segment for segment in source_segments if segment.segment_id}
+    #: 첫 등장이 이긴다 — 중복은 Transcript 검사가 이미 보고했다.
+    source_index: dict[str, _TranscriptSegment] = {}
+    source_order: dict[str, int] = {}
+    for position, segment in enumerate(source_segments):
+        if segment.segment_id and segment.segment_id not in source_index:
+            source_index[segment.segment_id] = segment
+            source_order[segment.segment_id] = position
     source_streams = {segment.stream_id for segment in source_segments}
 
-    for stream_index, stream in enumerate(document.get("streams") or []):
-        if isinstance(stream, dict) and stream.get("stream_id") not in source_streams:
+    for stream_index, stream in translated_streams:
+        if stream.get("stream_id") not in source_streams:
             findings.append(
                 _finding(
                     f"{location}/streams/{stream_index}/stream_id",
@@ -1348,7 +1584,7 @@ def check_translated_transcript(
         fragments = fragments if isinstance(fragments, list) else []
         resolved: list[tuple[int, int, str, str]] = []
 
-        previous_key: tuple[str, int] | None = None
+        previous_key: tuple[int, int] | None = None
         for index, fragment in enumerate(fragments):
             if not isinstance(fragment, dict):
                 continue
@@ -1364,23 +1600,37 @@ def check_translated_transcript(
                     )
                 )
                 continue
+            if segment.stream_id and source.stream_id and segment.stream_id != source.stream_id:
+                findings.append(
+                    _finding(
+                        f"{spot}/source_segment_id",
+                        "E_STREAM_REF",
+                        "번역 segment의 stream이 참조한 원문 segment의 stream과 다르다",
+                    )
+                )
             bounds = _check_fragment_range(fragment, source.text, spot, findings)
             if bounds is None:
                 continue
             start, end = bounds
-            if previous_key is not None and previous_key[0] == source_id and start < previous_key[1]:
+            # 원문 순서 보존 — 같은 source 안에서는 offset, 여러 source를 참조하는
+            # merged에서는 **원문 Transcript의 segment 순서**를 지켜야 한다 (REVIEW-023 B-01).
+            current_key = (source_order.get(source_id, 0), end)
+            if previous_key is not None and (
+                current_key[0] < previous_key[0]
+                or (current_key[0] == previous_key[0] and start < previous_key[1])
+            ):
                 findings.append(
                     _finding(
                         f"{spot}/char_start",
                         "E_OFFSET_ORDER",
-                        "같은 source segment의 fragment가 원문 순서·비중첩이 아니다",
+                        "source fragment가 원문 순서·비중첩이 아니다",
                     )
                 )
-            previous_key = (source_id, end)
+            previous_key = current_key
             resolved.append((start, end, source_id, spot))
             coverage.setdefault(source_id, []).append(
-                _Range(start=start, end=end, location=f"{spot}/char_start", order=order_counter,
-                       group="covered")
+                _Range(start=start, end=end, location=f"{spot}/char_start",
+                       order=(order_counter,), group="covered")
             )
             order_counter += 1
 
@@ -1563,7 +1813,7 @@ def _check_uncovered_fragments(
             )
         previous_key = (source_id, end)
         coverage.setdefault(source_id, []).append(
-            _Range(start=start, end=end, location=f"{spot}/char_start", order=order,
+            _Range(start=start, end=end, location=f"{spot}/char_start", order=(order,),
                    group="uncovered")
         )
         order += 1
@@ -1597,17 +1847,18 @@ def _check_coverage_partition(
     """covered + uncovered가 원문의 모든 non-empty scalar range를 정확히 한 번 덮는지."""
 
     findings: list[Finding] = []
-    gap_location = f"{location}/uncovered_source_fragments"
     for segment_id in sorted(source_index):
         source = source_index[segment_id]
         if source.text is None:
             continue
+        # gap의 위치는 **덮이지 않은 원문 segment 자신**이다. 식별자를 message에 넣지
+        # 않고도 어느 segment인지 가리킨다 (REVIEW-023 B-02).
         _check_partition(
             coverage.get(segment_id, []),
             len(source.text),
-            gap_location=gap_location,
+            gap_location=f"{source.location}/text",
             coverage_code="E_SOURCE_COVERAGE",
-            subject=f"source segment {segment_id!r}의 번역 coverage",
+            subject="원문 segment의 번역 coverage",
             findings=findings,
         )
     return findings
@@ -1626,6 +1877,9 @@ def check_translation_capability_binding(
 
     for key in ("supported_source_languages", "supported_target_languages"):
         _check_language_tags(capability.get(key), f"{capability_location}/{key}", findings)
+    findings.extend(
+        _check_capability_provenance(capability, document.get("provenance"), capability_location)
+    )
 
     targets = capability.get("supported_target_languages")
     if not isinstance(targets, list) or TARGET_LANGUAGE not in targets:
@@ -1699,6 +1953,27 @@ def check_subtitle_document(
     findings.extend(_check_cue_times(document, location))
     findings.extend(_check_unsupported_features(document, location))
 
+    # index 구축 **전에** cue ID 중복을 거른다 (REVIEW-023 B-01).
+    _check_duplicate_ids(
+        [
+            (cue.get("cue_id"), f"{location}/cues/{index}/cue_id")
+            for index, cue in enumerate(document.get("cues") or [])
+            if isinstance(cue, dict)
+        ],
+        findings,
+        what="SubtitleDocument cue_id",
+    )
+
+    expected_timebase = _input_timebase(axis, transcript, translated)
+    if expected_timebase is not None and document.get("timebase_ref") != expected_timebase:
+        findings.append(
+            _finding(
+                f"{location}/timebase_ref",
+                "E_SOURCE_REF",
+                "자막 문서의 timebase_ref가 직접 입력 문서의 시간축과 다르다",
+            )
+        )
+
     direct, other = _axis_indexes(axis, transcript, translated)
     if direct is None:
         return findings
@@ -1706,29 +1981,62 @@ def check_subtitle_document(
     return findings
 
 
+@dataclass(frozen=True)
+class _InputSegment:
+    """자막이 직접 재분할하는 입력 segment 하나."""
+
+    text: str
+    stream_id: str
+    location: str
+
+
 def _axis_indexes(
     axis: Any,
     transcript: Mapping[str, Any] | None,
     translated: Mapping[str, Any] | None,
-) -> tuple[dict[str, str] | None, dict[str, str]]:
-    """(직접 입력 segment_id -> text, 반대 축 segment_id -> text)."""
+) -> tuple[dict[str, _InputSegment] | None, dict[str, _InputSegment]]:
+    """(직접 입력 segment_id -> 입력, 반대 축 segment_id -> 입력).
 
-    source_map: dict[str, str] = {}
+    **첫 등장이 이긴다.** 중복 ID는 각 문서의 uniqueness 검사가 이미 보고했고, 여기서
+    last-write-wins로 lineage가 조용히 다른 segment에 결박되면 안 된다 (REVIEW-023 B-01).
+    """
+
+    source_map: dict[str, _InputSegment] = {}
     if isinstance(transcript, dict):
         for segment in _transcript_segments(transcript, "transcript"):
             if segment.segment_id and segment.text is not None:
-                source_map[segment.segment_id] = segment.text
-    target_map: dict[str, str] = {}
+                source_map.setdefault(
+                    segment.segment_id,
+                    _InputSegment(segment.text, segment.stream_id, f"{segment.location}/text"),
+                )
+    target_map: dict[str, _InputSegment] = {}
     if isinstance(translated, dict):
         for segment in _translation_segments(translated, "translated_transcript"):
             if segment.segment_id and segment.target_text is not None:
-                target_map[segment.segment_id] = segment.target_text
+                target_map.setdefault(
+                    segment.segment_id,
+                    _InputSegment(
+                        segment.target_text, segment.stream_id, f"{segment.location}/target_text"
+                    ),
+                )
 
     if axis == "source":
         return (source_map if isinstance(transcript, dict) else None), target_map
     if axis == "target":
         return (target_map if isinstance(translated, dict) else None), source_map
     return None, {}
+
+
+def _input_timebase(
+    axis: Any, transcript: Mapping[str, Any] | None, translated: Mapping[str, Any] | None
+) -> Any:
+    """자막이 결박돼야 할 직접 입력 문서의 시간축."""
+
+    if axis == "source" and isinstance(transcript, dict):
+        return transcript.get("timebase_ref")
+    if axis == "target" and isinstance(translated, dict):
+        return translated.get("timebase_ref")
+    return None
 
 
 def _check_axis(
@@ -1952,16 +2260,21 @@ def _check_unsupported_features(document: Mapping[str, Any], location: str) -> l
 def _check_cue_lineage(
     document: Mapping[str, Any],
     location: str,
-    direct: Mapping[str, str],
-    other: Mapping[str, str],
+    direct: Mapping[str, _InputSegment],
+    other: Mapping[str, _InputSegment],
 ) -> list[Finding]:
-    """cue lineage의 ID·범위·exact text·line 결합 동치와 입력 scalar partition (§4.5)."""
+    """cue lineage의 ID·범위·exact text·line 결합 동치와 입력 scalar partition (§4.5).
+
+    순서 검사는 **fragment 배열 순서가 아니라 실제 렌더링 순서**로 한다. 렌더링 순서는
+    `(cue 순서, 줄 위치, 줄 안 위치)`이며, 줄 사이의 `line_break_whitespace`가 그 두 줄
+    사이에 놓인다. 배열만 그대로 두고 `line_index`를 바꿔 줄을 뒤집은 문서도 여기서
+    잡힌다 (REVIEW-023 B-01).
+    """
 
     findings: list[Finding] = []
     cues = document.get("cues")
     cues = cues if isinstance(cues, list) else []
     coverage: dict[str, list[_Range]] = {}
-    order = 0
 
     for index, cue in enumerate(cues):
         if not isinstance(cue, dict):
@@ -1973,6 +2286,7 @@ def _check_cue_lineage(
             _scalar_text(line, f"{where}/lines/{line_index}", findings)
 
         assembled: dict[int, list[str]] = {}
+        cue_stream = cue.get("stream_id")
         for position, fragment in enumerate(cue.get("lineage_fragments") or []):
             if not isinstance(fragment, dict):
                 continue
@@ -1983,16 +2297,24 @@ def _check_cue_lineage(
                     _finding(f"{spot}/line_index", "E_LINEAGE", "line_index가 lines 범위 밖이다")
                 )
                 continue
-            bounds = _resolve_input_fragment(fragment, spot, direct, other, findings, field="text")
+            bounds = _resolve_input_fragment(
+                fragment, spot, direct, other, findings, field="text", cue_stream=cue_stream
+            )
             if bounds is None:
                 continue
             start, end, segment_id = bounds
-            assembled.setdefault(line_index, []).append(fragment.get("text") or "")
+            slot = assembled.setdefault(line_index, [])
+            slot.append(fragment.get("text") or "")
             coverage.setdefault(segment_id, []).append(
-                _Range(start=start, end=end, location=f"{spot}/char_start", order=order,
-                       group="visible")
+                _Range(
+                    start=start,
+                    end=end,
+                    location=f"{spot}/char_start",
+                    # 렌더링 순서: 줄은 2*line_index, 줄 사이 whitespace는 2*line_index+1.
+                    order=(index, 2 * line_index, len(slot) - 1),
+                    group="rendered",
+                )
             )
-            order += 1
 
         for line_index, line in enumerate(lines):
             if not isinstance(line, str):
@@ -2031,24 +2353,31 @@ def _check_cue_lineage(
                     )
                 )
                 continue
-            bounds = _resolve_input_fragment(gap, spot, direct, other, findings, field="text")
+            bounds = _resolve_input_fragment(
+                gap, spot, direct, other, findings, field="text", cue_stream=cue_stream
+            )
             if bounds is None:
                 continue
             start, end, segment_id = bounds
             coverage.setdefault(segment_id, []).append(
-                _Range(start=start, end=end, location=f"{spot}/char_start", order=order,
-                       group="line_break")
+                _Range(
+                    start=start,
+                    end=end,
+                    location=f"{spot}/char_start",
+                    order=(index, 2 * after + 1, position),
+                    group="rendered",
+                )
             )
-            order += 1
 
     for segment_id in sorted(direct):
-        text = direct[segment_id]
+        entry = direct[segment_id]
+        # gap의 위치는 **덮이지 않은 입력 segment 자신**이다 (REVIEW-023 B-02).
         _check_partition(
             coverage.get(segment_id, []),
-            len(text),
-            gap_location=f"{location}/cues",
+            len(entry.text),
+            gap_location=entry.location,
             coverage_code="E_LINEAGE",
-            subject=f"입력 segment {segment_id!r}의 cue lineage",
+            subject="입력 segment의 cue lineage",
             findings=findings,
         )
     return findings
@@ -2057,13 +2386,14 @@ def _check_cue_lineage(
 def _resolve_input_fragment(
     fragment: Mapping[str, Any],
     spot: str,
-    direct: Mapping[str, str],
-    other: Mapping[str, str],
+    direct: Mapping[str, _InputSegment],
+    other: Mapping[str, _InputSegment],
     findings: list[Finding],
     *,
     field: str,
+    cue_stream: Any = None,
 ) -> tuple[int, int, str] | None:
-    """lineage fragment의 입력 segment·scalar 범위·exact substring을 확인한다."""
+    """lineage fragment의 입력 segment·stream·scalar 범위·exact substring을 확인한다."""
 
     segment_id = fragment.get("input_segment_id")
     if not isinstance(segment_id, str) or segment_id not in direct:
@@ -2085,7 +2415,16 @@ def _resolve_input_fragment(
             )
         return None
 
-    text = direct[segment_id]
+    entry = direct[segment_id]
+    text = entry.text
+    if isinstance(cue_stream, str) and entry.stream_id and cue_stream != entry.stream_id:
+        findings.append(
+            _finding(
+                f"{spot}/input_segment_id",
+                "E_STREAM_REF",
+                "cue의 stream이 참조한 입력 segment의 stream과 다르다",
+            )
+        )
     start, end = fragment.get("char_start"), fragment.get("char_end")
     if not isinstance(start, int) or isinstance(start, bool):
         return None
@@ -2135,6 +2474,57 @@ class ValidationResult:
         return tuple((finding.code, finding.location) for finding in self.findings)
 
 
+#: schema 층 message를 **입력 값과 무관한 고정 문구**로 바꾸는 표.
+#: `schema_core`는 `enum 밖의 값: {instance!r}`처럼 실제 값을 message에 담는다. 그 모듈은
+#: TASK-029에서 수정 금지이므로 여기 boundary에서 정규화·비식별화한다 (REVIEW-023 B-02).
+#: 판정 계약은 message가 아니라 `(code, location)`이므로 이 정규화는 계약을 바꾸지 않는다.
+_SCHEMA_MESSAGE_RULES: tuple[tuple[str, str], ...] = (
+    ("enum 밖의 값", "허용된 enum 값이 아니다"),
+    ("const 불일치", "고정된 const 값이 아니다"),
+    ("type 불일치", "선언된 type이 아니다"),
+    ("필수 필드 누락", "필수 필드가 없다"),
+    ("허용되지 않은 추가 필드", "닫힌 객체에 허용되지 않은 추가 필드가 있다"),
+    ("uniqueItems 위반", "uniqueItems 위반이다"),
+    ("minLength", "minLength를 만족하지 않는다"),
+    ("maxLength", "maxLength를 만족하지 않는다"),
+    ("pattern 불일치", "선언된 pattern과 맞지 않는다"),
+    ("minItems", "minItems를 만족하지 않는다"),
+    ("maxItems", "maxItems를 만족하지 않는다"),
+    ("minimum", "minimum을 만족하지 않는다"),
+    ("maximum", "maximum을 만족하지 않는다"),
+    ("exclusiveMinimum", "exclusiveMinimum을 만족하지 않는다"),
+    ("exclusiveMaximum", "exclusiveMaximum을 만족하지 않는다"),
+    ("finite 숫자가 아니다", "finite 숫자가 아니다"),
+    ("RFC 3339 UTC timestamp가 아니다", "RFC 3339 UTC timestamp가 아니다"),
+)
+
+_REDACTED_SCHEMA_MESSAGE = "schema 계약 위반"
+
+
+def redact_schema_message(message: str) -> str:
+    """schema 층 message를 결정론적 고정 문구로 바꾼다. 실제 값은 남기지 않는다.
+
+    누락 필드 이름처럼 schema가 선언한 이름은 남길 수 있지만, 그 이름과 값을 구분해
+    유지하려면 `schema_core`의 문자열 포맷을 파싱해야 한다. 파싱은 갈라지기 쉬우므로
+    **어떤 instance 파생 조각도 남기지 않는** 쪽을 택했다. 위치가 필드를 가리킨다.
+    """
+
+    for prefix, replacement in _SCHEMA_MESSAGE_RULES:
+        if message.startswith(prefix):
+            return replacement
+    return _REDACTED_SCHEMA_MESSAGE
+
+
+def redact_schema_findings(findings: Sequence[Finding]) -> list[Finding]:
+    """schema validator가 낸 finding의 code·location은 유지하고 message만 정규화한다."""
+
+    return [
+        Finding(location=finding.location, code=finding.code,
+                message=redact_schema_message(finding.message))
+        for finding in findings
+    ]
+
+
 def _check_containers(documents: Mapping[str, Any]) -> list[Finding]:
     findings: list[Finding] = []
     for key in sorted(documents):
@@ -2168,14 +2558,18 @@ def validate_documents(documents: Mapping[str, Any], schemas: SchemaSet) -> Vali
     segments = documents.get("speech_segments") or []
     for index, segment in enumerate(segments):
         location = f"speech_segments/{index}"
-        result = validator.validate(segment, DOCUMENT_KEYS["speech_segments"], location)
+        result = redact_schema_findings(
+            validator.validate(segment, DOCUMENT_KEYS["speech_segments"], location)
+        )
         if result:
             schema_failed.add("speech_segments")
             findings.extend(result)
     for key in ("transcript", "translated_transcript", "subtitle_document"):
         if key not in documents:
             continue
-        result = validator.validate(documents[key], DOCUMENT_KEYS[key], key)
+        result = redact_schema_findings(
+            validator.validate(documents[key], DOCUMENT_KEYS[key], key)
+        )
         if result:
             schema_failed.add(key)
             findings.extend(result)
@@ -2277,7 +2671,7 @@ def run_fixtures(directory: Path, schemas: SchemaSet) -> list[FixtureOutcome]:
 
 
 #: fixture 디렉터리에 반드시 있어야 하는 case ID. 조용한 누락을 막는다.
-EXPECTED_CASE_IDS = tuple(f"K-{index:02d}" for index in range(1, 58))
+EXPECTED_CASE_IDS = tuple(f"K-{index:02d}" for index in range(1, 105))
 
 
 def main(argv: Sequence[str] | None = None) -> int:

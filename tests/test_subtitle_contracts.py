@@ -543,5 +543,147 @@ class ValidatorBoundaryTests(ContractCase):
         self.assertNotIn("def sort_findings", source)
 
 
+# ---------------------------------------------------------------------------
+# REVIEW-023 B-02 — finding message에 민감 값이 실리지 않는다
+# ---------------------------------------------------------------------------
+
+
+class RedactionTests(ContractCase):
+    """`(code, location)`만 계약이고 message는 설명이다. message에 입력 값을 실으면
+    로그·리포트가 원문 유출 경로가 된다. `schema_core`를 고치지 않고 TASK-029 경계에서
+    결정적으로 비식별화한다.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.verify = _load_verify_script()
+
+    def test_schema_enum_violation_does_not_echo_the_offending_value(self) -> None:
+        documents = load_fixture(FIXTURE_DIR / "k-01.json")["documents"]
+        secret = "SECRET-PATIENT-NAME"
+        documents["subtitle_document"]["cues"][1]["review_reasons"] = [secret]
+        result = validate_documents(documents, self.schemas)
+        self.assertIn(
+            ("E_SCHEMA", "subtitle_document/cues/1/review_reasons/0"), result.pairs
+        )
+        for finding in result.findings:
+            self.assertNotIn(secret, finding.message)
+
+    def test_no_finding_message_carries_source_or_target_text(self) -> None:
+        rows = self.verify.run_leak_scan(self.schemas, FIXTURE_DIR)
+        failures = [f"{row['leak_id']}: {'; '.join(row['hits'])}" for row in rows if not row["passed"]]
+        self.assertEqual(failures, [])
+        self.assertGreaterEqual(len(rows), len(EXPECTED_CASE_IDS))
+
+    def test_no_finding_message_carries_an_absolute_path(self) -> None:
+        for path in discover_fixtures(FIXTURE_DIR):
+            documents = load_fixture(path)["documents"]
+            for finding in validate_documents(documents, self.schemas).findings:
+                self.assertNotIn(str(REPO_ROOT), finding.message)
+                self.assertNotIn("/home/", finding.message)
+
+    def test_redaction_is_a_total_deterministic_map(self) -> None:
+        from media_clarity.subtitle_contracts import redact_schema_message
+
+        for prefix, replacement in self.verify.contracts._SCHEMA_MESSAGE_RULES:
+            with self.subTest(prefix=prefix):
+                self.assertEqual(redact_schema_message(f"{prefix} — SECRET"), replacement)
+        self.assertEqual(redact_schema_message("알 수 없는 설명 SECRET"), "schema 계약 위반")
+
+    def test_error_code_and_location_survive_redaction(self) -> None:
+        """비식별화는 message만 바꾼다. 계약 축은 그대로다."""
+
+        documents = load_fixture(FIXTURE_DIR / "k-01.json")["documents"]
+        documents["transcript"]["streams"][0]["segments"][0]["review_reasons"] = ["nope"]
+        subset = {key: documents[key] for key in ("speech_segments", "transcript")}
+        pairs = validate_documents(subset, self.schemas).pairs
+        self.assertEqual(
+            pairs, (("E_SCHEMA", "transcript/streams/0/segments/0/review_reasons/0"),)
+        )
+
+
+# ---------------------------------------------------------------------------
+# REVIEW-023 B-03 — 방어면 completeness guard
+# ---------------------------------------------------------------------------
+
+
+class DefenseCoverageTests(ContractCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.verify = _load_verify_script()
+
+    def test_every_declared_defense_site_fires_at_least_once(self) -> None:
+        """mutant 목록은 사람이 고른 표본이다. 방어면 전수는 따로 증명한다."""
+
+        rows = self.verify.run_defense_coverage(self.schemas, FIXTURE_DIR)
+        self.assertGreaterEqual(len(rows), 100)
+        uncovered = [f"{row['site_id']} {row['snippet']}" for row in rows if not row["passed"]]
+        self.assertEqual(uncovered, [])
+
+    def test_depth_defenses_fire_and_are_shadowed_by_schema(self) -> None:
+        rows = self.verify.run_depth_probes(self.schemas, FIXTURE_DIR)
+        self.assertTrue(rows)
+        failures = [row["probe_id"] for row in rows if not row["passed"]]
+        self.assertEqual(failures, [])
+
+
+# ---------------------------------------------------------------------------
+# REVIEW-023 B-01 — 시간·stream·lineage 결박
+# ---------------------------------------------------------------------------
+
+
+class LineageBindingTests(ContractCase):
+    """REVIEW-023이 든 반례를 manifest와 별개로 직접 고정한다."""
+
+    def _base(self) -> dict[str, Any]:
+        return load_fixture(FIXTURE_DIR / "k-01.json")["documents"]
+
+    def test_asr_segment_may_not_span_a_gap_between_speech_segments(self) -> None:
+        documents = self._base()
+        segment = documents["transcript"]["streams"][0]["segments"][0]
+        segment["source_speech_segment_ids"] = ["sp-1", "sp-3"]
+        segment["end_seconds"] = 3.5
+        pairs = validate_documents(
+            {k: documents[k] for k in ("speech_segments", "transcript")}, self.schemas
+        ).pairs
+        self.assertIn(
+            ("E_TIME_RANGE", "transcript/streams/0/segments/0/end_seconds"), pairs
+        )
+
+    def test_downstream_timebase_must_match_its_source(self) -> None:
+        documents = self._base()
+        documents["transcript"]["timebase_ref"] = "tb-detached"
+        pairs = validate_documents(
+            {k: documents[k] for k in ("speech_segments", "transcript")}, self.schemas
+        ).pairs
+        self.assertIn(("E_SOURCE_REF", "transcript/timebase_ref"), pairs)
+
+    def test_duplicate_cue_ids_are_reported_before_indexing(self) -> None:
+        documents = self._base()
+        cues = documents["subtitle_document"]["cues"]
+        cues[1]["cue_id"] = cues[0]["cue_id"]
+        pairs = validate_documents(documents, self.schemas).pairs
+        self.assertIn(("E_SCHEMA", "subtitle_document/cues/1/cue_id"), pairs)
+
+    def test_cue_lineage_follows_rendered_line_order_not_array_order(self) -> None:
+        """줄을 뒤집고 line_index만 맞바꾸면 배열 순서 검사는 통과한다 — 렌더 순서로 본다."""
+
+        documents = self._base()
+        target = next(
+            cue
+            for cue in documents["subtitle_document"]["cues"]
+            if len(cue["lines"]) > 1
+        )
+        target["lines"] = list(reversed(target["lines"]))
+        indexes = [fragment["line_index"] for fragment in target["lineage_fragments"]]
+        highest = max(indexes)
+        for fragment in target["lineage_fragments"]:
+            fragment["line_index"] = highest - fragment["line_index"]
+        codes = {code for code, _ in validate_documents(documents, self.schemas).pairs}
+        self.assertTrue(codes, "줄 순서를 뒤집었는데 아무 결함도 보고되지 않았다")
+
+
 if __name__ == "__main__":
     unittest.main()

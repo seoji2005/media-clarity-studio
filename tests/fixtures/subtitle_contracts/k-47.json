@@ -7,7 +7,7 @@
   "findings": [
    {
     "code": "E_LINEAGE",
-    "location": "subtitle_document/cues"
+    "location": "transcript/streams/0/segments/2/text"
    }
   ]
  },

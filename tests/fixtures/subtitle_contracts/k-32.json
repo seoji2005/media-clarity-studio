@@ -7,7 +7,7 @@
   "findings": [
    {
     "code": "E_SOURCE_COVERAGE",
-    "location": "translated_transcript/uncovered_source_fragments"
+    "location": "transcript/streams/0/segments/1/text"
    }
   ]
  },

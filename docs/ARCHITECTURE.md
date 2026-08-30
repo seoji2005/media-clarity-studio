@@ -294,6 +294,31 @@ ReferenceBundle/v1:
 > 이 절은 **정답을 어디에 담고 무엇과 비교하는가**만 규정합니다.
 > 두 축의 지표 정의는 [`EVALS.md`](EVALS.md) §4.1(원문 축)·§4.7(번역 축)에 있습니다.
 
+### 3.0.2 언어 authority는 **정답 쪽**과 **가설 쪽**을 나눠 읽습니다 (TASK-029)
+
+§3.0은 **정답(`ReferenceBundle`) 안에서** 무엇이 언어의 정답인지를 정합니다.
+가설 산출물 쪽에도 같은 표현을 그대로 옮겨 쓰면 "cue에도 `language_spans`가 있어야 한다"는
+잘못된 읽기가 생깁니다 (REVIEW-023 D-01). 세 자리를 구분합니다.
+
+| 자리 | 지위 | 어디에 있나 |
+|---|---|---|
+| `ReferenceBundle.language_spans[]` | **평가 정답(ground truth).** 언어 지표가 채점 기준으로 쓰는 유일한 값 (§3.0) | `ReferenceBundle` |
+| `Transcript.streams[].segments[].language_spans[]` | **가설 쪽 LID의 단일 출처(single source).** ASR/LID가 낸 언어 가설은 여기에만 있습니다 | `transcript-v1.schema.json` |
+| `SubtitleDocument` | **독립 LID 가설을 갖지 않습니다.** cue에 `language_spans`·`dominant_language`를 두지 않습니다 | `subtitle-document-v1.schema.json` |
+
+**규칙**
+
+| # | 규칙 |
+|---|---|
+| **L-1** | 가설 쪽 언어 판단의 정본은 `Transcript.language_spans[]` 하나입니다. `dominant_language`는 그 파생 편의 필드이며 정답으로 쓰지 않습니다 (§7.3) |
+| **L-2** | `SubtitleDocument`는 **자체 LID를 주장하지 않습니다.** cue 수준 언어가 필요한 평가·표시는 `lineage_fragments[]`의 exact scalar 범위를 따라 `Transcript.language_spans`를 **결정적으로 투영**해 얻습니다. 투영 결과는 파생값이며 문서에 저장하지 않습니다 |
+| **L-3** | cue의 `review_reasons`에 남는 `language_switch`는 **검토 신호**이지 언어 정답이 아닙니다 |
+| **L-4** | `supports_language_id=false`이면 `language_spans`도 `dominant_language`도 **부재**여야 합니다. 설정에서 받은 후보 언어를 결과처럼 기록하지 않습니다 |
+
+> 투영식(문자 오프셋 → 시간, cue → 원문 lineage)은 [`EVALS.md`](EVALS.md) §4.5(a)에 있습니다.
+> 저장 위치를 늘리지 않고 **계보를 따라 계산**하는 쪽을 택한 이유는, 같은 사실을 두 곳에
+> 적으면 둘이 갈라졌을 때 어느 쪽이 정답인지 정할 방법이 없기 때문입니다.
+
 ### 3.1 부분 번들 (Partial Bundle)
 
 **모든 필드가 항상 채워지지는 않습니다.** 실제 입력에는 `clean_video`가 없습니다.
@@ -1041,7 +1066,7 @@ TranslationCapabilityReport:
 | target Subtitle에 언어가 없음 | `text_axis="target"`이면 `target_language="ko"`와 원본 Transcript ref가 필수 |
 | document-level `unsupported_features[]` 문자열 | `cue_id`·`feature_kind`·`feature_identifier`·`reason_code`·`action`을 갖는 구조형 record. cue 비율을 계산할 수 있음 |
 | inline `style_profile` 숫자가 U-18과 충돌 가능 | `style_profile_id`/`style_profile_version` + `resolved_style` snapshot. schema에 기본 숫자를 두지 않음 |
-| cue `language_spans[]`·`dominant_language?` | **정본에서 제외.** 언어의 authority는 `Transcript.language_spans` 하나뿐이며(§3.0), cue는 lineage로 원문까지 추적됩니다. cue의 `review_reasons`에 남는 `language_switch`는 검토 신호이지 정답이 아닙니다 |
+| cue `language_spans[]`·`dominant_language?` | **정본에서 제외.** 가설 쪽 LID의 단일 출처는 `Transcript.language_spans`이고(§3.0.2 L-1), `SubtitleDocument`는 독립 LID 가설을 갖지 않습니다(L-2). cue 수준 언어가 필요하면 `lineage_fragments[]`를 따라 원문 span을 결정적으로 투영합니다(EVALS §4.5(a)). cue의 `review_reasons`에 남는 `language_switch`는 검토 신호이지 정답이 아닙니다 |
 | cue `confidence?`·`speaker_label?` | **정본에서 제외.** 결박할 capability 축이 자막 계층에 없어 근거 없는 숫자·label이 되기 때문입니다. 신뢰도 신호는 upstream 문서와 `needs_review`/`review_reasons`가, 화자 표시는 `stream_id`와 lineage가 담당하며 표시 형식은 후속 export/QC TASK의 몫입니다 |
 
 **정본 안에서 한 번만 정의하는 것과, 한 번 더 나타나는 것**

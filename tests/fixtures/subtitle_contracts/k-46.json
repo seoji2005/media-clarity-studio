@@ -1,13 +1,13 @@
 {
  "case_id": "K-46",
- "title": "cue lineage fragment 순서가 원문 순서가 아니다",
+ "title": "cue의 렌더링 line 순서를 뒤집고 line_index도 함께 교환했다",
  "mutation_id": "IM-90",
  "expected": {
   "valid": false,
   "findings": [
    {
     "code": "E_OFFSET_ORDER",
-    "location": "subtitle_document/cues/0/lineage_fragments/1/char_start"
+    "location": "subtitle_document/cues/0/lineage_fragments/0/char_start"
    }
   ]
  },
@@ -251,23 +251,23 @@
      "start_seconds": 0.0,
      "end_seconds": 2.0,
      "lines": [
-      "日",
-      "本語"
+      "本語",
+      "日"
      ],
      "lineage_fragments": [
       {
        "line_index": 1,
        "input_segment_id": "tm-1",
-       "char_start": 1,
-       "char_end": 3,
-       "text": "本語"
+       "char_start": 0,
+       "char_end": 1,
+       "text": "日"
       },
       {
        "line_index": 0,
        "input_segment_id": "tm-1",
-       "char_start": 0,
-       "char_end": 1,
-       "text": "日"
+       "char_start": 1,
+       "char_end": 3,
+       "text": "本語"
       }
      ],
      "line_break_whitespace": [],

@@ -120,21 +120,26 @@
           "type": "string"
         },
         "tokens": {
+          "description": "미지원·미요청·결과 없음이면 빈 배열이 아니라 **부재**여야 한다. 빈 배열은 minItems가 거른다.",
           "type": "array",
+          "minItems": 1,
           "items": { "$ref": "#/$defs/Token" }
         },
         "segment_confidence": { "type": "number" },
         "alternatives": {
-          "description": "n-best. supports_nbest=false이면 존재할 수 없다.",
+          "description": "n-best. supports_nbest=false이면 존재할 수 없다. 결과가 없으면 빈 배열이 아니라 부재여야 한다.",
           "type": "array",
+          "minItems": 1,
           "items": { "$ref": "#/$defs/Alternative" }
         },
         "language_spans": {
+          "description": "LID 결과가 없으면 빈 배열이 아니라 **부재**여야 한다. 빈 배열은 minItems가 거른다.",
           "type": "array",
+          "minItems": 1,
           "items": { "$ref": "#/$defs/LanguageSpan" }
         },
         "dominant_language": {
-          "description": "파생 편의 필드. gap 또는 und 범위가 하나라도 있으면 생략한다. 전 범위가 알려진 언어 span으로 덮였을 때만 길이 합이 최대인 언어를 기록하고 동률은 첫 span의 언어로 결정한다 (E_DOMINANT_LANGUAGE).",
+          "description": "파생 편의 필드. gap 또는 und 범위가 하나라도 있으면 생략한다. 전 범위가 알려진 언어 span으로 덮였을 때만 길이 합이 최대인 언어를 기록하고 동률은 첫 span의 언어로 결정한다. language_spans가 없으면 이 필드도 없다 (E_LANGUAGE_GAP_REVIEW).",
           "$ref": "adapter-capability-report-v1.schema.json#/$defs/language_tag"
         },
         "speaker_label": {

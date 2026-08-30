@@ -1,0 +1,17 @@
+{
+ "case_id": "K-102",
+ "title": "speech_segments가 배열이 아니다",
+ "mutation_id": "IM-169",
+ "expected": {
+  "valid": false,
+  "findings": [
+   {
+    "code": "E_SCHEMA",
+    "location": "speech_segments"
+   }
+  ]
+ },
+ "documents": {
+  "speech_segments": {}
+ }
+}

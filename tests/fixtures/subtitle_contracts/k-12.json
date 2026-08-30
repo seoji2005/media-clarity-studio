@@ -7,11 +7,11 @@
   "findings": [
    {
     "code": "E_LINEAGE",
-    "location": "subtitle_document/cues"
+    "location": "subtitle_document/cues/1/lineage_fragments/1/text"
    },
    {
     "code": "E_LINEAGE",
-    "location": "subtitle_document/cues/1/lineage_fragments/1/text"
+    "location": "transcript/streams/0/segments/1/text"
    }
   ]
  },

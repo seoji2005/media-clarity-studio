@@ -696,11 +696,20 @@ finding 위치는 **선행 `/` 없는** JSON Pointer이며, 57개 fixture 전부
 ### 14.5 정본에서 뺀 pseudo-contract 필드 (숨기지 않는다)
 
 `docs/ARCHITECTURE.md` §7.12 표에 전부 적었다. 요약하면 cue의 `language_spans[]`·
-`dominant_language?`·`confidence?`·`speaker_label?` 넷을 정본에 넣지 않았다. 언어의 authority는
-`Transcript.language_spans` 하나여야 하고(§3.0), 자막 계층에는 confidence·speaker label을 결박할
+`dominant_language?`·`confidence?`·`speaker_label?` 넷을 정본에 넣지 않았다. **가설 쪽** LID의
+단일 출처는 `Transcript.language_spans` 하나이고(`ARCHITECTURE.md` §3.0.2 L-1), `SubtitleDocument`는
+독립 LID 가설을 갖지 않는다(L-2). 자막 계층에는 confidence·speaker label을 결박할
 capability 축이 없어 근거 없는 값이 되기 때문이다. 산문은 지우지 않고 보존했다.
 
-### 14.6 fixture (57건)
+> **§3.0과 §3.0.2를 섞어 읽지 않는다** (REVIEW-023 D-01). §3.0은 **정답(`ReferenceBundle`)**
+> 안에서 `language_spans[]`가 정답이라는 규정이고, §3.0.2는 **가설 산출물** 쪽 authority다.
+> cue 수준 언어가 필요하면 `lineage_fragments[]`를 따라 원문 span을 결정적으로 투영한다
+> (`EVALS.md` §4.5(a) L1–L3). 투영 결과는 파생값이며 문서에 저장하지 않는다.
+
+### 14.6 fixture (57건 — 첫 구현 시점)
+
+> 현재 저장소의 fixture·mutation·test 숫자는 **§15**에 있다. 아래는 첫 구현 세션의 기록이며
+> REVIEW-023 반영으로 늘어났다. 이 절의 숫자를 현재 상태로 읽지 않는다.
 
 정상 3건이 §9가 요구한 일곱 경로를 모두 담는다.
 
@@ -712,7 +721,10 @@ capability 축이 없어 근거 없는 값이 되기 때문이다. 산문은 지
 
 위반 54건은 §9 mutation 목록에 1:1 대응하며 각 fixture의 `mutation_id`가 그 대응을 기록한다.
 
-### 14.7 mutation 감사 — 세 분모를 섞지 않았다
+### 14.7 mutation 감사 — 세 분모를 섞지 않았다 (첫 구현 시점)
+
+> 현재 분모와 판정 규칙은 **§15.4**에 있다. REVIEW-023 B-03이 지적한 대로 multi-kill 판정과
+> 실제 sentinel 계산이 바뀌었고, 방어면 coverage guard와 depth probe 분모가 추가됐다.
 
 `make audit-task-029` (= `scripts/verify_task_029.py`) 한 번으로 재현된다.
 
@@ -742,7 +754,9 @@ schema mutant(`SM-17`)와 그 defect case(`IM-110`)를 추가해 실제 방어�
 ② 임시 사본에서 같은 초에 크기가 같은 파일을 다시 쓰면 스테일 `.pyc`가 재사용돼 mutant가 가짜로
 미탐지되는 것을 관측했다. 감사 driver에 `PYTHONDONTWRITEBYTECODE=1`을 넣어 제거했다.
 
-### 14.8 실행한 검증
+### 14.8 실행한 검증 (첫 구현 시점)
+
+> REVIEW-023 반영 뒤 다시 실행한 결과는 **§15.6**에 있다.
 
 ```bash
 make verify-task-029      # K-01~K-57 fixture + 계약 test + 3분류 mutation 감사 + 기존 전체 verify
@@ -786,3 +800,118 @@ offset을 쓰라고 읽히던 부분은 §5가 지시한 대로 좁혀 정합화
    (target exact `ko`)은 domain validator가 **정확한 문자열 동등성**으로 따로 강제한다.
 2. **`schema_core.SchemaValidator`는 `patternProperties` 중 처음 일치하는 하나만 적용한다.**
    신규 schema는 패턴이 하나뿐이라 영향이 없지만, 후속 계약이 패턴을 둘 이상 쓰면 재검토가 필요하다.
+
+---
+
+## 15. REVIEW-023 변경 요청 반영 기록 (같은 브랜치의 후속 커밋)
+
+[`docs/reviews/REVIEW-023.md`](../reviews/REVIEW-023.md)의 **변경 요청** 판정을 PR #45의 같은
+브랜치에 후속 커밋으로 반영했다. §14는 첫 구현 세션의 기록이며 **지우지 않았다.** 아래 숫자가
+현재 저장소 상태이고, §14.6~§14.8의 숫자는 그 시점의 기록이다.
+
+`schema_core.py`·`CACHE_KEY_FIELDS`·기존 job/artifact schema의 canonical bytes는 그대로다.
+신규 dependency·model·network access는 0이고, §8의 안정 오류 코드 22개 밖의 코드를 만들지 않았다.
+
+### 15.1 B-01 — 시간·stream·계보 결박 (거짓 음성 제거)
+
+| # | 무엇이 통과하던 것을 막았나 | code / location |
+|---|---|---|
+| 1 | ASR segment가 입력 SpeechSegment **사이의 빈틈**을 가로질러도 양 끝점만 보면 통과했다. 이제 `start`를 포함하는 **하나의 연속 구간**이 `end`까지 덮는지 본다 | `E_TIME_RANGE` @ `…/end_seconds` |
+| 2 | SpeechSegment → Transcript → TranslatedTranscript → SubtitleDocument의 `timebase_ref`가 갈라져도 통과했다 | `E_SOURCE_REF` @ `<문서>/timebase_ref` |
+| 3 | Transcript segment·번역 fragment·cue fragment가 **다른 stream**의 상류를 참조해도 통과했다 | `E_STREAM_REF` @ 참조 필드 |
+| 4 | Transcript stream/segment·번역 stream/segment·cue의 **ID 중복**이 dict last-write-wins에 먹혀 보이지 않았다. 이제 index를 만들기 **전에** 검사하고, 모든 index는 first-wins다 | `E_SCHEMA` @ 중복 ID |
+| 5 | merged 번역의 source fragment가 **원문 Transcript 순서를 뒤집어도** 통과했다 | `E_OFFSET_ORDER` @ `…/char_start` |
+| 6 | cue lineage가 배열 순서만 봐서, 줄을 뒤집고 `line_index`를 맞바꾸면 통과했다. 이제 `(cue_index, 2*line_index, position)`·줄바꿈 공백 `(cue_index, 2*after_line_index+1, position)`의 **렌더 순서 키**로 본다 | `E_OFFSET_ORDER` @ `…/char_start` |
+
+### 15.2 B-02 — capability 정직성과 필드 부재
+
+- `tokens`·`alternatives`·`language_spans`에 `minItems: 1`을 넣어 **빈 배열을 부재로 위장**할 수 없게 했다.
+- `language_spans`가 없는데 `dominant_language`만 있으면 `E_LANGUAGE_GAP_REVIEW`.
+- capability snapshot의 `adapter_id`/`adapter_version`을 문서 `provenance`에 결박했다 (`E_CAPABILITY_MISMATCH`).
+- stream 수준 `speaker_label_source="adapter"`는 `supports_diarization`에, `"input"`은 실제 입력 label에 결박했다.
+- `overlap_kind="none"`인데 `concurrent_stream_ids`가 비어 있지 않으면 계약 위반이다.
+
+### 15.3 B-02 — 민감 값 비노출 (`schema_core.py` 무변경)
+
+`schema_core`의 schema finding message는 위반한 **실제 값**을 담는다(`enum 밖의 값: 'SECRET…'`).
+`schema_core`를 고치지 않고 **TASK-029 검증 경계에서** message를 결정적 고정 문구로 바꾼다
+(`redact_schema_message` / `redact_schema_findings`). `error_code`와 `error_location`은 그대로다.
+
+- 어떤 instance 파생 조각도 남기지 않는다. 필드 이름과 값을 구분해 남기려면 `schema_core`의
+  문자열 포맷을 파싱해야 하고, 파싱은 갈라지기 쉽다. 위치가 이미 필드를 가리킨다.
+- `run_leak_scan`이 **모든 fixture와 모든 input mutant**의 finding message를 훑어, 문서의
+  `text`·`target_text`·`source_text`·`lines`·`speaker_label`·확장 ID와 절대 경로가
+  들어갔는지 본다. 이 스캔이 실패하면 검증 전체가 실패한다.
+
+### 15.4 B-03 — mutation 감사의 완전성
+
+- **multi-kill 판정**: 여러 kill case를 선언한 mutant는 **선언한 전부**가 미탐지가 될 때만 killed다.
+- **실제 sentinel**: fixture·input·leak 분모도 row 수가 아니라 **실제 valid-case 실행 결과**를 센다.
+- **방어면 coverage guard**: `sys.settrace`로 domain validator의 `_finding(...)` 발화 **문장 전수**를
+  AST에서 뽑아, fixture + input mutant를 돌리는 동안 한 번도 발화하지 않는 방어면이 있으면 실패한다.
+  mutant 목록은 사람이 고른 표본이므로, 표본에 없는 방어면이 죽어 있어도 100% kill로 보인다.
+  이 guard가 그 착시를 없앤다.
+- **depth probe**: 비-finite·음수처럼 **schema가 먼저 거르는** 심층 방어는 문서 경로로 도달하지
+  않는다. 면제 목록으로 두지 않고, (a) 내부 검사 함수를 직접 호출해 실제로 발화시키고
+  (b) 같은 값이 문서 경로에서는 상류 schema에 잡힌다는 것을 **함께** 요구한다.
+- **약한 mutant를 지우지 않았다.** REVIEW-023이 지적한 무효 mutant(VM-24·VM-25·VM-76·VM-98)는
+  삭제가 아니라 **실제로 방어를 무력화하도록 고쳐** 다시 감사한다.
+
+### 15.5 D-01 — 언어 authority 문서 정합화
+
+cue에 독립 `language_spans`를 **다시 넣지 않았다.** 대신 세 자리를 나눠 적었다.
+
+| 자리 | 지위 |
+|---|---|
+| `ReferenceBundle.language_spans[]` | 평가 정답 (ground truth) — `ARCHITECTURE.md` §3.0 |
+| `Transcript…language_spans[]` | 가설 쪽 LID의 단일 출처 — `ARCHITECTURE.md` §3.0.2 L-1 |
+| `SubtitleDocument` | 독립 LID 가설 없음. 필요하면 `lineage_fragments[]`를 따라 **결정적으로 투영** — L-2, `EVALS.md` §4.5(a) L1–L3 |
+
+- `ARCHITECTURE.md` §3.0.2를 **추가**했다 (기존 산문은 지우지 않았다). §7.12 표의 근거를
+  §3.0에서 §3.0.2로 고쳤다.
+- `EVALS.md` C0 규칙 7·8과 §4.5(a)의 두 text space 표를 위 정의에 맞췄고, cue 언어 구간의
+  투영식 L1–L3을 명시했다.
+- **미해결 모순 0건.** 남은 모순을 찾지 못했다.
+
+**원문과 번역문이 문자열상 같다는 사실만으로 구조 오류를 만들지 않았다.** validator에 그런 검사는
+없다(`grep`으로 확인). 동일 문자열은 QC 신호 후보이지 계약 무효 조건이 아니다.
+
+### 15.6 반영 뒤 감사 결과 (`make audit-task-029`)
+
+| 분모 | total | detected | kill rate | 실제 valid-case sentinel | SKIP |
+|---|---|---|---|---|---|
+| fixture | 104 | 104 | **100%** | 3/3 | 0 |
+| **input mutants** | 171 | 171 | **100%** | 171/171 | 0 |
+| leak scan (민감 값 비노출) | 275 | 275 | **100%** | 3/3 | 0 |
+| depth probes | 4 | 4 | **100%** | — | 0 |
+| validator 방어면 coverage | 122 | 122 | **100%** | — | 0 |
+| **schema mutants** | 22 | 22 | **100%** | 22/22 | 0 |
+| **validator code mutants** | 100 | 100 | **100%** | 100/100 | 0 |
+
+- fixture·leak scan의 sentinel은 **정상 fixture 3건의 실제 실행 결과**다. row 수를 sentinel
+  통과 수로 출력하던 이전 판(REVIEW-023 B-03)을 고쳤다.
+- depth probe·coverage guard는 mutant 분모가 아니라 **완전성 분모**라 valid-case sentinel 개념이
+  없다. 대신 depth probe 자체가 상류 schema 방어를 함께 확인한다.
+- schema mutant 22건은 다섯 정본의 **root `additionalProperties: false` 제거**(SM-18~SM-22),
+  `required` 필드 제거, `enum` 확장, 범위·닫힌 객체·`pattern`·`uniqueItems`·`minItems` 방어를 덮는다.
+
+### 15.7 실행한 검증 (반영 뒤)
+
+```bash
+make verify-task-029                  # fixture 104건 + 계약 test + 감사 + 기존 전체 verify
+make audit-task-029
+make verify-task-028
+make verify-task-006
+make verify
+make verify-task-029 PYTHON=python3.12
+git diff --check
+git status --short
+```
+
+### 15.8 남은 한계 (확인하지 않은 것)
+
+- **실제 ASR·번역·diarization·정렬 adapter는 없다.** 이 반영도 계약과 검증만 만든다.
+- **Windows 11/NTFS에서 실행하지 않았다.** WER·RTF·VRAM·사람 수정시간도 측정하지 않았다.
+- `CorrectionLedger`·`TermBundle`·`WorkUnitManifest`는 여전히 범위 밖이다.
+- `STATUS.md`·`PLAN.md`·`DECISIONS.md`의 일반 상태 정합화는 Lean Root의 몫이며 여기서 하지 않았다.
+- 이 세션은 **작성자**다. 리뷰도 승인도 하지 않는다 (`AGENTS.md` R8).
