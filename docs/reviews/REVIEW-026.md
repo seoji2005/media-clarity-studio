@@ -173,7 +173,7 @@ required 배열 또는 manifest 목록에 동일 ID를 중복해도 declared/uni
 
 상태 정합성은 기능 수정과 섞지 않는다. 다만 승인/통합 전에 Lean Root가 별도 변경으로 다음을 해소해야 한다.
 
-- PR #45에서 깨진 REVIEW-023~026 상대 링크: review evidence PR #46의 선행 통합 또는 영속 링크
+- PR #45에서 깨진 REVIEW-023~026 상대 링크: PR #46은 과거 구현 HEAD에서 분기했으므로 그대로 선행 병합하지 않는다. 최신 main 기반 review-only 브랜치로 REVIEW 파일만 옮기거나, PR #45 승인·병합 뒤 PR #46이 review-only diff가 된 것을 확인해 통합한다.
 - STATUS의 fixture 158→159, merged/open PR 목록, TASK-029 잔존 제안 문구
 - PLAN의 TASK-029 미확정 candidate 문구
 - DECISIONS에 승인된 TASK-029 결정과 오너 결정 항목 추적
