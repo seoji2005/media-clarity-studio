@@ -6,7 +6,10 @@
 | **Owner** | Claude Code 구현 세션 |
 | **Reviewer** | Lean Root Orchestrator — 구현 세션과 분리된 고정 HEAD Gate H 검토 |
 | **Phase** | Phase 1a / subtitle data spine |
-| **Status** | `Not started` |
+| **Status** | `In review` |
+| **구현 상태** | **`Implemented — awaiting fixed HEAD review`** — 구현 세션 자기 승인 없음 |
+| **구현 기준 main** | `5264f6bec469ae741e8c99d8d5d150cf78e2b76f` |
+| **구현 브랜치** | `claude/task-029-subtitle-spine-contracts` |
 | **위험 등급** | **Gate H** — 데이터 구조·파일 형식·교차 문서 참조·원본 증거 계보 |
 | **계약 기준 main** | `6c71867b4c920c8550edc4eadc1f3b7f4ab5a3a9` |
 | **선행** | TASK-006 Done, TASK-022 Done, TASK-028 Done |
@@ -629,3 +632,157 @@ validator의 mutation 감사는 저장소 밖 임시 사본에서 수행한다. 
 > 모순이나 범위 확장이 필요하면 임의로 선택하지 말고 구현을 중단해 `Blocked`로 보고하세요.
 > 완료 전 §11 명령을 직접 실행하고 실제 test 수·fixture 수·mutation 결과·미검증 환경을 PR 본문과
 > TASK 구현 기록에 남기세요. Ready 전환·병합·자기 승인은 하지 마세요.
+
+---
+
+## 14. 구현 기록 (Claude Code 구현 세션)
+
+**상태: `Implemented — awaiting fixed HEAD review`.** 아래는 구현 세션의 주장이며 검증이 아니다.
+판정은 Lean Root가 고정 HEAD에서 직접 재현한다 (`AGENTS.md` R10 / §3.5).
+구현 세션은 자기 변경을 승인하지 않았고 병합·Ready 전환을 하지 않았다.
+
+### 14.1 산출물
+
+| 파일 | 내용 |
+|---|---|
+| `schemas/speech-segment-v1.schema.json` | root 직렬화 단위는 SpeechSegment **단일 객체**. track/channel index와 `channel_semantics`, `separation_method`, concurrent stream, 선택 confidence + semantics |
+| `schemas/transcript-v1.schema.json` | immutable ASR evidence. segment lineage·exact text·선택 token/LID/n-best·닫힌 7-key `feature_status`·capability **snapshot** |
+| `schemas/adapter-capability-report-v1.schema.json` | adapter 능력 축. `language_tag`·`token_unit`·`confidence_semantics`·`feature_status_value`·`network_requirement`·`determinism_tier`의 **단일 정의처** |
+| `schemas/translated-transcript-v1.schema.json` | 번역 산출물과 `$defs/TranslationCapabilityReport` (**유일 정의**). exact source fragment, `coverage_status`, `uncovered_source_fragments[]` |
+| `schemas/subtitle-document-v1.schema.json` | 표시 cue, line별 exact scalar lineage, `line_break_whitespace[]`, `resolved_style` snapshot, 구조형 `unsupported_features[]` |
+| `src/media_clarity/subtitle_contracts.py` | domain validator + fixture runner CLI. `schema_core`의 `SchemaSet`·`SchemaValidator`·`Finding`·strict loader를 **재사용**하고 재구현하지 않는다 |
+| `tests/test_subtitle_contracts.py` | schema 정본 계약, fixture, input mutation manifest, validator 경계 test 32건 |
+| `tests/fixtures/subtitle_contracts/k-01.json` … `k-57.json` | 정상 3건 + 위반 54건. expected는 message가 아니라 exact `code + location` 쌍 |
+| `scripts/verify_task_029.py` | 단일 검증 진입점. fixture · input mutants · schema mutants · validator code mutants를 **분모를 섞지 않고** 각각 보고 |
+| `Makefile` | `fixtures-task-029` · `test-task-029` · `audit-task-029` · `verify-task-029` |
+
+### 14.2 §0의 다섯 기술 결정을 그대로 구현했다
+
+1. `SpeechSegment/v1` root는 단일 객체이고, ID 유일성·concurrent 대칭성은 `check_speech_segments()`가
+   ordered 집합을 받아 검사한다. 별도 collection envelope를 만들지 않았다.
+2. `Transcript/v1`은 immutable ASR evidence다. forced alignment schema·producer를 만들지 않았다.
+3. offset은 exact stored text의 Unicode scalar 반개구간이고, gap과 explicit `und`는 **둘 다**
+   `needs_review=true` + `language_unknown`을 요구한다. `und`로 바꿔 검수를 우회할 수 없다.
+4. confidence는 semantics와 결박하며 `calibrated_probability`만 `[0,1]`을 강제한다.
+5. translation split/merge와 subtitle cue는 fragment-level upstream lineage를 항상 보존한다.
+
+### 14.3 확정한 안정 오류 코드
+
+§8 표의 22개 코드를 **그대로** 쓴다. 새 코드를 만들지 않았다. 표에 이름이 하나뿐인 규칙 묶음은
+다음처럼 그 코드 하나로 모으고 module docstring에 같은 내용을 적었다.
+
+- `E_SCHEMA` — schema 위반에 더해, schema로 표현할 수 없는 **문서 집합 수준의 구조 위반**
+  (ID 중복, 조건부 동반 필수 필드, `x-` 확장 ID 규칙, language tag 자리의 `"unknown"` 문자열).
+- `E_LANGUAGE_GAP_REVIEW` — §4.2 R6·R10의 language unknown 정직성 묶음 세 가지:
+  gap·`und`인데 review 상태 없음 / gap·`und`인데 `dominant_language` 있음 /
+  전 범위 커버인데 `dominant_language`가 파생 규칙과 다름.
+- `E_LINEAGE` — cue upstream fragment의 ID·exact text·line 결합 동치·입력 범위 partition 위반.
+  범위 자체가 비었거나 밖이면 `E_OFFSET_RANGE`, 순서가 역전되면 `E_OFFSET_ORDER`가 먼저다.
+
+finding 위치는 **선행 `/` 없는** JSON Pointer이며, 57개 fixture 전부에 대해 실제 입력에서
+해석되는지 test로 고정했다 (`test_locations_are_resolvable_json_pointers`).
+`resolved_style.language_overrides` 위반은 override에 없는 필드를 가리키지 않고 실제 존재하는
+필드나 override 객체 자체로 좁힌다.
+
+### 14.4 schema 경계를 지킨 방법
+
+- `schema_core.py` diff **0**. `SUPPORTED_KEYWORDS`를 넓히지 않았고 새 `x-mcs-semantic`도 없다.
+- `oneOf`/`anyOf`/`allOf`/`if-then-else`/`contains`/custom format을 쓰지 않는다. 그 표현이 필요한
+  조건(축·capability·coverage·lineage)은 전부 domain validator로 옮겼다. test가 이를 고정한다.
+- Draft 2020-12 **전체 구현을 주장하지 않는다.** 부분집합만 검사한다는 기존 경계를 그대로 쓴다.
+- `common-v1.schema.json`과 job/eval schema는 **byte 무변경**이다. §10의 raw·canonical SHA-256
+  네 개를 test가 매 실행 확인한다.
+
+### 14.5 정본에서 뺀 pseudo-contract 필드 (숨기지 않는다)
+
+`docs/ARCHITECTURE.md` §7.12 표에 전부 적었다. 요약하면 cue의 `language_spans[]`·
+`dominant_language?`·`confidence?`·`speaker_label?` 넷을 정본에 넣지 않았다. 언어의 authority는
+`Transcript.language_spans` 하나여야 하고(§3.0), 자막 계층에는 confidence·speaker label을 결박할
+capability 축이 없어 근거 없는 값이 되기 때문이다. 산문은 지우지 않고 보존했다.
+
+### 14.6 fixture (57건)
+
+정상 3건이 §9가 요구한 일곱 경로를 모두 담는다.
+
+| fixture | 담은 경로 |
+|---|---|
+| `k-01` | JA/EN 문장 내 전환 · explicit `und` · gap→unknown+review와 `dominant_language` 생략 · 실제 independent channel과 다른 stream의 동시 segment/cue · one_to_one/merged/split/dropped/unknown 번역 lineage · target axis emoji(U+1F44D)+combining(U+0301) cue lineage · 다른 stream cue overlap 허용 |
+| `k-02` | timing·confidence·LID를 **전부 미지원**해 필드가 정직하게 생략된 Transcript · source axis 자막 · emoji/combining scalar offset · 공백 없는 일본어 `日本語 → ["日","本語"]` 분할 · 영어 공백을 explicit `line_break_whitespace`로 옮긴 분할 |
+| `k-03` | partial 번역 — uncovered fragment가 남은 원문 범위를 정확히 한 번 채우고 `needs_review`와 안정 reason을 남김 |
+
+위반 54건은 §9 mutation 목록에 1:1 대응하며 각 fixture의 `mutation_id`가 그 대응을 기록한다.
+
+### 14.7 mutation 감사 — 세 분모를 섞지 않았다
+
+`make audit-task-029` (= `scripts/verify_task_029.py`) 한 번으로 재현된다.
+
+| 분모 | total | detected | kill rate | valid-case sentinel | SKIP |
+|---|---|---|---|---|---|
+| fixture | 57 | 57 | **100%** | 57/57 | 0 |
+| **input mutants** | 121 | 121 | **100%** | 121/121 | 0 |
+| **schema mutants** | 17 | 17 | **100%** | 17/17 | 0 |
+| **validator code mutants** | 78 | 78 | **100%** | 78/78 | 0 |
+
+- input mutant는 정상 fixture 문서를 **메모리에서** 한 필드·한 관계씩 변형하고 선언한
+  `(code, location)`이 그대로 나오는지 본다. 기대값은 관측 복사가 아니라 손으로 선언했다.
+- schema mutant는 production schema의 `required`·`enum`·범위·닫힌 객체 방어를, validator code
+  mutant는 domain validator의 핵심 분기를 **저장소 밖 임시 사본에서** 하나씩 약화한다.
+  각 mutant는 (a) 지정한 defect case가 실제로 탐지되지 않게 되는지와 (b) valid-case sentinel이
+  여전히 통과하는지를 **함께** 판정한다. 저장소 파일은 바꾸지 않는다.
+
+**중복 방어를 숨기지 않고 mutant를 합쳤다.** concurrent stream의 존재·겹침·대칭 세 분기와
+concurrent cue의 겹침·대칭 두 분기는 하나를 지우면 나머지가 **같은 code·location으로** 잡아
+개별 mutant가 공허해진다. 그래서 개별 mutant 대신 **한 번에 무력화하는 mutant** 하나로
+감사하고, 그 사실을 mutant 제목과 코드 주석에 적었다.
+
+**감사 과정에서 스스로 만든 공백 두 가지를 그대로 두지 않았다.**
+① 처음 만든 `uncovered fragment의 needs_review=true` 검사는 schema의 `review_reasons` minItems 1과
+동치 검사에 완전히 흡수돼 같은 위치를 두 번 보고했다. 중복 검사를 없애고 대신 minItems를 약화하는
+schema mutant(`SM-17`)와 그 defect case(`IM-110`)를 추가해 실제 방어를 실증했다.
+② 임시 사본에서 같은 초에 크기가 같은 파일을 다시 쓰면 스테일 `.pyc`가 재사용돼 mutant가 가짜로
+미탐지되는 것을 관측했다. 감사 driver에 `PYTHONDONTWRITEBYTECODE=1`을 넣어 제거했다.
+
+### 14.8 실행한 검증
+
+```bash
+make verify-task-029      # K-01~K-57 fixture + 계약 test + 3분류 mutation 감사 + 기존 전체 verify
+make verify-task-028      # J-01~J-16 + store/runtime test + smoke + 전체 verify
+make verify-task-006      # H-01~H-14 + 계약 test + 전체 verify
+make verify               # static + 전체 unit + 실제 FFmpeg smoke
+git diff --check
+git status --short
+```
+
+전체 test는 355 → **387** (신규 32, 전부 `test_subtitle_contracts.py`). 기존 test 삭제·skip·완화 0건.
+`ffmpeg`는 이 실행 환경에 처음부터 없어 컨테이너에 설치한 뒤 실행했다. 저장소에는 의존성·CI·
+외부 데이터·모델을 추가하지 않았고 network access도 쓰지 않는다.
+
+### 14.9 명시적 한계 (과장하지 않는다)
+
+- **Draft 2020-12 전체 구현이 아니다.** `schema_core`의 부분집합만 검사한다.
+- **BCP-47 전체 ABNF·IANA registry 유효성을 주장하지 않는다.** §4.3의 구조 subset만 본다.
+- **번역문이 원문을 그대로 복사했는지 구조적으로 판정하지 않는다.** 정당하게 동일한 번역
+  (고유명사 등)과 구분할 방법이 없어 잘못된 거부를 만든다. 계약이 강제할 수 있는 절반 —
+  source/target을 한 필드로 합치지 않는 것, `dropped`는 빈 `target_text` + `untranslated_span` —
+  만 강제하고 나머지는 검수 신호로 남긴다.
+- **실제 ASR·번역·VAD·diarization·forced alignment adapter를 만들지 않았다.** 이 TASK는 계약과
+  검증만 만들며 WER·번역 품질·RTF·VRAM·사람 수정시간을 개선하거나 측정하지 않는다.
+- **미정값을 채우지 않았다.** U-07·U-12·U-13·U-15·U-16·U-18·U-19·U-22·U-26·U-27은 그대로다.
+  U-18이 미정이므로 style 수치를, U-19가 미정이므로 `norm-v1` 규칙을 만들지 않았다.
+- **Windows 11/NTFS에서 실행하지 않았다.** Linux·Python 3.11/3.12에서만 확인했다.
+
+### 14.10 미해결 교차 계약 모순
+
+**발견하지 못했다.** §5 표로 해결되지 않는 모순은 없었고, 따라서 `Blocked`로 중단하지 않았다.
+`docs/EVALS.md` §4.5(a)가 raw `Transcript`의 `language_spans`에도 `canonical_cue_text` 기준
+offset을 쓰라고 읽히던 부분은 §5가 지시한 대로 좁혀 정합화했다 (raw Transcript는 exact segment
+`text`와 ASR segment/token timing, SubtitleDocument만 `canonical_cue_text`).
+
+### 14.11 범위 밖에서 발견했지만 수정하지 않은 것
+
+1. **`common-v1.schema.json`의 `identifier`·`timestamp` pattern은 Python `re.search`로 해석되므로
+   끝의 개행 하나를 통과시킨다** (`re`의 `$`는 trailing newline 앞에서도 맞는다). TASK-029에서
+   `common-v1`과 `schema_core`는 수정 금지이므로 손대지 않았고, 신규 정본의 제품 불변식
+   (target exact `ko`)은 domain validator가 **정확한 문자열 동등성**으로 따로 강제한다.
+2. **`schema_core.SchemaValidator`는 `patternProperties` 중 처음 일치하는 하나만 적용한다.**
+   신규 schema는 패턴이 하나뿐이라 영향이 없지만, 후속 계약이 패턴을 둘 이상 쓰면 재검토가 필요하다.

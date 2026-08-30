@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.media-clarity-studio.invalid/adapter-capability-report-v1.schema.json",
+  "title": "AdapterCapabilityReport/v1",
+  "description": "ARCHITECTURE.md §7.3.1 어댑터 능력 보고의 기계 정본 (TASK-029 §4.3). 실행 결과와 독립적으로 adapter가 실제로 할 수 있는 것만 보고한다. 없는 능력을 fallback으로 합성했으면 능력으로 보고하지 않는다. $id는 안정 식별자이며 네트워크 주소가 아니다(.invalid, RFC 2606).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "adapter_id",
+    "adapter_version",
+    "supported_languages",
+    "token_timing_units",
+    "supports_word_timing",
+    "token_confidence_semantics",
+    "segment_confidence_semantics",
+    "supports_language_id",
+    "supports_intra_sentential_lid",
+    "language_confidence_semantics",
+    "supports_diarization",
+    "supports_independent_channel_input",
+    "supports_overlap_streams",
+    "supports_nbest",
+    "nbest_score_semantics",
+    "restricts_candidate_languages",
+    "term_injection_modes",
+    "network_requirement",
+    "requires_gpu",
+    "determinism_tier",
+    "limitations"
+  ],
+  "properties": {
+    "schema_version": { "$ref": "common-v1.schema.json#/$defs/schema_version" },
+    "adapter_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "adapter_version": { "type": "string", "minLength": 1 },
+    "supported_languages": {
+      "description": "언어 tag 배열. 알 수 없으면 빈 배열과 명시적 limitation을 쓴다. 문자열 단독 \"unknown\"은 domain validator가 E_SCHEMA로 거부한다 (§4.3).",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/language_tag" }
+    },
+    "token_timing_units": {
+      "description": "adapter가 timing을 붙일 수 있는 token 단위. 비어 있으면 token timing 미지원이다.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/token_unit" }
+    },
+    "supports_word_timing": {
+      "description": "token_timing_units에 word가 있을 때만 true. domain validator가 E_CAPABILITY_MISMATCH로 강제한다.",
+      "type": "boolean"
+    },
+    "token_confidence_semantics": { "$ref": "#/$defs/confidence_semantics" },
+    "segment_confidence_semantics": { "$ref": "#/$defs/confidence_semantics" },
+    "supports_language_id": { "type": "boolean" },
+    "supports_intra_sentential_lid": { "type": "boolean" },
+    "language_confidence_semantics": { "$ref": "#/$defs/confidence_semantics" },
+    "supports_diarization": {
+      "description": "adapter가 직접 화자를 분리해 label을 만들 수 있는가. independent channel 입력의 stream 귀속은 여기에 포함되지 않는다.",
+      "type": "boolean"
+    },
+    "supports_independent_channel_input": { "type": "boolean" },
+    "supports_overlap_streams": { "type": "boolean" },
+    "supports_nbest": { "type": "boolean" },
+    "nbest_score_semantics": { "$ref": "#/$defs/confidence_semantics" },
+    "restricts_candidate_languages": { "type": "boolean" },
+    "max_candidate_languages": {
+      "description": "restricts_candidate_languages=true일 때만 허용한다 (domain validator).",
+      "type": "integer",
+      "minimum": 1
+    },
+    "term_injection_modes": {
+      "description": "미지원이면 빈 배열. 실제 term payload 형식은 이 TASK에서 정하지 않는다.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["prompt", "phrase_list", "custom_vocabulary"] }
+    },
+    "network_requirement": { "$ref": "#/$defs/network_requirement" },
+    "requires_gpu": { "type": "boolean" },
+    "determinism_tier": { "$ref": "#/$defs/determinism_tier" },
+    "limitations": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "$defs": {
+    "language_tag": {
+      "description": "TASK-029 §4.3이 규정한 stdlib 검증 subset. primary subtag는 소문자 ASCII 2~8자, 후속 subtag는 ASCII 영숫자 1~8자. 전체 BCP-47 ABNF나 IANA registry 유효성을 주장하지 않는다. 이 프로젝트에서 language tag가 필요한 다른 schema는 이 정의를 상대 $ref로 재사용한다 (common-v1은 TASK-029에서 수정 금지).",
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 64,
+      "pattern": "^[a-z]{2,8}(-[A-Za-z0-9]{1,8})*$"
+    },
+    "token_unit": {
+      "enum": ["word", "subword", "character", "provider_token"]
+    },
+    "confidence_semantics": {
+      "description": "confidence·score 값의 의미. calibrated_probability만 [0,1]로 해석하며, model_score·provider_opaque는 finite provider-native 값이라 adapter 간 확률처럼 비교하지 않는다. none은 축 자체가 없다는 뜻이며 대응 값 필드가 존재할 수 없다.",
+      "enum": ["calibrated_probability", "model_score", "provider_opaque", "none"]
+    },
+    "feature_status_value": {
+      "description": "실행별 기능 상태. unsupported는 능력 부재, not_requested·no_result는 능력은 있으나 이번 실행 결과가 없음, produced는 실제 결과가 존재함을 뜻한다.",
+      "enum": ["produced", "not_requested", "no_result", "unsupported"]
+    },
+    "network_requirement": {
+      "enum": ["none", "optional", "required"]
+    },
+    "determinism_tier": {
+      "enum": ["T1", "T2", "T3"]
+    }
+  }
+}

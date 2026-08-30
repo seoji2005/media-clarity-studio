@@ -678,6 +678,22 @@ P3. 격자 g의 가설 언어 = g의 중앙 시각을 포함하는 투영 구간
   다른 파생이나 다른 결합 텍스트를 쓰지 않습니다.
 - `c_end ≤ c_start`인 빈 span은 투영하지 않고 그 사실을 보고합니다.
 
+**두 text space를 구분합니다 (TASK-029).** 위 P1의 `canonical_cue_text` 기준은
+**`SubtitleDocument` 가설에만** 적용됩니다. 가설이 raw `Transcript/v1`이면 `language_spans`의
+`char_start`/`char_end`는 그 ASR segment의 **exact stored `text`** 기준 Unicode scalar offset이고,
+시간은 `canonical_cue_text` 균등 배분이 아니라 **ASR segment/token timing**으로 투영합니다.
+raw Transcript에는 `lines[]`도 cue 경계도 없으므로 `canonical_cue_text`를 만들 수 없습니다.
+
+| 가설 산출물 | offset 기준 text | 시간 파생 |
+|---|---|---|
+| `Transcript/v1` (원문 축) | ASR segment의 exact `text` (Unicode scalar index) | ASR이 직접 보고한 segment/token timing. 없으면 그 지표는 **미지원** |
+| `SubtitleDocument/v1` | `canonical_cue_text = norm-v1(lines.join(U+0020))` (알고리즘 C0) | 알고리즘 C |
+
+`lines[]` 결합에 넣는 **U+0020 구분자는 표시 문자열을 만들기 위한 인공 구분자이며 upstream 원문
+증거가 아닙니다.** cue의 원문 계보는 `lineage_fragments[]`의 exact scalar 범위가 담습니다
+([`ARCHITECTURE.md`](ARCHITECTURE.md) §7.4·§7.12). `norm-v1`의 내용은 **U-19로 미정**이며
+TASK-029의 validator는 정규화 규칙을 새로 만들지 않습니다.
+
 **(b) 전환 지점 탐지**
 
 | 항목 | 규정 |

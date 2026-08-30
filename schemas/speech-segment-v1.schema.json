@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.media-clarity-studio.invalid/speech-segment-v1.schema.json",
+  "title": "SpeechSegment/v1",
+  "description": "ARCHITECTURE.md §7.2 발화 구간의 기계 정본 (TASK-029 §4.1). root 직렬화 단위는 SpeechSegment 단일 객체이며, ID 유일성과 concurrent 참조 대칭성은 같은 실행의 ordered segment 집합을 받는 domain validator가 검사한다. 별도 collection envelope를 만들지 않는다. $id는 안정 식별자이며 네트워크 주소가 아니다(.invalid, RFC 2606).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "segment_id",
+    "timebase_ref",
+    "start_seconds",
+    "end_seconds",
+    "audio_ref",
+    "stream_id",
+    "concurrent_stream_ids",
+    "overlap_kind",
+    "separation_method",
+    "source_track_index",
+    "channel_semantics",
+    "processing_chain",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": { "$ref": "common-v1.schema.json#/$defs/schema_version" },
+    "segment_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "timebase_ref": {
+      "description": "시간은 이 timebase가 가리키는 원본 source 시간축이다. clip-local offset을 가장하지 않는다.",
+      "$ref": "common-v1.schema.json#/$defs/identifier"
+    },
+    "start_seconds": { "$ref": "common-v1.schema.json#/$defs/seconds" },
+    "end_seconds": { "$ref": "common-v1.schema.json#/$defs/seconds" },
+    "audio_ref": {
+      "description": "실제로 ASR에 공급할 sample data. segment clip이면 추출 chain을 processing_chain에 남긴다.",
+      "$ref": "common-v1.schema.json#/$defs/ArtifactRef"
+    },
+    "stream_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "concurrent_stream_ids": {
+      "description": "이 구간과 시간이 실제로 겹치는 다른 stream. 존재·비자기참조·실제 겹침·상호 대칭은 domain validator가 E_STREAM_REF로 강제한다.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+    },
+    "overlap_kind": { "$ref": "#/$defs/overlap_kind" },
+    "separation_method": {
+      "description": "channel은 source_channel_index가 있고 channel_semantics=independent일 때만 허용한다. none이면 채널만으로 별도 화자를 주장하지 않는다 (E_CHANNEL_SEMANTICS).",
+      "enum": ["none", "diarization", "source_separation", "channel"]
+    },
+    "source_track_index": {
+      "description": "원본 미디어의 오디오 track index.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "source_channel_index": {
+      "description": "track 안의 channel index. 일반 stereo mix를 두 화자로 간주하지 않는다.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "channel_semantics": {
+      "enum": ["independent", "mixed", "unknown"]
+    },
+    "speaker_label": {
+      "description": "화자 분리를 실제로 수행했을 때만 존재한다 (U-15). separation_method=none이면 존재할 수 없다.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "speech_confidence": {
+      "description": "선택. 있으면 speech_confidence_semantics가 함께 있어야 하며, 미지원 값을 1.0으로 채우지 않는다.",
+      "type": "number"
+    },
+    "speech_confidence_semantics": { "$ref": "#/$defs/value_semantics" },
+    "speaker_confidence": { "type": "number" },
+    "speaker_confidence_semantics": { "$ref": "#/$defs/value_semantics" },
+    "snr_estimate": { "type": "number" },
+    "processing_chain": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["step", "params_hash"],
+        "properties": {
+          "step": { "type": "string", "minLength": 1 },
+          "params_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["config_hash"],
+      "properties": {
+        "adapter_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+        "adapter_version": { "type": "string", "minLength": 1 },
+        "config_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" }
+      }
+    }
+  },
+  "$defs": {
+    "overlap_kind": {
+      "description": "unknown은 정상 상태다 — 겹침 탐지에 실패했음을 정직하게 표시한다. 하류 SubtitleDocument도 이 정의를 재사용한다.",
+      "enum": ["none", "partial", "full", "unknown"]
+    },
+    "value_semantics": {
+      "description": "SpeechSegment confidence의 의미 (TASK-029 §4.1 R6·R7). calibrated_probability만 [0,1]을 강제하고, model_score·provider_opaque는 finite provider-native 값이다. 값이 없으면 이 필드도 없다 — 별도의 none 값을 두지 않는다.",
+      "enum": ["calibrated_probability", "model_score", "provider_opaque"]
+    }
+  }
+}

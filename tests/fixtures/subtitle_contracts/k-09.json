@@ -1,0 +1,432 @@
+{
+ "case_id": "K-09",
+ "title": "language span이 앞 span과 겹친다",
+ "mutation_id": "IM-10",
+ "expected": {
+  "valid": false,
+  "findings": [
+   {
+    "code": "E_OFFSET_ORDER",
+    "location": "transcript/streams/0/segments/1/language_spans/1/char_start"
+   }
+  ]
+ },
+ "documents": {
+  "speech_segments": [
+   {
+    "schema_version": "1.0.0",
+    "segment_id": "sp-1",
+    "timebase_ref": "tb-source",
+    "start_seconds": 0.0,
+    "end_seconds": 2.0,
+    "audio_ref": {
+     "schema_version": "1.0.0",
+     "artifact_id": "art-sp-1",
+     "kind": "audio",
+     "uri": "work/sp-1.wav",
+     "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+     "byte_size": 1024,
+     "media_type": "audio/wav",
+     "produced_by": {
+      "stage_id": "stage-synthetic",
+      "job_id": "job-029"
+     },
+     "created_at": "2026-08-29T00:00:00Z",
+     "parent_refs": [],
+     "is_estimate": false
+    },
+    "stream_id": "s-main",
+    "concurrent_stream_ids": [
+     "s-alt"
+    ],
+    "overlap_kind": "partial",
+    "separation_method": "channel",
+    "source_track_index": 0,
+    "channel_semantics": "independent",
+    "processing_chain": [
+     {
+      "step": "vad",
+      "params_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+     }
+    ],
+    "provenance": {
+     "adapter_id": "audio-synthetic",
+     "adapter_version": "0.0.1",
+     "config_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    "source_channel_index": 0,
+    "speaker_label": "CH-L"
+   },
+   {
+    "schema_version": "1.0.0",
+    "segment_id": "sp-2",
+    "timebase_ref": "tb-source",
+    "start_seconds": 1.0,
+    "end_seconds": 4.0,
+    "audio_ref": {
+     "schema_version": "1.0.0",
+     "artifact_id": "art-sp-2",
+     "kind": "audio",
+     "uri": "work/sp-2.wav",
+     "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+     "byte_size": 1024,
+     "media_type": "audio/wav",
+     "produced_by": {
+      "stage_id": "stage-synthetic",
+      "job_id": "job-029"
+     },
+     "created_at": "2026-08-29T00:00:00Z",
+     "parent_refs": [],
+     "is_estimate": false
+    },
+    "stream_id": "s-alt",
+    "concurrent_stream_ids": [
+     "s-main"
+    ],
+    "overlap_kind": "partial",
+    "separation_method": "channel",
+    "source_track_index": 0,
+    "channel_semantics": "independent",
+    "processing_chain": [
+     {
+      "step": "vad",
+      "params_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+     }
+    ],
+    "provenance": {
+     "adapter_id": "audio-synthetic",
+     "adapter_version": "0.0.1",
+     "config_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    "source_channel_index": 1,
+    "speaker_label": "CH-R"
+   },
+   {
+    "schema_version": "1.0.0",
+    "segment_id": "sp-3",
+    "timebase_ref": "tb-source",
+    "start_seconds": 3.0,
+    "end_seconds": 4.0,
+    "audio_ref": {
+     "schema_version": "1.0.0",
+     "artifact_id": "art-sp-3",
+     "kind": "audio",
+     "uri": "work/sp-3.wav",
+     "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+     "byte_size": 1024,
+     "media_type": "audio/wav",
+     "produced_by": {
+      "stage_id": "stage-synthetic",
+      "job_id": "job-029"
+     },
+     "created_at": "2026-08-29T00:00:00Z",
+     "parent_refs": [],
+     "is_estimate": false
+    },
+    "stream_id": "s-main",
+    "concurrent_stream_ids": [
+     "s-alt"
+    ],
+    "overlap_kind": "partial",
+    "separation_method": "channel",
+    "source_track_index": 0,
+    "channel_semantics": "independent",
+    "processing_chain": [
+     {
+      "step": "vad",
+      "params_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+     }
+    ],
+    "provenance": {
+     "adapter_id": "audio-synthetic",
+     "adapter_version": "0.0.1",
+     "config_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    "source_channel_index": 0,
+    "speaker_label": "CH-L"
+   },
+   {
+    "schema_version": "1.0.0",
+    "segment_id": "sp-4",
+    "timebase_ref": "tb-source",
+    "start_seconds": 4.0,
+    "end_seconds": 6.0,
+    "audio_ref": {
+     "schema_version": "1.0.0",
+     "artifact_id": "art-sp-4",
+     "kind": "audio",
+     "uri": "work/sp-4.wav",
+     "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+     "byte_size": 1024,
+     "media_type": "audio/wav",
+     "produced_by": {
+      "stage_id": "stage-synthetic",
+      "job_id": "job-029"
+     },
+     "created_at": "2026-08-29T00:00:00Z",
+     "parent_refs": [],
+     "is_estimate": false
+    },
+    "stream_id": "s-main",
+    "concurrent_stream_ids": [],
+    "overlap_kind": "none",
+    "separation_method": "channel",
+    "source_track_index": 0,
+    "channel_semantics": "independent",
+    "processing_chain": [
+     {
+      "step": "vad",
+      "params_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+     }
+    ],
+    "provenance": {
+     "adapter_id": "audio-synthetic",
+     "adapter_version": "0.0.1",
+     "config_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    "source_channel_index": 0,
+    "speaker_label": "CH-L"
+   }
+  ],
+  "transcript": {
+   "schema_version": "1.0.0",
+   "transcript_id": "tx-base",
+   "timebase_ref": "tb-source",
+   "token_unit": "word",
+   "streams": [
+    {
+     "stream_id": "s-main",
+     "segments": [
+      {
+       "segment_id": "tr-1",
+       "source_speech_segment_ids": [
+        "sp-1"
+       ],
+       "start_seconds": 0.0,
+       "end_seconds": 2.0,
+       "text": "今日はsunnyですね",
+       "tokens": [
+        {
+         "text": "今日は",
+         "start_seconds": 0.0,
+         "end_seconds": 0.8,
+         "confidence": 0.91
+        },
+        {
+         "text": "sunny",
+         "start_seconds": 0.8,
+         "end_seconds": 1.4,
+         "confidence": 0.72
+        },
+        {
+         "text": "ですね",
+         "start_seconds": 1.4,
+         "end_seconds": 2.0,
+         "confidence": 0.88
+        }
+       ],
+       "segment_confidence": -1.25,
+       "alternatives": [
+        {
+         "text": "今日は sunny ですね",
+         "score": -2.5
+        }
+       ],
+       "language_spans": [
+        {
+         "char_start": 0,
+         "char_end": 3,
+         "language": "ja",
+         "confidence": 0.95
+        },
+        {
+         "char_start": 3,
+         "char_end": 8,
+         "language": "en",
+         "switch_kind": "intra_sentential"
+        },
+        {
+         "char_start": 8,
+         "char_end": 11,
+         "language": "ja",
+         "switch_kind": "intra_sentential"
+        }
+       ],
+       "dominant_language": "ja",
+       "speaker_label": "SPK-A",
+       "speaker_label_source": "adapter",
+       "is_low_confidence": false,
+       "needs_review": true,
+       "review_reasons": [
+        "language_switch"
+       ]
+      },
+      {
+       "segment_id": "tr-2",
+       "source_speech_segment_ids": [
+        "sp-3"
+       ],
+       "start_seconds": 3.0,
+       "end_seconds": 4.0,
+       "text": "Hello world",
+       "language_spans": [
+        {
+         "char_start": 0,
+         "char_end": 5,
+         "language": "en"
+        },
+        {
+         "char_start": 3,
+         "char_end": 11,
+         "language": "en",
+         "switch_kind": "unknown"
+        }
+       ],
+       "is_low_confidence": false,
+       "needs_review": true,
+       "review_reasons": [
+        "language_unknown"
+       ]
+      },
+      {
+       "segment_id": "tr-4",
+       "source_speech_segment_ids": [
+        "sp-4"
+       ],
+       "start_seconds": 4.0,
+       "end_seconds": 5.0,
+       "text": "Yes",
+       "language_spans": [
+        {
+         "char_start": 0,
+         "char_end": 3,
+         "language": "en"
+        }
+       ],
+       "dominant_language": "en",
+       "is_low_confidence": false,
+       "needs_review": false,
+       "review_reasons": []
+      },
+      {
+       "segment_id": "tr-5",
+       "source_speech_segment_ids": [
+        "sp-4"
+       ],
+       "start_seconds": 5.0,
+       "end_seconds": 6.0,
+       "text": "No",
+       "language_spans": [
+        {
+         "char_start": 0,
+         "char_end": 2,
+         "language": "en"
+        }
+       ],
+       "dominant_language": "en",
+       "is_low_confidence": false,
+       "needs_review": false,
+       "review_reasons": []
+      }
+     ]
+    },
+    {
+     "stream_id": "s-alt",
+     "segments": [
+      {
+       "segment_id": "tr-3",
+       "source_speech_segment_ids": [
+        "sp-2"
+       ],
+       "start_seconds": 1.0,
+       "end_seconds": 3.0,
+       "text": "Mmm hmm",
+       "language_spans": [
+        {
+         "char_start": 0,
+         "char_end": 7,
+         "language": "und"
+        }
+       ],
+       "is_low_confidence": true,
+       "needs_review": true,
+       "review_reasons": [
+        "language_unknown",
+        "low_confidence"
+       ]
+      },
+      {
+       "segment_id": "tr-6",
+       "source_speech_segment_ids": [
+        "sp-2"
+       ],
+       "start_seconds": 3.0,
+       "end_seconds": 4.0,
+       "text": "Ah",
+       "language_spans": [
+        {
+         "char_start": 0,
+         "char_end": 2,
+         "language": "en"
+        }
+       ],
+       "dominant_language": "en",
+       "is_low_confidence": false,
+       "needs_review": false,
+       "review_reasons": []
+      }
+     ]
+    }
+   ],
+   "feature_status": {
+    "token_timing": "produced",
+    "token_confidence": "produced",
+    "segment_confidence": "produced",
+    "language_id": "produced",
+    "language_confidence": "produced",
+    "speaker_diarization": "produced",
+    "nbest": "produced"
+   },
+   "capability_report": {
+    "schema_version": "1.0.0",
+    "adapter_id": "asr-synthetic",
+    "adapter_version": "0.0.1",
+    "supported_languages": [
+     "en",
+     "ja",
+     "ko"
+    ],
+    "token_timing_units": [
+     "word"
+    ],
+    "supports_word_timing": true,
+    "token_confidence_semantics": "calibrated_probability",
+    "segment_confidence_semantics": "model_score",
+    "supports_language_id": true,
+    "supports_intra_sentential_lid": true,
+    "language_confidence_semantics": "calibrated_probability",
+    "supports_diarization": true,
+    "supports_independent_channel_input": true,
+    "supports_overlap_streams": true,
+    "supports_nbest": true,
+    "nbest_score_semantics": "model_score",
+    "restricts_candidate_languages": false,
+    "term_injection_modes": [
+     "prompt"
+    ],
+    "network_requirement": "none",
+    "requires_gpu": false,
+    "determinism_tier": "T2",
+    "limitations": [
+     "합성 fixture adapter — 실제 음성 분포를 대표하지 않는다"
+    ]
+   },
+   "provenance": {
+    "adapter_id": "asr-synthetic",
+    "adapter_version": "0.0.1",
+    "params_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "seed": 7
+   }
+  }
+ }
+}

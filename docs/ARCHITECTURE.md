@@ -549,6 +549,12 @@ SpeechSegment/v1:
 다만 과도한 잡음 제거·과도한 VAD는 실제 발화를 버립니다.
 **강도는 평가로 결정할 항목입니다 (U-12).**
 
+> **기계 정본: [`schemas/speech-segment-v1.schema.json`](../schemas/speech-segment-v1.schema.json)** (TASK-029).
+> 위 블록은 설계 의도를 읽기 위한 pseudo-contract이며, 필드·enum이 다르면 **schema가 정답**입니다.
+> ID 유일성과 concurrent 참조 대칭성은 하나의 segment 객체로 표현할 수 없어
+> [`src/media_clarity/subtitle_contracts.py`](../src/media_clarity/subtitle_contracts.py)의
+> ordered 집합 validator가 검사합니다. 차이 목록은 §7.12를 보십시오.
+
 ---
 
 ### 7.3 `asr` — 음성 인식
@@ -594,6 +600,11 @@ Transcript/v1:
 - `tokens`, `confidence`, `language_spans`는 **전부 선택 필드(optional)** 입니다.
   모든 ASR 모델이 이를 제공하지는 않기 때문입니다.
 
+> **기계 정본: [`schemas/transcript-v1.schema.json`](../schemas/transcript-v1.schema.json)** (TASK-029).
+> `Transcript/v1`은 **immutable ASR evidence**입니다. 번역·사람 교정·forced alignment가 이 문서를
+> 덮어쓰지 않으며, forced alignment 결과는 **후속 별도 artifact**입니다 (TASK-029에서 만들지 않음).
+> 모든 문자 offset은 exact stored `text`의 **Unicode scalar value index** 반개구간입니다.
+
 #### 7.3.1 어댑터 능력 보고와 대체 동작 (Fallback)
 
 **능력이 없는 것과 값이 0인 것은 다릅니다.** 이를 혼동하면 평가가 조용히 틀립니다.
@@ -628,6 +639,11 @@ AdapterCapabilityReport:
 > 조용한 채움은 지표를 오염시키고 오염 사실을 숨깁니다.
 
 **다국어 전략은 아직 미정입니다 (U-13).** (a) 구간별 LID 후 언어별 모델, (b) 다국어 통합 모델.
+
+> **기계 정본: [`schemas/adapter-capability-report-v1.schema.json`](../schemas/adapter-capability-report-v1.schema.json)** (TASK-029).
+> 정본은 위 목록에 없는 축(token timing unit, confidence semantics, channel 입력, term injection,
+> candidate language, network 요구)을 추가로 고정하고, 실행 결과와의 결박을 Transcript의
+> `feature_status` 일곱 key로 표현합니다 (`produced | not_requested | no_result | unsupported`).
 
 ---
 
@@ -682,6 +698,13 @@ SubtitleDocument/v1:
   표현되지 않을 수 있습니다. **표현하지 못한 것을 조용히 버리지 않고 기록**합니다.
 - `review_reason`은 사람이 어디를 봐야 하는지 알려줍니다.
   자동 결과는 초안이며, **어디가 불확실한지 말해주는 것이 "다 맞다"보다 유용**합니다.
+
+> **기계 정본: [`schemas/subtitle-document-v1.schema.json`](../schemas/subtitle-document-v1.schema.json)** (TASK-029).
+> 정본은 cue마다 **line별 exact scalar fragment lineage**(`lineage_fragments[]`)와, 원문 whitespace를
+> 줄 경계로 옮긴 기록(`line_break_whitespace[]`)을 필수로 둡니다. 직접 입력 문서의 모든 scalar 범위는
+> 둘 중 하나로 **정확히 한 번** 덮여야 하며, 공백 없는 일본어 줄 분할도 인접 visible range로 표현합니다.
+> U-18이 미정이므로 CPS·줄 길이·표시시간 숫자는 schema 기본값이 아니라
+> `style_profile_id`/`style_profile_version`과 실행 시점 `resolved_style` snapshot으로 남깁니다.
 
 ---
 
@@ -981,6 +1004,54 @@ TranslationCapabilityReport:
 > **`translate`의 상세 설계는 TASK-005·TASK-006의 범위입니다.**
 > 이 절은 **모듈 경계·계약·미지원 처리**만 고정하며, 지표의 구체 정의는
 > [`EVALS.md`](EVALS.md) §4.7에 있습니다.
+
+> **기계 정본: [`schemas/translated-transcript-v1.schema.json`](../schemas/translated-transcript-v1.schema.json)** (TASK-029).
+> `TranslationCapabilityReport`는 그 파일의 `#/$defs/TranslationCapabilityReport`에 **한 번만**
+> 정의하며 다른 schema나 Python 상수가 같은 enum·field set을 복제하지 않습니다.
+> 정본은 `source_segment_ids` 대신 **exact source fragment**(`source_segment_id` + scalar
+> `char_start`/`char_end` + `source_text`)를 쓰고, `coverage_status`(`complete | partial`)와
+> `uncovered_source_fragments[]`가 원문의 모든 non-empty scalar 범위를 **정확히 한 번 partition**합니다.
+
+---
+
+### 7.12 pseudo-contract → TASK-029 기계 정본 migration note
+
+§7.2·§7.3·§7.3.1·§7.4·§7.11의 블록은 **읽기 위한 pseudo-contract로 그대로 보존**합니다.
+아래는 그 산문과 [TASK-029](tasks/TASK-029.md) 정본 schema의 **실제 차이**이며, 조용히 바뀐 것이
+없음을 보이기 위한 기록입니다. 충돌하면 schema가 정답입니다 (§10 문서 우선순위).
+
+| 기존 pseudo-contract | TASK-029 정본 |
+|---|---|
+| SpeechSegment confidence가 사실상 필수 (`0..1`) | 선택이며, 있으면 `*_confidence_semantics`(`calibrated_probability \| model_score \| provider_opaque`)를 함께 기록. `calibrated_probability`만 `[0,1]`. 미지원값을 1.0으로 채우지 않음 |
+| channel 선택의 출처·독립성이 불명확 | `source_track_index`·선택 `source_channel_index`와 `channel_semantics`(`independent \| mixed \| unknown`)로 분리. `separation_method="channel"`은 independent channel일 때만 허용하고, `"none"`이면 speaker label을 주장할 수 없음 |
+| Transcript token timing의 출처가 불명확 | **raw ASR timing만** 허용. forced alignment는 후속 별도 artifact이며 이 문서에 합치지 않음 |
+| Transcript segment 경계가 명시되지 않음 | source timebase의 `[start_seconds, end_seconds)`와 `source_speech_segment_ids[]` lineage 필수. ASR segment 시간은 참조한 입력 구간 합집합 안에 있어야 함 |
+| 문자 offset 단위가 불명확 | exact stored `text`의 **Unicode scalar value index**. lone surrogate가 있는 text는 계약 실패 |
+| language span gap·switch 경계 의미가 불명확 | gap과 explicit `und`는 **모두** unknown + `needs_review` + `language_unknown`. 둘 중 하나라도 있으면 `dominant_language` 생략. `switch_kind`는 그 span의 `char_start`로 **들어오는 경계**를 설명하며 첫 span에는 두지 않음 |
+| LID 미지원 fallback이 설정값 `dominant_language`를 결과처럼 기록 | `supports_language_id=false`이면 `language_spans`·`dominant_language` 모두 부재. 후보 언어는 실행 options·provenance의 후속 계약 |
+| ASR n-best/alternative score의 의미가 불명확 | `supports_nbest`·`nbest_score_semantics`와 실행 `feature_status.nbest`로 결박. score는 semantics가 `none`이 아닐 때만 존재 |
+| capability에 channel·term·candidate·network 축이 없음 | capability report에 `supports_independent_channel_input`·`term_injection_modes[]`·`restricts_candidate_languages`·`network_requirement`를 명시 |
+| Transcript `streams[].speaker_label?`의 출처가 불명확 | `speaker_label`에는 `speaker_label_source`(`input \| adapter`)가 반드시 동반. input/channel에서 복사한 label은 `feature_status.speaker_diarization="produced"`의 근거가 되지 않음 |
+| 번역 capability의 `supports_confidence` boolean | `translation_confidence_semantics`(4값)로 대체. `supports_document_context`·`supports_code_switching_input`은 닫힌 report에 그대로 보존 |
+| 번역 `source_segment_ids` 생략 fallback | adapter가 정렬을 보고하지 못해도 orchestrator의 실제 입력 fragment lineage는 **항상** 보존. `alignment_evidence_source`(`adapter \| orchestrator`)가 둘을 구분 |
+| `source_language_authority` literal 문자열 경로 | 제거. 원문 언어의 authority는 `source_transcript` ref와 segment lineage이며, literal 경로는 stream 계층을 누락하고 ASR 가설을 정답처럼 표현했음 |
+| merged/split에서 source text 범위가 불명확 | exact source fragment + scalar offset. `one_to_one`은 전체, `split`은 non-empty strict subrange, `merged`는 서로 다른 2개 이상, `dropped`는 빈 `target_text` + `untranslated_span` |
+| 번역 coverage 개념 없음 | `coverage_status`와 `uncovered_source_fragments[]`가 `complete`·`partial` 모두에서 원문을 정확히 한 번 partition |
+| Subtitle cue upstream lineage가 불명확 | 축별 **line별 exact scalar fragment lineage**와 `line_break_whitespace[]`. 직접 입력의 모든 scalar를 정확히 한 번 덮어야 함 |
+| target Subtitle에 언어가 없음 | `text_axis="target"`이면 `target_language="ko"`와 원본 Transcript ref가 필수 |
+| document-level `unsupported_features[]` 문자열 | `cue_id`·`feature_kind`·`feature_identifier`·`reason_code`·`action`을 갖는 구조형 record. cue 비율을 계산할 수 있음 |
+| inline `style_profile` 숫자가 U-18과 충돌 가능 | `style_profile_id`/`style_profile_version` + `resolved_style` snapshot. schema에 기본 숫자를 두지 않음 |
+| cue `language_spans[]`·`dominant_language?` | **정본에서 제외.** 언어의 authority는 `Transcript.language_spans` 하나뿐이며(§3.0), cue는 lineage로 원문까지 추적됩니다. cue의 `review_reasons`에 남는 `language_switch`는 검토 신호이지 정답이 아닙니다 |
+| cue `confidence?`·`speaker_label?` | **정본에서 제외.** 결박할 capability 축이 자막 계층에 없어 근거 없는 숫자·label이 되기 때문입니다. 신뢰도 신호는 upstream 문서와 `needs_review`/`review_reasons`가, 화자 표시는 `stream_id`와 lineage가 담당하며 표시 형식은 후속 export/QC TASK의 몫입니다 |
+
+**정본 안에서 한 번만 정의하는 것과, 한 번 더 나타나는 것**
+
+`TranslationCapabilityReport`는 `translated-transcript-v1.schema.json#/$defs`에만 있습니다.
+language tag의 구조 subset(`^[a-z]{2,8}(-[A-Za-z0-9]{1,8})*$`)은 `adapter-capability-report-v1`
+에만 **타입으로** 정의하고 나머지 schema가 상대 `$ref`로 재사용합니다. 다만
+`resolved_style.language_overrides`의 `patternProperties` **key**는 정규식 자체이므로 `$ref`로
+대신할 수 없어 그 한 곳에만 같은 문자열이 다시 나타납니다. `common-v1.schema.json`은 TASK-029에서
+수정 대상이 아니므로 이 공통 타입을 공통 파일로 올리지 않았습니다.
 
 ---
 

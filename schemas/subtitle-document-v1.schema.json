@@ -1,0 +1,253 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.media-clarity-studio.invalid/subtitle-document-v1.schema.json",
+  "title": "SubtitleDocument/v1",
+  "description": "ARCHITECTURE.md §7.4 표시 자막 문서의 기계 정본 (TASK-029 §4.5). 표시 단위로 재분할할 수 있지만 upstream lineage를 잃지 않는다. U-18이 미정이므로 CPS·줄 길이·표시시간 숫자를 schema 기본값으로 박지 않는다. $id는 안정 식별자이며 네트워크 주소가 아니다(.invalid, RFC 2606).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "document_id",
+    "timebase_ref",
+    "text_axis",
+    "input_document_ref",
+    "cues",
+    "style_profile_id",
+    "style_profile_version",
+    "resolved_style",
+    "unsupported_features",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": { "$ref": "common-v1.schema.json#/$defs/schema_version" },
+    "document_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "timebase_ref": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "text_axis": {
+      "description": "이 문서의 텍스트가 원문인가 번역인가. ReferenceBundle.reference_axis와 같은 축끼리만 비교한다. target이면 직접 입력은 TranslatedTranscript이고 source_transcript_ref와 target_language=ko가 필수다 (E_TEXT_AXIS·E_TARGET_LANGUAGE).",
+      "$ref": "common-v1.schema.json#/$defs/reference_axis"
+    },
+    "target_language": {
+      "description": "text_axis=target일 때만 존재하며 정확히 ko여야 한다.",
+      "$ref": "adapter-capability-report-v1.schema.json#/$defs/language_tag"
+    },
+    "input_document_ref": {
+      "description": "이 문서가 직접 재분할한 입력 문서. text_axis=source이면 Transcript, target이면 TranslatedTranscript다.",
+      "$ref": "common-v1.schema.json#/$defs/ArtifactRef"
+    },
+    "source_transcript_ref": {
+      "description": "text_axis=target일 때 원문 Transcript 참조. 번역 자막이 원문 자막을 대신하지 않는다.",
+      "$ref": "common-v1.schema.json#/$defs/ArtifactRef"
+    },
+    "cues": {
+      "description": "canonical order는 (start_seconds, end_seconds, stream_id, cue_id) 오름차순이다 (E_CUE_ORDER).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/Cue" }
+    },
+    "style_profile_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "style_profile_version": { "type": "string", "minLength": 1 },
+    "resolved_style": { "$ref": "#/$defs/ResolvedStyle" },
+    "unsupported_features": {
+      "description": "출력 형식이 표현하지 못한 것을 cue 단위로 남긴다. 조용히 버리지 않는다. 실제 QC 정책은 후속 TASK다.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/UnsupportedFeature" }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input_hash", "config_hash", "pipeline_version"],
+      "properties": {
+        "input_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+        "config_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+        "pipeline_version": { "type": "string", "minLength": 1 },
+        "seed": { "type": "integer" }
+      }
+    }
+  },
+  "$defs": {
+    "Cue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cue_id",
+        "stream_id",
+        "start_seconds",
+        "end_seconds",
+        "lines",
+        "lineage_fragments",
+        "line_break_whitespace",
+        "concurrent_cue_ids",
+        "overlap_kind",
+        "needs_review",
+        "review_reasons"
+      ],
+      "properties": {
+        "cue_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+        "stream_id": {
+          "description": "같은 stream의 cue는 겹칠 수 없고, 다른 stream의 cue는 정상적으로 겹칠 수 있다.",
+          "$ref": "common-v1.schema.json#/$defs/identifier"
+        },
+        "start_seconds": { "$ref": "common-v1.schema.json#/$defs/seconds" },
+        "end_seconds": { "$ref": "common-v1.schema.json#/$defs/seconds" },
+        "lines": {
+          "description": "표시 줄. 평가용 raw_cue_text=lines.join(U+0020)와 canonical_cue_text=norm-v1(raw_cue_text)는 원본 lineage text와 별도 표현이며, 인공 U+0020 구분자는 upstream 원문 증거가 아니다 (U-19 미정).",
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "lineage_fragments": {
+          "description": "같은 line의 항목을 순서대로 결합하면 lines[line_index]와 exact scalar sequence로 같아야 한다 (E_LINEAGE).",
+          "type": "array",
+          "items": { "$ref": "#/$defs/LineageFragment" }
+        },
+        "line_break_whitespace": {
+          "description": "원문의 whitespace를 실제 줄 경계로 대체한 기록. 허용 whitespace scalar 집합 밖의 문자는 옮길 수 없다 (E_LINEAGE).",
+          "type": "array",
+          "items": { "$ref": "#/$defs/LineBreakWhitespace" }
+        },
+        "concurrent_cue_ids": {
+          "description": "존재하는 다른 cue이고 실제 시간이 겹치며 상호 대칭이어야 한다 (E_CUE_REF).",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+        },
+        "overlap_kind": { "$ref": "speech-segment-v1.schema.json#/$defs/overlap_kind" },
+        "needs_review": { "type": "boolean" },
+        "review_reasons": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/review_reason" }
+        },
+        "review_extension_id": { "$ref": "transcript-v1.schema.json#/$defs/extension_id" }
+      }
+    },
+    "LineageFragment": {
+      "description": "직접 입력 segment exact text의 Unicode scalar 반개구간과 그 범위의 exact substring. source axis는 Transcript segment text, target axis는 TranslatedTranscript segment target_text 기준이다.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["line_index", "input_segment_id", "char_start", "char_end", "text"],
+      "properties": {
+        "line_index": { "type": "integer", "minimum": 0 },
+        "input_segment_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+        "char_start": { "type": "integer", "minimum": 0 },
+        "char_end": { "type": "integer", "minimum": 0 },
+        "text": { "type": "string" }
+      }
+    },
+    "LineBreakWhitespace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["after_line_index", "input_segment_id", "char_start", "char_end", "text"],
+      "properties": {
+        "after_line_index": { "type": "integer", "minimum": 0 },
+        "input_segment_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+        "char_start": { "type": "integer", "minimum": 0 },
+        "char_end": { "type": "integer", "minimum": 0 },
+        "text": {
+          "description": "U+0009–000D, U+0020, U+0085, U+00A0, U+1680, U+2000–U+200A, U+2028, U+2029, U+202F, U+205F, U+3000만 허용한다. domain validator가 고정 집합으로 강제한다.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "ResolvedStyle": {
+      "description": "실행 당시 resolved style 값 snapshot. U-18이 미정이므로 어떤 숫자도 schema 기본값으로 두지 않는다. max_duration_seconds > min_duration_seconds는 domain validator가 강제한다.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_chars_per_line",
+        "max_lines",
+        "max_cps",
+        "min_duration_seconds",
+        "max_duration_seconds",
+        "min_gap_seconds",
+        "line_break_policy",
+        "language_overrides"
+      ],
+      "properties": {
+        "max_chars_per_line": { "type": "integer", "minimum": 1 },
+        "max_lines": { "type": "integer", "minimum": 1 },
+        "max_cps": { "type": "number", "exclusiveMinimum": 0 },
+        "min_duration_seconds": { "type": "number", "minimum": 0 },
+        "max_duration_seconds": { "type": "number", "exclusiveMinimum": 0 },
+        "min_gap_seconds": { "type": "number", "minimum": 0 },
+        "line_break_policy": {
+          "enum": ["semantic", "balanced", "source_preserving"]
+        },
+        "language_overrides": {
+          "description": "language tag key별 동일 수치 필드의 닫힌 partial override.",
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^[a-z]{2,8}(-[A-Za-z0-9]{1,8})*$": { "$ref": "#/$defs/StyleOverride" }
+          }
+        }
+      }
+    },
+    "StyleOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_chars_per_line": { "type": "integer", "minimum": 1 },
+        "max_lines": { "type": "integer", "minimum": 1 },
+        "max_cps": { "type": "number", "exclusiveMinimum": 0 },
+        "min_duration_seconds": { "type": "number", "minimum": 0 },
+        "max_duration_seconds": { "type": "number", "exclusiveMinimum": 0 },
+        "min_gap_seconds": { "type": "number", "minimum": 0 },
+        "line_break_policy": {
+          "enum": ["semantic", "balanced", "source_preserving"]
+        }
+      }
+    },
+    "UnsupportedFeature": {
+      "description": "document-level 문자열이 아니라 cue ID와 reason이 있는 구조형 record다. 새 core 어휘는 schema version 변경으로 추가하며 자유문자 reason으로 core 의미를 바꾸지 않는다.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cue_id", "feature_kind", "feature_identifier", "reason_code", "action"],
+      "properties": {
+        "cue_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+        "feature_kind": {
+          "enum": [
+            "ruby",
+            "positioning",
+            "font_style",
+            "speaker_placement",
+            "karaoke",
+            "bidirectional_layout",
+            "vertical_text",
+            "other"
+          ]
+        },
+        "feature_identifier": {
+          "description": "feature_kind 또는 reason_code가 other이면 x- 접두사의 안정 확장 ID여야 한다 (E_SCHEMA).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "reason_code": {
+          "enum": [
+            "not_representable",
+            "profile_disallowed",
+            "exporter_unsupported",
+            "source_ambiguous",
+            "other"
+          ]
+        },
+        "action": {
+          "enum": ["dropped", "flattened", "approximated", "review_required"]
+        }
+      }
+    },
+    "review_reason": {
+      "enum": [
+        "low_confidence",
+        "overlap",
+        "language_switch",
+        "timing_uncertain",
+        "format_violation",
+        "silence_adjacent",
+        "unsupported_feature",
+        "other"
+      ]
+    }
+  }
+}

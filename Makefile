@@ -3,7 +3,8 @@ export PYTHONPATH := src
 
 .PHONY: static test smoke verify verify-task-022 \
 	fixtures-task-006 test-task-006 verify-task-006 \
-	fixtures-task-028 test-task-028 smoke-task-028 verify-task-028
+	fixtures-task-028 test-task-028 smoke-task-028 verify-task-028 \
+	fixtures-task-029 test-task-029 audit-task-029 verify-task-029
 
 static:
 	$(PYTHON) -m compileall -q src tests scripts
@@ -44,3 +45,19 @@ smoke-task-028:
 
 # TASK-028 단일 검증 진입점: fixture runner + 계약 test + smoke + 기존 전체 verify
 verify-task-028: fixtures-task-028 test-task-028 smoke-task-028 verify
+
+# TASK-029 — K-* fixture runner (읽기 전용)
+fixtures-task-029:
+	$(PYTHON) -m media_clarity.subtitle_contracts --fixtures tests/fixtures/subtitle_contracts --require-all-cases
+
+# TASK-029 — 자막 spine 계약 unit·mutation test
+test-task-029:
+	$(PYTHON) -m unittest discover -s tests -p 'test_subtitle_contracts.py'
+
+# TASK-029 — fixture + input/schema/validator-code mutation 감사
+# (schema·validator mutation은 저장소 밖 임시 사본에서만 수행한다)
+audit-task-029:
+	$(PYTHON) scripts/verify_task_029.py
+
+# TASK-029 단일 검증 진입점: fixture runner + 계약 test + 3분류 mutation 감사 + 기존 전체 verify
+verify-task-029: fixtures-task-029 test-task-029 audit-task-029 verify

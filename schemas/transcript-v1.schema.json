@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.media-clarity-studio.invalid/transcript-v1.schema.json",
+  "title": "Transcript/v1 — immutable ASR evidence",
+  "description": "ARCHITECTURE.md §7.3 원문 transcript의 기계 정본 (TASK-029 §4.2). 이 문서는 ASR이 직접 낸 원문 증거이며 번역·사람 교정·forced alignment가 덮어쓰지 않는다. forced alignment 결과는 후속 별도 artifact다. 문자 offset 단위는 exact stored text의 Unicode scalar value index다. $id는 안정 식별자이며 네트워크 주소가 아니다(.invalid, RFC 2606).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "transcript_id",
+    "timebase_ref",
+    "token_unit",
+    "streams",
+    "feature_status",
+    "capability_report",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": { "$ref": "common-v1.schema.json#/$defs/schema_version" },
+    "transcript_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "timebase_ref": {
+      "description": "입력 SpeechSegment와 같은 원본 source 시간축.",
+      "$ref": "common-v1.schema.json#/$defs/identifier"
+    },
+    "token_unit": {
+      "description": "token text의 단위. token timing이 있으면 capability report의 token_timing_units에 포함돼야 한다 (E_CAPABILITY_MISMATCH).",
+      "$ref": "adapter-capability-report-v1.schema.json#/$defs/token_unit"
+    },
+    "streams": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/Stream" }
+    },
+    "feature_status": {
+      "description": "실행별 기능 상태. 임의 key/value map이 아니라 일곱 key가 모두 있는 닫힌 객체다 (§4.2). 각 key는 capability snapshot과 실제 결과 필드에 독립적으로 결박된다.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "token_timing",
+        "token_confidence",
+        "segment_confidence",
+        "language_id",
+        "language_confidence",
+        "speaker_diarization",
+        "nbest"
+      ],
+      "properties": {
+        "token_timing": { "$ref": "adapter-capability-report-v1.schema.json#/$defs/feature_status_value" },
+        "token_confidence": { "$ref": "adapter-capability-report-v1.schema.json#/$defs/feature_status_value" },
+        "segment_confidence": { "$ref": "adapter-capability-report-v1.schema.json#/$defs/feature_status_value" },
+        "language_id": { "$ref": "adapter-capability-report-v1.schema.json#/$defs/feature_status_value" },
+        "language_confidence": { "$ref": "adapter-capability-report-v1.schema.json#/$defs/feature_status_value" },
+        "speaker_diarization": { "$ref": "adapter-capability-report-v1.schema.json#/$defs/feature_status_value" },
+        "nbest": { "$ref": "adapter-capability-report-v1.schema.json#/$defs/feature_status_value" }
+      }
+    },
+    "capability_report": {
+      "description": "capability_report_ref가 아니라 실행 당시 report의 immutable snapshot이다.",
+      "$ref": "adapter-capability-report-v1.schema.json#"
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adapter_id", "adapter_version", "params_hash"],
+      "properties": {
+        "adapter_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+        "adapter_version": { "type": "string", "minLength": 1 },
+        "params_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+        "seed": { "type": "integer" }
+      }
+    }
+  },
+  "$defs": {
+    "Stream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stream_id", "segments"],
+      "properties": {
+        "stream_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+        "speaker_label": {
+          "description": "있으면 speaker_label_source가 함께 있어야 한다 (E_SCHEMA). input/channel에서 복사한 label은 diarization 결과로 세지 않는다.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "speaker_label_source": { "$ref": "#/$defs/speaker_label_source" },
+        "segments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Segment" }
+        }
+      }
+    },
+    "Segment": {
+      "description": "ASR hypothesis 하나. segment_id는 ASR hypothesis ID이며 SpeechSegment ID와 같다고 가정하지 않는다. split/merge lineage는 source_speech_segment_ids로만 표현한다.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "segment_id",
+        "source_speech_segment_ids",
+        "start_seconds",
+        "end_seconds",
+        "text",
+        "is_low_confidence",
+        "needs_review",
+        "review_reasons"
+      ],
+      "properties": {
+        "segment_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+        "source_speech_segment_ids": {
+          "description": "존재하는 입력 SpeechSegment 참조. 다른 stream의 입력을 한 segment lineage로 섞지 않는다.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+        },
+        "start_seconds": { "$ref": "common-v1.schema.json#/$defs/seconds" },
+        "end_seconds": { "$ref": "common-v1.schema.json#/$defs/seconds" },
+        "text": {
+          "description": "ASR이 직접 낸 exact text. 모든 char offset은 이 문자열의 Unicode scalar index다. lone surrogate는 안정적인 scalar offset을 만들 수 없어 계약 실패다 (E_UNICODE_SCALAR).",
+          "type": "string"
+        },
+        "tokens": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Token" }
+        },
+        "segment_confidence": { "type": "number" },
+        "alternatives": {
+          "description": "n-best. supports_nbest=false이면 존재할 수 없다.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/Alternative" }
+        },
+        "language_spans": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/LanguageSpan" }
+        },
+        "dominant_language": {
+          "description": "파생 편의 필드. gap 또는 und 범위가 하나라도 있으면 생략한다. 전 범위가 알려진 언어 span으로 덮였을 때만 길이 합이 최대인 언어를 기록하고 동률은 첫 span의 언어로 결정한다 (E_DOMINANT_LANGUAGE).",
+          "$ref": "adapter-capability-report-v1.schema.json#/$defs/language_tag"
+        },
+        "speaker_label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "speaker_label_source": { "$ref": "#/$defs/speaker_label_source" },
+        "is_low_confidence": {
+          "description": "numeric confidence의 존재를 뜻하지 않는다. true이면 needs_review와 low_confidence review reason이 함께 있어야 한다.",
+          "type": "boolean"
+        },
+        "needs_review": { "type": "boolean" },
+        "review_reasons": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/review_reason" }
+        },
+        "review_extension_id": { "$ref": "#/$defs/extension_id" }
+      }
+    },
+    "Token": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text"],
+      "properties": {
+        "text": { "type": "string" },
+        "start_seconds": {
+          "description": "ASR이 직접 보고한 값만 담는다. forced alignment 값을 raw Transcript에 합치지 않는다. start와 end는 둘 다 있거나 둘 다 없어야 한다.",
+          "$ref": "common-v1.schema.json#/$defs/seconds"
+        },
+        "end_seconds": { "$ref": "common-v1.schema.json#/$defs/seconds" },
+        "confidence": { "type": "number" }
+      }
+    },
+    "Alternative": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text"],
+      "properties": {
+        "text": { "type": "string" },
+        "score": {
+          "description": "nbest_score_semantics != none일 때만 존재한다. calibrated_probability만 [0,1]이다.",
+          "type": "number"
+        }
+      }
+    },
+    "LanguageSpan": {
+      "description": "exact text의 Unicode scalar 반개구간 [char_start, char_end). char_start 오름차순·비중첩이며 gap은 허용하되 unknown+review로 남긴다. producer가 모르는 범위를 language=\"und\"로 명시해도 같은 review 의무를 진다.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["char_start", "char_end", "language"],
+      "properties": {
+        "char_start": { "type": "integer", "minimum": 0 },
+        "char_end": { "type": "integer", "minimum": 0 },
+        "language": { "$ref": "adapter-capability-report-v1.schema.json#/$defs/language_tag" },
+        "confidence": { "type": "number" },
+        "switch_kind": {
+          "description": "이 span의 char_start로 들어오는 경계를 설명한다. 첫 span에는 생략하고 이후 span에는 필수다.",
+          "enum": ["inter_sentential", "intra_sentential", "unknown"]
+        }
+      }
+    },
+    "speaker_label_source": {
+      "description": "input은 입력 SpeechSegment·channel에서 복사한 label, adapter는 ASR adapter의 diarization 결과다.",
+      "enum": ["input", "adapter"]
+    },
+    "review_reason": {
+      "enum": [
+        "low_confidence",
+        "language_unknown",
+        "language_switch",
+        "timing_uncertain",
+        "speaker_uncertain",
+        "overlap",
+        "other"
+      ]
+    },
+    "extension_id": {
+      "description": "core 어휘를 바꾸지 않는 안정 확장 ID. review_reasons에 other가 있을 때만 쓴다.",
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "pattern": "^x-[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    }
+  }
+}
