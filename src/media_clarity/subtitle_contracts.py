@@ -78,6 +78,12 @@ __all__ = [
     "EXPECTED_CASE_IDS",
     "Finding",
     "JsonInputError",
+    "LID_GRID_INTERVAL_SECONDS",
+    "LID_GRID_ORIGIN_SECONDS",
+    "LID_GRID_PROFILE",
+    "LID_METRIC_IDS",
+    "LID_NONFINITE_MESSAGE",
+    "LID_UNSUPPORTED_REASON",
     "REF_CONTEXT_KEY",
     "REPO_ROOT",
     "SCHEMA_DIALECT",
@@ -88,6 +94,7 @@ __all__ = [
     "SchemaValidator",
     "TARGET_LANGUAGE",
     "UNDETERMINED_LANGUAGE",
+    "ZERO_DENOMINATOR_REASON",
     "ValidationResult",
     "check_asr_capability_binding",
     "check_artifact_consistency",
@@ -105,10 +112,18 @@ __all__ = [
     "speech_timebase",
     "evaluate_fixture",
     "load_fixture",
+    "lid_frame_bounds",
+    "lid_frame_languages",
+    "lid_frame_midpoint",
+    "lid_frame_range",
+    "lid_has_simultaneous_conflict",
+    "lid_scoring_result",
     "load_strict",
     "loads_strict",
+    "normalize_language_spans",
     "sort_findings",
     "validate_documents",
+    "zero_denominator_result",
 ]
 
 
@@ -1521,9 +1536,22 @@ def _check_language_spans(
             )
             ok = False
         if ok:
-            previous_end = end
             language = span.get("language")
-            usable.append((start, end, language if isinstance(language, str) else ""))
+            tag = language if isinstance(language, str) else ""
+            # **정규형 고정** (REVIEW-026 D-04 / 오너 결정 option 3).
+            # 맞닿은 두 span이 같은 언어면 같은 시간 구간을 두 가지로 적을 수 있고, 그러면
+            # 격자 채점이 표현에 따라 달라진다. 정규형은 하나로 합친 쪽이며, 이 자리에서
+            # 선언된 switch_kind는 실제 전환이 아니다.
+            if usable and usable[-1][1] == start and usable[-1][2] == tag:
+                findings.append(
+                    _finding(
+                        f"{spot}/language",
+                        "E_OFFSET_ORDER",
+                        "맞닿은 같은 언어 span은 하나로 합친 정규형이어야 한다",
+                    )
+                )
+            previous_end = end
+            usable.append((start, end, tag))
 
         if index == 0 and "switch_kind" in span:
             findings.append(
@@ -1632,6 +1660,203 @@ def _check_language_coverage(
                 )
             )
     return findings
+
+
+# ---------------------------------------------------------------------------
+# LID 채점 미지원 계약과 고정 격자 경계 (REVIEW-026 D-04, 오너 결정 option 3)
+# ---------------------------------------------------------------------------
+#
+# **공식 LID 정확도 채점은 이 계약 집합에서 미지원이다.**
+#
+# 격자 채점은 격자 하나에 정답 언어가 **하나**라고 전제한다. 그런데 이 계약은 서로 다른
+# `stream_id`가 같은 시각을 동시에 덮는 것을 정상으로 허용한다(동시 발화). 그 시각에 두
+# stream의 언어가 다르면 정답 label이 하나가 아니고, 그것을 하나로 접는 규칙(우세 stream,
+# 첫 stream, 아무거나 일치)은 이 저장소 어디에도 없다. 없는 규칙을 여기서 지어내지 않는다.
+#
+# 따라서 §4.5(a)~(c)의 지표는 `status="unsupported"`이며 **값을 내지 않는다.** 동시 다국어
+# 발화의 채점 의미를 정의하는 후속 화자/정렬 평가 TASK가 생기면 그때 지원으로 바꾼다.
+#
+# 미지원이라고 해서 경계를 열어 두지는 않는다. 후속 구현이 서로 다른 격자를 만들지 못하도록
+# 아래 정규화·경계 규칙을 지금 고정한다.
+
+#: 이 계약에서 미지원으로 고정된 LID 지표. §4.5 (a)·(b)·(c)에 해당한다.
+LID_METRIC_IDS = ("lid_accuracy", "lid_switch_detection", "lid_intra_sentential_switch")
+
+#: 고정 격자 profile 이름. 후속 TASK가 다른 격자를 쓰려면 이 이름을 올려야 한다.
+LID_GRID_PROFILE = "lid-grid-v1"
+
+#: **timeline origin.** 격자 0번은 정준 `Timebase`의 0.0초에서 시작한다. 첫 발화나 첫
+#: segment에서 시작하지 않는다 — 그러면 같은 미디어라도 실행마다 격자가 밀린다.
+LID_GRID_ORIGIN_SECONDS = "0"
+
+#: **interval.** 격자 간격은 100ms 고정이다.
+LID_GRID_INTERVAL_SECONDS = "0.1"
+
+#: 미지원 사유. 안정 문자열이며 `MetricResult.reason`에 그대로 쓴다.
+LID_UNSUPPORTED_REASON = "simultaneous_multilingual_speech_semantics_undefined"
+
+#: 분모가 0인 지표의 사유. 안정 문자열이다.
+ZERO_DENOMINATOR_REASON = "reference_denominator_empty"
+
+#: 유한하지 않은 시각이 들어왔을 때의 **고정 message**. 입력값을 담지 않는다 (§8.2).
+LID_NONFINITE_MESSAGE = "격자 시각은 유한한 수여야 한다"
+
+_GRID_ORIGIN = Decimal(LID_GRID_ORIGIN_SECONDS)
+_GRID_INTERVAL = Decimal(LID_GRID_INTERVAL_SECONDS)
+
+
+def _grid_decimal(seconds: Any) -> Decimal:
+    """시각을 격자 산술용 `Decimal`로 읽는다.
+
+    binary64 그대로 비교하면 `0.25 / 0.1`이 `2.4999…`가 되어 격자 소속이 표기에 따라
+    흔들린다. `num-profile-v1`과 같은 축으로 **최단 왕복 표기**를 읽어 십진 산술을 쓴다.
+    """
+
+    if isinstance(seconds, bool) or not isinstance(seconds, (int, float)):
+        raise ValueError(LID_NONFINITE_MESSAGE)
+    if isinstance(seconds, int):
+        return Decimal(seconds)
+    if not math.isfinite(seconds):
+        raise ValueError(LID_NONFINITE_MESSAGE)
+    return Decimal(repr(seconds))
+
+
+def lid_frame_bounds(index: int) -> tuple[Decimal, Decimal]:
+    """격자 `index`의 **반개구간** `[start, end)`를 초 단위로 돌려준다.
+
+    구간 규약은 이 계약의 다른 모든 시간 구간과 같다 — 시작 포함, 끝 배제.
+    """
+
+    if isinstance(index, bool) or not isinstance(index, int):
+        raise ValueError(LID_NONFINITE_MESSAGE)
+    start = _GRID_ORIGIN + _GRID_INTERVAL * index
+    return (start, start + _GRID_INTERVAL)
+
+
+def lid_frame_midpoint(index: int) -> Decimal:
+    """격자 `index`의 중점. 꼬리 프레임 판정의 유일한 기준점이다."""
+
+    start, end = lid_frame_bounds(index)
+    return (start + end) / 2
+
+
+def lid_frame_range(start_seconds: Any, end_seconds: Any) -> range:
+    """반개구간 `[start, end)`가 덮는 격자 index들.
+
+    **꼬리 프레임 규약**: 격자는 **중점이 그 구간 안에 들 때만** 덮인 것으로 센다.
+    부분 가중치를 두지 않고, 구간 끝을 격자 경계로 반올림하지도 않는다. 중점 비교도
+    반개구간이므로 중점이 정확히 `end`인 격자는 빠진다.
+
+    빈 구간·역전 구간은 빈 `range`다. 유한하지 않은 시각은 `ValueError`다.
+    """
+
+    start = _grid_decimal(start_seconds)
+    end = _grid_decimal(end_seconds)
+    if end <= start:
+        return range(0)
+    half = Decimal(1) / 2
+    low = math.ceil((start - _GRID_ORIGIN) / _GRID_INTERVAL - half)
+    stop = math.ceil((end - _GRID_ORIGIN) / _GRID_INTERVAL - half)
+    return range(low, max(low, stop))
+
+
+def lid_frame_languages(
+    intervals: Sequence[tuple[Any, Any, str]], index: int
+) -> frozenset[str]:
+    """격자 `index`를 덮는 **모든** 언어. 하나로 접지 않는다.
+
+    반환값의 크기가 2 이상이면 그 격자에는 단일 정답 label이 없다 — 동시 다국어 발화다.
+    어느 하나를 고르는 규칙은 이 계약에 없으므로, 그 상태는 `lid_scoring_result()`가
+    말하는 **미지원**으로만 표현한다. 격자를 분모에서 몰래 빼는 것도 허용하지 않는다.
+    """
+
+    covered: set[str] = set()
+    for entry in intervals:
+        start, end, language = entry
+        if not isinstance(language, str) or not language:
+            continue
+        if index in lid_frame_range(start, end):
+            covered.add(language)
+    return frozenset(covered)
+
+
+def lid_has_simultaneous_conflict(intervals: Sequence[tuple[Any, Any, str]]) -> bool:
+    """어느 격자에서든 서로 다른 언어가 동시에 덮이는가."""
+
+    frames: set[int] = set()
+    for start, end, language in intervals:
+        if isinstance(language, str) and language:
+            frames.update(lid_frame_range(start, end))
+    return any(len(lid_frame_languages(intervals, index)) > 1 for index in sorted(frames))
+
+
+def lid_scoring_result(metric_id: str) -> dict[str, Any]:
+    """LID 지표의 **고정 결과**. 이 계약에서는 언제나 미지원이다.
+
+    데이터에 따라 지원으로 바뀌지 않는다. 동시 다국어 발화가 없는 실행에서만 채점하는
+    것도 규칙을 고르는 일이고, 그 규칙이 아직 없다.
+
+    `value`를 넣지 않는다. 0도 100도 아니다 (`common-v1` `$defs/MetricResult`는
+    `status != "computed"`일 때 `value`를 금지한다). 반환값에는 `schema_version`이
+    없으며, 그 필드는 결과를 기록하는 producer가 채운다.
+    """
+
+    if metric_id not in LID_METRIC_IDS:
+        raise ValueError("LID 지표 ID가 아니다")
+    return {
+        "metric_id": metric_id,
+        "status": "unsupported",
+        "reason": LID_UNSUPPORTED_REASON,
+    }
+
+
+def zero_denominator_result(metric_id: str) -> dict[str, Any]:
+    """분모가 0인 지표의 **고정 결과**.
+
+    측정하지 못한 것을 숫자로 적지 않는다. 0%는 "다 틀렸다", 100%는 "다 맞았다"는
+    주장인데 분모가 없으면 둘 다 근거가 없다. 집계에서도 값이 아니라 개수로 센다.
+    """
+
+    if not isinstance(metric_id, str) or not metric_id:
+        raise ValueError("metric_id가 비어 있다")
+    return {
+        "metric_id": metric_id,
+        "status": "insufficient_n",
+        "reason": ZERO_DENOMINATOR_REASON,
+        "n": 0,
+    }
+
+
+def normalize_language_spans(
+    spans: Sequence[Mapping[str, Any]]
+) -> list[dict[str, Any]]:
+    """language span 열의 **정규형**. 맞닿은 같은 언어 span을 하나로 합친다.
+
+    합쳐진 span은 앞 span의 `char_start`와 뒤 span의 `char_end`를 갖고, 앞 span의 나머지
+    field를 유지한다. 뒤 span의 `switch_kind`는 실제 전환이 아니므로 버린다. 맞닿지 않은
+    같은 언어 span은 사이의 gap이 별도 계약이므로 합치지 않는다.
+
+    문서가 이미 정규형인지는 validator가 `E_OFFSET_ORDER`로 강제한다. 이 함수는 그 정규형이
+    무엇인지를 기계로 고정해 후속 구현이 다르게 정규화하지 못하게 한다.
+    """
+
+    normalized: list[dict[str, Any]] = []
+    for span in spans:
+        if not isinstance(span, Mapping):
+            normalized.append(span)  # type: ignore[arg-type]
+            continue
+        current = dict(span)
+        previous = normalized[-1] if normalized else None
+        if (
+            isinstance(previous, dict)
+            and previous.get("char_end") == current.get("char_start")
+            and previous.get("language") == current.get("language")
+            and isinstance(current.get("language"), str)
+        ):
+            previous["char_end"] = current.get("char_end")
+            continue
+        normalized.append(current)
+    return normalized
 
 
 def _check_capability_implications(
@@ -3771,7 +3996,7 @@ def run_fixtures(directory: Path, schemas: SchemaSet) -> list[FixtureOutcome]:
 
 
 #: fixture 디렉터리에 반드시 있어야 하는 case ID. 조용한 누락을 막는다.
-EXPECTED_CASE_IDS = tuple(f"K-{index:02d}" for index in range(1, 170))
+EXPECTED_CASE_IDS = tuple(f"K-{index:02d}" for index in range(1, 172))
 
 
 def main(argv: Sequence[str] | None = None) -> int:

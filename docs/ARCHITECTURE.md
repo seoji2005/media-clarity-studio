@@ -149,9 +149,38 @@ artifact인가"는 문서가 아니라 **검증 호출의 컨텍스트**로 받�
 | role | `transcript`와 `translated_transcript` **둘뿐**입니다. 다른 key는 `E_SCHEMA`이며 그 key 이름은 finding location에 남지 않습니다 |
 | 값의 모양 | 각 role의 값은 `common-v1` `$defs/ArtifactRef` 전체를 만족해야 합니다. 계약 밖 field는 거부합니다 |
 | 종류 결박 | 문서 artifact이므로 `kind`와 `media_type`이 문서용 값이어야 합니다. `kind="video"` 같은 매체 ref를 문서 identity로 쓸 수 없습니다 |
-| **선택이 아님** | 계보 identity를 검사해야 하는 조합(번역·자막이 상류 문서를 참조하는 경우)에서 **필수**입니다. 없거나 필요한 role이 빠지면 조용히 건너뛰지 않고 `E_SOURCE_REF`로 거부합니다. "확인하지 못했다"를 `VALID`로 돌려주지 않습니다 |
+| **선택이 아님** | 계보 identity를 검사해야 하는 조합에서 **필수**입니다. 없거나 필요한 role이 빠지면 조용히 건너뛰지 않고 `E_SOURCE_REF`로 거부합니다. "확인하지 못했다"를 `VALID`로 돌려주지 않습니다. 어느 조합에서 무엇이 필요한지는 아래 표에 **전부** 적습니다 |
 | identity 비교 | 같은 `artifact_id`를 가리키는 모든 ref는 `schema_version`·`content_hash`·`kind`·`media_type`·`byte_size`·`is_estimate`가 일치해야 합니다 (§7.12) |
 | 비교하지 않는 field | `uri`·`produced_by`·`created_at`·`parent_refs`·`timebase_ref` — 동일성 의미가 **오너 결정 항목**입니다 (위 §2.1) |
+
+**어떤 문서 조합에서 어떤 role이 필요한가 (전부)**
+
+| 검증 입력에 든 문서 | 필요한 role |
+|---|---|
+| `speech_segments`만 / `transcript`까지 | **없음.** 상류 문서를 참조하는 문서가 없습니다 |
+| `translated_transcript` 포함 | `transcript` |
+| `subtitle_document`, `text_axis="source"` | `transcript` |
+| `subtitle_document`, `text_axis="target"` | `transcript` **와** `translated_transcript` |
+
+**값이 만족해야 하는 것**
+
+| 항목 | 계약 |
+|---|---|
+| `kind` | `"text"` 고정입니다. 상류 문서는 전부 JSON 문서이므로 `kind="video"` 같은 매체 ref를 문서 identity로 쓸 수 없습니다 |
+| `media_type` | essence가 `"application/json"`이어야 합니다. `; charset=utf-8` 같은 parameter가 붙어도 되고 대소문자도 구분하지 않습니다 — **다만 그것은 종류 결박 규칙일 뿐입니다.** identity 비교(위 표)는 **문자열이 정확히 일치**해야 하므로, 같은 artifact를 가리키는 ref 중 한 곳만 표기를 바꾸면 `E_SOURCE_REF`입니다 |
+| 두 role의 분리 | `transcript`와 `translated_transcript`가 **같은 `(artifact_id, content_hash)`로 붕괴하면** `E_SOURCE_REF`입니다. 서로 다른 문서가 한 artifact가 되면 계보가 무너집니다 |
+| 문서 쪽과의 일치 | `translated_transcript.source_transcript`, `subtitle_document.input_document_ref`, `subtitle_document.source_transcript_ref`가 각각 컨텍스트의 해당 role과 **같은 identity**를 가리켜야 합니다 |
+
+**finding 위치 규약**
+
+컨텍스트가 없거나 role이 빠졌을 때의 finding은 `document_refs/...`가 아니라 **그 검사가 붙는
+실제 문서 field**를 가리킵니다 — `translated_transcript/source_transcript`,
+`subtitle_document/input_document_ref`, `subtitle_document/source_transcript_ref`. 읽는 사람이
+"무엇을 확인하지 못했는가"를 문서 쪽에서 바로 보게 하기 위해서입니다. 두 role이 같은
+artifact로 붕괴한 경우만 `document_refs/translated_transcript`를 가리킵니다.
+
+계약 밖 key는 `E_SCHEMA` @ `document_refs`이며 **그 key 이름은 finding location에 남지
+않습니다** (TASK-029 §8.2 비식별화 계약).
 
 > 이 envelope을 채우는 것은 **producer(orchestrator)의 몫**입니다. store가 문서를 쓰면서
 > 돌려준 ref를 그대로 넘깁니다. 기계 정본은
@@ -363,10 +392,14 @@ ReferenceBundle/v1:
 | **L-2** | `SubtitleDocument`는 **자체 LID를 주장하지 않습니다.** cue 수준 **문자 범위** 언어는 현재 계약으로 계산할 수 없으므로 **미지원**입니다(REVIEW-024 D-02). cue는 `lineage_fragments[]`로 입력 segment까지, 번역이면 그 segment의 `source_fragments[]`로 원문 segment까지 **segment 수준으로 추적**됩니다. 그 이상은 후속 TASK가 source↔target 문자 정렬과 문자↔시간 매핑을 정의한 뒤의 일입니다 |
 | **L-3** | cue의 `review_reasons`에 남는 `language_switch`는 **검토 신호**이지 언어 정답이 아닙니다 |
 | **L-4** | `supports_language_id=false`이면 `language_spans`도 `dominant_language`도 **부재**여야 합니다. 설정에서 받은 후보 언어를 결과처럼 기록하지 않습니다 |
+| **L-5** | 맞닿은 두 `language_span`의 언어가 같으면 **하나로 합친 것이 정규형**입니다. 같은 시간 구간을 두 가지 표현으로 적을 수 없습니다. TASK-029 validator가 `E_OFFSET_ORDER`로 거부합니다 (ADR-0029) |
+| **L-6** | **공식 LID 정확도 채점은 미지원입니다** (ADR-0029). 이 표현들은 계보·검토 신호로 쓰이며, 채점 지표는 [`EVALS.md`](EVALS.md) §4.5(a)가 `status: "unsupported"`로 고정합니다. 동시 발화 구간의 단일 정답 label 규칙이 없기 때문이며, 그 규칙은 후속 화자/정렬 평가 TASK가 정합니다 |
 
 > 원문 축 `Transcript` 가설의 언어 시간 귀속 범위는 [`EVALS.md`](EVALS.md) §4.5(a)에 있습니다.
-> **segment 단위까지만 지원**하며, segment 안쪽 문자→시간 투영은 token에 문자 오프셋이 없어
-> 미지원입니다 (REVIEW-025 D-03).
+> **공식 LID 정확도 지표 자체가 미지원**이며, 그 절이 후속 구현을 위해 고정한 것은 격자
+> origin·interval·꼬리 프레임 규약과 인접 동일 언어 정규화, 동시 다른 언어 stream의 표현,
+> 분모 0의 표현입니다 (ADR-0029). segment 안쪽 문자→시간 투영은 token에 문자 오프셋이 없어
+> 여전히 계약이 없습니다 (REVIEW-025 D-03).
 > 저장 위치를 늘리지 않는 쪽을 택한 이유는, 같은 사실을 두 곳에 적으면 둘이 갈라졌을 때
 > 어느 쪽이 정답인지 정할 방법이 없기 때문입니다.
 >

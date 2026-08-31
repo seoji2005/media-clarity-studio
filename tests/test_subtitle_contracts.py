@@ -16,6 +16,7 @@ import json
 import re
 import sys
 import unittest
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -25,15 +26,29 @@ from media_clarity.subtitle_contracts import (
     DOCUMENT_KEYS,
     ERROR_CODES,
     EXPECTED_CASE_IDS,
+    LID_GRID_INTERVAL_SECONDS,
+    LID_GRID_ORIGIN_SECONDS,
+    LID_METRIC_IDS,
+    LID_NONFINITE_MESSAGE,
+    LID_UNSUPPORTED_REASON,
     SCHEMA_FILES,
     TARGET_LANGUAGE,
+    ZERO_DENOMINATOR_REASON,
     SchemaSet,
     check_speech_segments,
     discover_fixtures,
     evaluate_fixture,
+    lid_frame_bounds,
+    lid_frame_languages,
+    lid_frame_midpoint,
+    lid_frame_range,
+    lid_has_simultaneous_conflict,
+    lid_scoring_result,
     load_fixture,
     load_strict,
+    normalize_language_spans,
     validate_documents,
+    zero_denominator_result,
 )
 
 
@@ -1627,6 +1642,138 @@ class DefenseManifestTests(ContractCase):
         self.assertTrue(all(row["passed"] for row in equivalent))
         self.assertTrue(all(not row.get("subsumed") for row in killable))
         self.assertTrue(all(row.get("subsumed") for row in equivalent))
+
+
+# ---------------------------------------------------------------------------
+# LID 채점 미지원 계약과 고정 격자 경계 (REVIEW-026 D-04, 오너 결정 option 3)
+# ---------------------------------------------------------------------------
+
+
+class LidScoringContract(unittest.TestCase):
+    """공식 LID 정확도 채점은 미지원이며, 그 경계는 지금 고정한다."""
+
+    def test_grid_origin_and_interval_are_frozen(self) -> None:
+        self.assertEqual(LID_GRID_ORIGIN_SECONDS, "0")
+        self.assertEqual(LID_GRID_INTERVAL_SECONDS, "0.1")
+        # origin은 첫 발화가 아니라 timebase의 0초다. 실행마다 격자가 밀리지 않는다.
+        self.assertEqual(lid_frame_bounds(0), (Decimal("0"), Decimal("0.1")))
+        self.assertEqual(lid_frame_bounds(3), (Decimal("0.3"), Decimal("0.4")))
+
+    def test_frames_are_half_open_and_contiguous(self) -> None:
+        for index in range(0, 40):
+            start, end = lid_frame_bounds(index)
+            self.assertEqual(end - start, Decimal(LID_GRID_INTERVAL_SECONDS))
+            self.assertEqual(lid_frame_bounds(index + 1)[0], end)
+            self.assertEqual(lid_frame_midpoint(index), (start + end) / 2)
+
+    def test_tail_frame_uses_the_midpoint_rule(self) -> None:
+        # [0.00, 0.25) — 꼬리 격자 2는 중점 0.25가 구간 밖이라 빠진다.
+        self.assertEqual(list(lid_frame_range(0.0, 0.25)), [0, 1])
+        # 조금만 더 길어지면 그 격자가 들어온다. 부분 가중치는 없다.
+        self.assertEqual(list(lid_frame_range(0.0, 0.26)), [0, 1, 2])
+        # 시작 쪽 중점은 포함이다 (반개구간).
+        self.assertEqual(list(lid_frame_range(0.05, 0.25)), [0, 1])
+        self.assertEqual(list(lid_frame_range(0.06, 0.25)), [1])
+
+    def test_grid_membership_does_not_depend_on_binary64_drift(self) -> None:
+        # 0.25 / 0.1 은 binary64에서 2.4999…다. 십진 산술로 고정하지 않으면 흔들린다.
+        self.assertEqual(list(lid_frame_range(0.0, 0.25)), list(lid_frame_range(0, 0.25)))
+        self.assertEqual(list(lid_frame_range(0.1, 0.3)), [1, 2])
+        self.assertEqual(list(lid_frame_range(0.7, 0.9)), [7, 8])
+
+    def test_empty_and_reversed_intervals_cover_nothing(self) -> None:
+        self.assertEqual(list(lid_frame_range(1.0, 1.0)), [])
+        self.assertEqual(list(lid_frame_range(1.0, 0.5)), [])
+
+    def test_nonfinite_time_is_a_stable_error_without_the_value(self) -> None:
+        for value in (float("inf"), float("-inf"), float("nan")):
+            with self.assertRaises(ValueError) as caught:
+                lid_frame_range(value, 1.0)
+            self.assertEqual(str(caught.exception), LID_NONFINITE_MESSAGE)
+            self.assertNotIn(repr(value), str(caught.exception))
+        with self.assertRaises(ValueError):
+            lid_frame_range("0.1", 1.0)
+
+    def test_simultaneous_streams_keep_every_language(self) -> None:
+        intervals = [(0.0, 0.5, "ko"), (0.2, 0.9, "en")]
+        # 겹치는 격자에서 언어를 하나로 접지 않는다 — 고를 규칙이 없기 때문이다.
+        self.assertEqual(lid_frame_languages(intervals, 3), frozenset({"ko", "en"}))
+        self.assertEqual(lid_frame_languages(intervals, 0), frozenset({"ko"}))
+        self.assertEqual(lid_frame_languages(intervals, 8), frozenset({"en"}))
+        self.assertTrue(lid_has_simultaneous_conflict(intervals))
+        # 같은 시각에 같은 언어면 충돌이 아니다.
+        self.assertFalse(lid_has_simultaneous_conflict([(0.0, 0.5, "ko"), (0.2, 0.9, "ko")]))
+        # 이어 붙은 다른 언어도 동시가 아니다.
+        self.assertFalse(lid_has_simultaneous_conflict([(0.0, 0.5, "ko"), (0.5, 0.9, "en")]))
+
+    def test_lid_metrics_are_unsupported_regardless_of_data(self) -> None:
+        for metric_id in LID_METRIC_IDS:
+            result = lid_scoring_result(metric_id)
+            self.assertEqual(result["status"], "unsupported")
+            self.assertEqual(result["reason"], LID_UNSUPPORTED_REASON)
+            # 미지원은 0점도 100점도 아니다.
+            self.assertNotIn("value", result)
+        with self.assertRaises(ValueError):
+            lid_scoring_result("wer")
+
+    def test_zero_denominator_is_explicit_and_never_a_number(self) -> None:
+        result = zero_denominator_result("lid_accuracy")
+        self.assertEqual(result["status"], "insufficient_n")
+        self.assertEqual(result["reason"], ZERO_DENOMINATOR_REASON)
+        self.assertEqual(result["n"], 0)
+        self.assertNotIn("value", result)
+        with self.assertRaises(ValueError):
+            zero_denominator_result("")
+
+    def test_metric_results_match_the_common_v1_metric_status_vocabulary(self) -> None:
+        common = json.loads((SCHEMA_DIR / "common-v1.schema.json").read_text(encoding="utf-8"))
+        allowed = common["$defs"]["metric_status"]["enum"]
+        self.assertIn(lid_scoring_result("lid_accuracy")["status"], allowed)
+        self.assertIn(zero_denominator_result("lid_accuracy")["status"], allowed)
+
+    def test_adjacent_same_language_spans_normalize_to_one(self) -> None:
+        spans = [
+            {"char_start": 0, "char_end": 3, "language": "ja"},
+            {"char_start": 3, "char_end": 5, "language": "en", "switch_kind": "intra_sentential"},
+            {"char_start": 5, "char_end": 8, "language": "en", "switch_kind": "intra_sentential"},
+            {"char_start": 8, "char_end": 11, "language": "ja", "switch_kind": "intra_sentential"},
+        ]
+        self.assertEqual(
+            normalize_language_spans(spans),
+            [
+                {"char_start": 0, "char_end": 3, "language": "ja"},
+                {"char_start": 3, "char_end": 8, "language": "en",
+                 "switch_kind": "intra_sentential"},
+                {"char_start": 8, "char_end": 11, "language": "ja",
+                 "switch_kind": "intra_sentential"},
+            ],
+        )
+        # 정규형은 고정점이다.
+        self.assertEqual(
+            normalize_language_spans(normalize_language_spans(spans)),
+            normalize_language_spans(spans),
+        )
+
+    def test_normalization_does_not_close_gaps(self) -> None:
+        # 맞닿지 않은 같은 언어 span은 합치지 않는다 — 사이의 gap은 별도 계약이다.
+        spans = [
+            {"char_start": 0, "char_end": 3, "language": "en"},
+            {"char_start": 5, "char_end": 8, "language": "en", "switch_kind": "unknown"},
+        ]
+        self.assertEqual(normalize_language_spans(spans), spans)
+
+    def test_documents_must_already_be_in_the_normal_form(self) -> None:
+        """정규형이 아닌 문서는 validator가 직접 거부한다 (K-170·K-171)."""
+
+        schemas = SchemaSet(SCHEMA_DIR)
+        for case, location in (
+            ("k-170.json", "transcript/streams/0/segments/0/language_spans/2/language"),
+            ("k-171.json", "transcript/streams/1/segments/0/language_spans/1/language"),
+        ):
+            documents = load_fixture(FIXTURE_DIR / case)["documents"]
+            result = validate_documents(documents, schemas)
+            self.assertFalse(result.valid)
+            self.assertIn(("E_OFFSET_ORDER", location), result.pairs)
 
 
 if __name__ == "__main__":

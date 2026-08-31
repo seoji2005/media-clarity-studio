@@ -408,9 +408,10 @@ raw Transcript의 offset은 exact segment `text` 기준이고, SubtitleDocument�
 > **문자 offset을 시간으로 옮기는 규칙은 이 TASK에 없다 (§17.7, REVIEW-026 D-04).**
 > 이 절의 초판은 "raw Transcript는 ASR segment/token timing을 기준으로 **투영**한다"고 썼는데,
 > `tokens[]`는 선택 필드이고 문자 offset이 없으며 token 문자열이 segment `text`를 정확히 한 번
-> 분할한다는 계약도 없다. 그래서 EVALS §4.5(a)는 **segment 단위 귀속만** 지원하고
-> intra-segment 문자→시간 투영은 미지원으로 둔다. 위 문장은 offset이 **어느 text space에
-> 속하는가**를 정하는 규칙일 뿐, 시간 투영을 승인하는 규칙이 아니다.
+> 분할한다는 계약도 없다. 위 문장은 offset이 **어느 text space에 속하는가**를 정하는 규칙일
+> 뿐, 시간 투영을 승인하는 규칙이 아니다.
+> **§19 이후:** EVALS §4.5(a)의 공식 LID 정확도 채점 자체가 미지원이다 (ADR-0029).
+> segment 단위 귀속도 채점 규칙으로 승인하지 않는다.
 
 schema와 문서가 다르면 schema가 정답이다. 단, 구현자는 모순을 임의 선택해 schema에 숨기지 않는다.
 이 표로 해결되지 않는 교차 계약 모순을 발견하면 구현을 중단하고 제품 오너에게 올린다.
@@ -1402,3 +1403,84 @@ profile 거부는 **schema 범위 위반과 다른 축**이다 (§8.1). `NumberP
 않았다. `schema_core.py`·`artifact_store.py`·`job_runtime.py`·`CACHE_KEY_FIELDS`·
 `common-v1`·`job-v1`은 diff 0이고, 새 dependency·model·network는 0이며 §8의 안정 error code
 22개만 쓴다. **새 error code 0개.**
+
+
+## 19. 오너 결정 option 3 반영 기록 (같은 브랜치의 다섯 번째 후속 커밋)
+
+REVIEW-026 **D-04**에 대한 사람 제품 오너의 결정은 **option 3**이다.
+
+> 공식 LID 정확도 채점을 TASK-029에서 **미지원**으로 표시한다. 동시 다국어 발화의 채점
+> 의미를 정의하는 후속 화자/정렬 평가 TASK가 생기기 전까지 단일 label 채점 규칙을
+> **만들지도, 조용히 고르지도 않는다.** 다만 후속 구현이 서로 다른 격자를 만들지 못하도록
+> 결정적 정규화·경계는 지금 고정한다.
+
+정본은 [`docs/DECISIONS.md`](../DECISIONS.md) **ADR-0029**다.
+
+### 19.1 §18.4의 무엇을 대체하는가
+
+§18.4의 1·2번은 §4.5(a)의 **1차 분모와 S1–S4 채점 규칙**을 고정했다. 그 규정은 동시 발화
+격자에서 정답 label을 **암묵적으로 하나로 골랐다** — 두 stream이 같은 시각을 다른 언어로
+덮을 때 무엇이 정답인지 그 규정에는 없고, 그럼에도 일치율을 계산했다.
+
+**그래서 §18.4-1의 1차 분모·S1–S4·네 비율 규정을 철회한다.** §18.4의 나머지(3·4·5·6·7)는
+그대로 유지되며, §18의 기록 자체는 지우지 않는다 (일어난 일이다).
+
+### 19.2 지금 고정한 다섯 경계
+
+| 항목 | 규정 | 기계 정본 |
+|---|---|---|
+| timeline origin·interval | 격자 0번은 정준 `Timebase`의 **0.0초**에서 시작하고 간격은 **100ms**, 구간은 **반개구간** `[start, end)`다 | `LID_GRID_ORIGIN_SECONDS`·`LID_GRID_INTERVAL_SECONDS`·`lid_frame_bounds()` |
+| 꼬리 프레임 | 격자는 **중점이 구간 안에 들 때만** 덮인 것으로 센다. 부분 가중치도 경계 반올림도 없다. 경계 판정은 binary64가 아니라 **최단 왕복 십진 표기**로 한다 (`num-profile-v1`과 같은 축) | `lid_frame_range()`·`lid_frame_midpoint()` |
+| 인접 동일 언어 정규화 | 맞닿은 두 `language_span`의 언어가 같으면 **하나로 합친 것이 정규형**이다. 문서가 정규형인지는 validator가 `E_OFFSET_ORDER`로 거부한다. 맞닿지 **않은** 같은 언어 span은 합치지 않는다 (사이 gap은 별도 계약) | `normalize_language_spans()` · `_check_language_spans()` |
+| 동시 다른 언어 stream | 한 격자를 덮는 언어를 **집합으로** 돌려주고 하나로 접지 않는다. 크기 2 이상이면 단일 정답이 없다는 뜻이고, 그 상태는 **미지원**으로만 표현한다. 격자를 분모에서 몰래 빼지 않는다 | `lid_frame_languages()`·`lid_has_simultaneous_conflict()` |
+| 분모 0 | `status: "insufficient_n"`·`reason: "reference_denominator_empty"`·`n: 0`이고 `value`가 **없다.** 0%도 100%도 쓰지 않는다 | `zero_denominator_result()` |
+
+LID 지표 자체의 고정 결과는 `lid_scoring_result()`다 — `status: "unsupported"`,
+`reason: "simultaneous_multilingual_speech_semantics_undefined"`, `value` 없음. **데이터에
+의존하지 않는다.**
+
+### 19.3 새 계약 방어와 fixture
+
+| 항목 | 값 |
+|---|---|
+| 새 validator 방어면 | **1개** — 맞닿은 동일 언어 span (`E_OFFSET_ORDER`) |
+| 새 error code | **0개** (§8의 22개만 사용) |
+| 새 fixture | **K-170** (알려진 언어) · **K-171** (`und`) |
+| 새 input mutant | **IM-236** · **IM-237** |
+| 새 validator code mutant | **VM-144** (정규형 검사 제거 → IM-236·IM-237을 놓친다) |
+| 새 계약 unit test | **13건** (격자 origin/interval, 반개구간, 꼬리 프레임 중점 규칙, binary64 drift 비의존, 빈·역전 구간, 비유한 시각의 안정 오류와 **값 비노출**, 동시 언어 집합, 미지원 고정, 분모 0, `common-v1` `metric_status` 어휘 일치, 정규형과 고정점, gap 비병합, 문서 거부) |
+
+### 19.4 공개 `document_refs` 계약 보강
+
+[`ARCHITECTURE.md`](../ARCHITECTURE.md) §2.1.1은 envelope의 존재와 role·모양·identity 비교
+field는 적었지만, **어느 문서 조합에서 무엇이 필수인지**, `kind`·`media_type`이 정확히 어떤
+값인지, finding이 어디에 붙는지는 code와 §8에만 있었다. 그 셋을 공개 계약에 적었다.
+
+- 조합별 필요 role 표 (`speech_segments`/`transcript`만 → 없음, `translated_transcript` →
+  `transcript`, 자막 `text_axis="source"` → `transcript`, `text_axis="target"` → 둘 다)
+- `kind="text"` 고정, `media_type` essence `application/json` (parameter 허용, 대소문자 무시).
+  종류 결박과 identity 비교는 **다른 축**이다 — 후자는 같은 artifact의 모든 ref에서
+  `media_type` 문자열이 정확히 일치할 것을 요구하므로 한 곳만 표기를 바꾸면 `E_SOURCE_REF`다
+- 두 role이 같은 `(artifact_id, content_hash)`로 붕괴하면 `E_SOURCE_REF`
+- 컨텍스트 부재 finding은 `document_refs/...`가 아니라 **그 검사가 붙는 실제 문서 field**에
+  붙는다. 붕괴만 `document_refs/translated_transcript`다
+- 계약 밖 key는 `E_SCHEMA` @ `document_refs`이고 **key 이름은 location에 남지 않는다**
+
+### 19.5 R-01·R-02·R-03에 대해 이 커밋이 한 일
+
+이 세 finding은 이전 고정 HEAD `cb3bcbc`에서 이미 반영됐다 (§18.1~18.3). 이번 커밋은 그
+방어를 **약화하지 않고**, 새로 늘어난 면에 같은 계약을 적용했다.
+
+| finding | 이번 커밋의 처리 |
+|---|---|
+| **R-01** (경로별 비식별화) | 새 방어면의 location `transcript/streams/*/segments/*/language_spans/*/language`는 전부 정본 선언 어휘다. 독립 oracle의 leak scan 분모가 404 → **408**로 늘었고 전부 통과한다. 새 helper의 비유한 입력 오류 message에도 입력값을 넣지 않으며 unit test가 그것을 직접 검사한다 |
+| **R-02** (raw JSON 숫자·문서 root) | 새 격자 helper는 비유한 시각·비수치 입력을 **고정 message의 `ValueError`**로 끝낸다. 격자 소속 판정도 binary64 나눗셈이 아니라 `num-profile-v1`과 같은 최단 왕복 십진 표기로 한다 — `0.25 / 0.1 = 2.4999…`가 격자를 흔들지 못한다. raw JSON probe 17건은 그대로 통과한다 |
+| **R-03** (방어 manifest) | schema 방어는 diff 0이므로 manifest도 diff 0이다. validator 방어면 inventory는 자동 파생이라 144 → **145**로 늘었고 새 면도 실제로 발화한다. MF-01~08·SD-01~13·AS-01~04는 그대로 통과한다 |
+
+### 19.6 이 반영에서 정하지 않은 것
+
+- §17.8의 오너 결정 항목 아홉 개는 그대로 열려 있다.
+- 동시 다국어 발화의 **채점 의미**는 정하지 않았다. 그것이 이 결정의 요지다.
+- `schema_core.py`·`artifact_store.py`·`job_runtime.py`·`CACHE_KEY_FIELDS`·`common-v1`·
+  `job-v1`은 계속 diff 0이고, 다섯 신규 정본 schema도 이전 고정 HEAD 대비 **diff 0**이다.
+- 새 dependency·model·network **0**, 새 error code **0**, 기존 test 삭제·skip·완화 **0건**.

@@ -2276,6 +2276,40 @@ def register_mutations() -> None:
         fixture="K-169",
     )
 
+    # --- 오너 결정 option 3 (REVIEW-026 D-04): language span 정규형 ------------------
+    # 맞닿은 같은 언어 span은 같은 시간 구간을 두 가지로 적을 수 있게 한다. 격자 채점이
+    # 표현에 따라 달라지지 않도록 정규형을 하나로 고정한다.
+    mutate(
+        "IM-236", "맞닿은 두 span이 같은 언어다 (알려진 언어)", "base",
+        lambda d: tr(d, "tr-1").__setitem__(
+            "language_spans",
+            [
+                {"char_start": 0, "char_end": 3, "language": "ja", "confidence": 0.95},
+                {"char_start": 3, "char_end": 5, "language": "en",
+                 "switch_kind": "intra_sentential"},
+                {"char_start": 5, "char_end": 8, "language": "en",
+                 "switch_kind": "intra_sentential"},
+                {"char_start": 8, "char_end": 11, "language": "ja",
+                 "switch_kind": "intra_sentential"},
+            ],
+        ),
+        [("E_OFFSET_ORDER", "transcript/streams/0/segments/0/language_spans/2/language")],
+        fixture="K-170",
+    )
+    mutate(
+        "IM-237", "맞닿은 두 span이 같은 언어다 (und)", "base",
+        lambda d: tr(d, "tr-3").__setitem__(
+            "language_spans",
+            [
+                {"char_start": 0, "char_end": 3, "language": "und"},
+                {"char_start": 3, "char_end": 7, "language": "und",
+                 "switch_kind": "unknown"},
+            ],
+        ),
+        [("E_OFFSET_ORDER", "transcript/streams/1/segments/0/language_spans/1/language")],
+        fixture="K-171",
+    )
+
 
 # ---------------------------------------------------------------------------
 # schema / validator code mutant 목록 — 저장소 밖 임시 사본에서만 적용한다
@@ -3195,6 +3229,12 @@ def validator_mutants() -> list[SourceMutant]:
             "            if len(matches) != 1 or matches[0] not in _declared_children(position):",
             "            if len(matches) != 1 or not (\n                matches[0] in _declared_children(position)\n                or (matches[0][:2].isalpha() and matches[0][:2].islower())\n            ):",
             ("LOCATION", "IM-231", "IM-232"),
+        ),
+        # --- 오너 결정 option 3 (REVIEW-026 D-04): language span 정규형 --------------
+        SourceMutant(
+            "VM-144", "맞닿은 같은 언어 span의 정규형 검사 제거", target,
+            "            if usable and usable[-1][1] == start and usable[-1][2] == tag:",
+            "            if False:", ("IM-236", "IM-237"),
         ),
         SourceMutant(
             "VM-143", "container 조기 반환의 정규화 생략", target,
