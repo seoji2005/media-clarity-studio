@@ -591,7 +591,15 @@ class ValidatorBoundaryTests(ContractCase):
             self.assertIn(f"    {name},", source, f"{name}를 schema_core에서 재사용하지 않는다")
         # strict loader는 재사용하되 **공개 API로 다시 내보내지 않는다** (REVIEW-027 R-02).
         self.assertIn("    load_strict as _load_strict,", source)
-        self.assertIn("    loads_strict as _loads_strict,", source)
+        # 문서 본문 파싱은 `loads_strict()`의 **두 hook을 그대로 합성**해서 지난다.
+        # `loads_strict()`가 `parse_int`를 받지 않아 전역 상한을 건드리지 않고는 계약
+        # 자릿수를 지킬 수 없기 때문이다 (REVIEW-027 R-02C). 다시 구현하지 않는다 —
+        # 같은 callable인지와 schema_core 구성이 그대로인지는
+        # `StrictLoaderCompositionTests`가 따로 고정한다.
+        self.assertIn("_reject_constant as _REJECT_CONSTANT", source)
+        self.assertIn("_reject_duplicate_keys as _REJECT_DUPLICATE_KEYS", source)
+        self.assertNotIn("def _reject_duplicate_keys", source)
+        self.assertNotIn("def _reject_constant", source)
         self.assertNotIn("class SchemaValidator", source)
         self.assertNotIn("def sort_findings", source)
 
@@ -2048,6 +2056,95 @@ class ManifestWriterClassificationTests(ContractCase):
             self.assertIn("MF-10", check_ids)
             self.assertTrue(all(row["passed"] for row in rows))
 
+    def _work_tree(self, tmp: str, pattern: str | None = None):
+        """임시 schema 사본과 manifest 사본. 저장소 파일은 건드리지 않는다."""
+
+        import shutil
+
+        work = Path(tmp)
+        schemas = work / "schemas"
+        shutil.copytree(SCHEMA_DIR, schemas)
+        manifest = work / "defense-manifest.json"
+        manifest.write_bytes((FIXTURE_DIR / "defense-manifest.json").read_bytes())
+        if pattern is not None:
+            name = "transcript-v1.schema.json"
+            document = json.loads((schemas / name).read_text(encoding="utf-8"))
+            document["$defs"]["extension_id"]["pattern"] = pattern
+            (schemas / name).write_text(
+                json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
+        return schemas, manifest
+
+    def test_classification_prefers_an_independent_witness(self) -> None:
+        """첫 candidate가 다른 제약에 걸렸다고 subsumed로 끝내지 않는다 (R-03C).
+
+        `^x-(?:[A-Za-z0-9][A-Za-z0-9._:-]*)?$`는 `aa`를 거부하지만 `x-`를 허용한다.
+        `x-`는 길이 2라서 `minLength: 3`만 어기는 **독립 witness**다.
+        """
+
+        import tempfile
+
+        target = "transcript#/$defs/extension_id|range:minLength"
+        with tempfile.TemporaryDirectory(prefix="mcs-029-witness-") as tmp:
+            schemas, _ = self._work_tree(
+                tmp, "^x-(?:[A-Za-z0-9][A-Za-z0-9._:-]*)?$"
+            )
+            rows = {
+                row["defense_id"]: row
+                for row in self.verify.classify_schema_defenses(FIXTURE_DIR, schemas)
+            }
+            row = rows[target]
+            self.assertTrue(row["detected"], row.get("note"))
+            self.assertFalse(
+                row.get("subsumed"),
+                "독립 witness가 있는데 여전히 equivalent로 판정한다",
+            )
+
+    def test_unmodified_schema_keeps_its_equivalent_classification(self) -> None:
+        """정본 schema에서는 두 minLength가 그대로 equivalent다 — 과잉 재분류 금지."""
+
+        rows = {
+            row["defense_id"]: row
+            for row in self.verify.classify_schema_defenses(FIXTURE_DIR, SCHEMA_DIR)
+        }
+        for target in (
+            "adapter-capability-report#/$defs/language_tag|range:minLength",
+            "transcript#/$defs/extension_id|range:minLength",
+        ):
+            with self.subTest(target):
+                self.assertTrue(rows[target].get("subsumed"))
+
+    def test_failed_self_check_preserves_the_existing_manifest_bytes(self) -> None:
+        """방어가 죽은 반례에서는 `--reclassify`여도 기존 bytes를 보존한다 (R-03C)."""
+
+        import tempfile
+
+        with tempfile.TemporaryDirectory(prefix="mcs-029-atomic-") as tmp:
+            schemas, manifest = self._work_tree(tmp, "^.*$")
+            before = manifest.read_bytes()
+            written, rows = self.verify.write_defense_manifest(
+                schemas, manifest, fixture_dir=FIXTURE_DIR, reclassify=True
+            )
+            self.assertIsNone(written)
+            self.assertEqual(manifest.read_bytes(), before)
+            self.assertFalse(manifest.with_name(manifest.name + ".staging").exists())
+            check_ids = {row["check_id"] for row in rows}
+            self.assertIn("MF-10", check_ids)
+            self.assertIn("MF-11", check_ids)
+
+    def test_successful_write_replaces_atomically_and_leaves_no_staging(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory(prefix="mcs-029-atomic-ok-") as tmp:
+            schemas, manifest = self._work_tree(tmp)
+            written, rows = self.verify.write_defense_manifest(
+                schemas, manifest, fixture_dir=FIXTURE_DIR, reclassify=False
+            )
+            self.assertIsNotNone(written)
+            self.assertTrue(all(row["passed"] for row in rows))
+            self.assertIn("MF-11", {row["check_id"] for row in rows})
+            self.assertFalse(manifest.with_name(manifest.name + ".staging").exists())
+
     def test_stale_equivalent_self_tests_are_declared(self) -> None:
         declared = {item.selftest_id: item for item in self.verify._DEFENSE_SELF_TESTS}
         self.assertIn("SD-14", declared)
@@ -2057,6 +2154,237 @@ class ManifestWriterClassificationTests(ContractCase):
         self.assertIn((("--write-manifest", "--reclassify"), 1), declared["SD-15"].steps)
         # 성공 경로(SD-13)는 분류 inventory까지 통과해야 한다.
         self.assertIn((("--classification-check",), 0), declared["SD-13"].steps)
+        # SD-16 — 첫 candidate 조기 성공 반례 (R-03C).
+        self.assertIn("SD-16", declared)
+        self.assertIn((("--classification-check",), 1), declared["SD-16"].steps)
+        self.assertIn((("--write-manifest",), 1), declared["SD-16"].steps)
+        self.assertIn((("--write-manifest", "--reclassify"), 0), declared["SD-16"].steps)
+
+
+
+
+# ---------------------------------------------------------------------------
+# REVIEW-027 R-02C — 공개 loader가 프로세스 전역 정수 정책을 건드리지 않는다
+# ---------------------------------------------------------------------------
+
+
+class IntegerLimitIsolationTests(unittest.TestCase):
+    """이전 판은 파싱 구간에서 `sys.set_int_max_str_digits()`를 올렸다 되돌렸다.
+
+    그 사이 무관한 thread의 정수 파싱 정책이 바뀌었고, 겹치는 loader 호출은 서로의 복원에
+    걸릴 수 있었다. 지금은 전역을 **읽지도 쓰지도 않는다.**
+    """
+
+    LOW_LIMIT = 640
+    BIG = "1" * 4300
+
+    def _fixture(self, documents: str) -> str:
+        return (
+            '{"case_id":"K-XX","title":"t","expected":{"valid":true,"findings":[]},'
+            f'"documents":{documents}}}'
+        )
+
+    def test_source_never_calls_the_process_global_setter(self) -> None:
+        """산문이 아니라 **실제 호출**을 본다 — AST에 그 호출이 없어야 한다."""
+
+        import ast
+
+        source = (REPO_ROOT / "src" / "media_clarity" / "subtitle_contracts.py").read_text(
+            encoding="utf-8"
+        )
+        calls = [
+            node
+            for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in ("set_int_max_str_digits", "get_int_max_str_digits")
+        ]
+        self.assertEqual(calls, [], "공개 loader 경로가 프로세스 전역 정수 상한을 읽거나 쓴다")
+
+    def test_public_loader_does_not_mutate_the_process_global(self) -> None:
+        """실제 production loader를 부르는 동안 setter가 **한 번도** 불리지 않는다."""
+
+        calls: list[int] = []
+        original = sys.set_int_max_str_digits
+        previous = sys.get_int_max_str_digits()
+
+        def spy(value: int) -> None:
+            calls.append(value)
+            original(value)
+
+        sys.set_int_max_str_digits = spy  # type: ignore[assignment]
+        try:
+            original(self.LOW_LIMIT)
+            calls.clear()
+            loads_documents(self._fixture('{"speech_segments":%s}' % self.BIG))
+            self.assertEqual(calls, [])
+            self.assertEqual(sys.get_int_max_str_digits(), self.LOW_LIMIT)
+        finally:
+            sys.set_int_max_str_digits = original  # type: ignore[assignment]
+            original(previous)
+
+    def test_overlapping_loader_calls_stay_deterministic(self) -> None:
+        """겹치는 실제 loader 호출도 4,300자리를 결정적으로 허용한다."""
+
+        import threading
+
+        text = self._fixture('{"speech_segments":%s}' % self.BIG)
+        failures: list[str] = []
+        previous = sys.get_int_max_str_digits()
+
+        def worker() -> None:
+            for _ in range(20):
+                try:
+                    loads_documents(text)
+                except Exception as exc:  # noqa: BLE001 - 실패 자체가 결함이다
+                    failures.append(f"{type(exc).__name__}: {exc}")
+
+        try:
+            sys.set_int_max_str_digits(self.LOW_LIMIT)
+            threads = [threading.Thread(target=worker) for _ in range(6)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+        finally:
+            sys.set_int_max_str_digits(previous)
+        self.assertEqual(failures, [], failures[:3])
+
+    def test_unrelated_thread_integer_policy_is_unchanged(self) -> None:
+        """loader가 도는 동안에도 무관한 thread의 정수 파싱 정책은 그대로다."""
+
+        import threading
+
+        text = self._fixture('{"speech_segments":%s}' % self.BIG)
+        leaked: list[int] = []
+        limits: set[int] = set()
+        stop = threading.Event()
+        previous = sys.get_int_max_str_digits()
+
+        def observer() -> None:
+            while not stop.is_set():
+                limits.add(sys.get_int_max_str_digits())
+                try:
+                    int("1" * (self.LOW_LIMIT + 1))
+                    leaked.append(1)
+                except ValueError:
+                    pass
+
+        def worker() -> None:
+            for _ in range(20):
+                loads_documents(text)
+
+        try:
+            sys.set_int_max_str_digits(self.LOW_LIMIT)
+            watcher = threading.Thread(target=observer)
+            watcher.start()
+            threads = [threading.Thread(target=worker) for _ in range(4)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            stop.set()
+            watcher.join()
+        finally:
+            sys.set_int_max_str_digits(previous)
+        self.assertEqual(leaked, [], "무관한 thread에서 계약 밖 정수 변환이 일시적으로 성공했다")
+        self.assertEqual(limits, {self.LOW_LIMIT})
+
+    def test_contract_boundary_holds_under_a_lowered_global(self) -> None:
+        previous = sys.get_int_max_str_digits()
+        try:
+            sys.set_int_max_str_digits(self.LOW_LIMIT)
+            for digits in (639, 641, 4300):
+                with self.subTest(digits=digits):
+                    loads_documents(self._fixture('{"speech_segments":%s}' % ("1" * digits)))
+            for digits in (4301, 10000):
+                with self.subTest(digits=digits):
+                    with self.assertRaises(NumberProfileError):
+                        loads_documents(
+                            self._fixture('{"speech_segments":[%s]}' % ("1" * digits))
+                        )
+        finally:
+            sys.set_int_max_str_digits(previous)
+
+    def test_other_rejections_are_not_relaxed_under_a_lowered_global(self) -> None:
+        previous = sys.get_int_max_str_digits()
+        try:
+            sys.set_int_max_str_digits(self.LOW_LIMIT)
+            for literal in (
+                '{"transcript":{},"transcript":{}}',
+                '{"speech_segments":[{"start_seconds":NaN}]}',
+                '{"speech_segments":[{"start_seconds":Infinity}]}',
+            ):
+                with self.subTest(literal[:28]):
+                    with self.assertRaises(JsonInputError):
+                        loads_documents(self._fixture(literal))
+            with self.assertRaises(NumberProfileError):
+                loads_documents(
+                    self._fixture('{"transcript":{"confidence":1.0000000000000001}}')
+                )
+        finally:
+            sys.set_int_max_str_digits(previous)
+
+
+class StrictLoaderCompositionTests(unittest.TestCase):
+    """합성 parse가 `schema_core.loads_strict()`의 계약을 그대로 지나는지 고정한다.
+
+    hook을 직접 합성하는 것은 `loads_strict()`가 `parse_int`를 받지 않기 때문이다. 그 선택이
+    조용히 갈라지지 않도록 (1) 같은 callable인지, (2) schema_core의 구성이 그대로인지,
+    (3) 실제 동작이 같은지를 함께 검사한다.
+    """
+
+    CORPUS = (
+        '{"a": 1, "b": [1, 2, {"c": "x"}]}',
+        '{"a": 0.1, "b": -3, "c": null, "d": true}',
+        '{"a": {"b": {"c": [1, {"d": "e"}]}}}',
+        '{"a": 1, "a": 2}',
+        '{"a": NaN}',
+        '{"a": Infinity}',
+        '{"a": -Infinity}',
+        '{"a": ',
+        '[]',
+        '7',
+    )
+
+    def test_composed_parse_uses_the_same_callables_as_schema_core(self) -> None:
+        from media_clarity import schema_core
+        from media_clarity import subtitle_contracts as module
+
+        self.assertIs(module._REJECT_DUPLICATE_KEYS, schema_core._reject_duplicate_keys)
+        self.assertIs(module._REJECT_CONSTANT, schema_core._reject_constant)
+
+    def test_schema_core_strict_loader_composition_is_unchanged(self) -> None:
+        """schema_core가 구성을 바꾸면 여기서 먼저 실패한다."""
+
+        source = (REPO_ROOT / "src" / "media_clarity" / "schema_core.py").read_text(
+            encoding="utf-8"
+        )
+        start = source.index("def loads_strict(")
+        body = source[start : source.index("def load_strict(", start)]
+        self.assertIn("object_pairs_hook=_reject_duplicate_keys", body)
+        self.assertIn("parse_constant=_reject_constant", body)
+        # 숫자 hook이 생기면 이 모듈이 합성할 이유가 사라진다 — 그때 다시 판단해야 한다.
+        self.assertNotIn("parse_int", body)
+        self.assertNotIn("parse_float", body)
+
+    def test_composed_parse_matches_loads_strict_outcome(self) -> None:
+        """profile을 지나는 입력에서 두 경로의 결과·예외가 같다."""
+
+        from media_clarity.schema_core import loads_strict
+        from media_clarity.subtitle_contracts import _parse_documents
+
+        for text in self.CORPUS:
+            with self.subTest(text[:24]):
+                try:
+                    expected: Any = ("value", loads_strict(text))
+                except Exception as exc:  # noqa: BLE001
+                    expected = ("error", type(exc).__name__)
+                try:
+                    observed: Any = ("value", _parse_documents(text))
+                except Exception as exc:  # noqa: BLE001
+                    observed = ("error", type(exc).__name__)
+                self.assertEqual(expected, observed)
 
 
 if __name__ == "__main__":

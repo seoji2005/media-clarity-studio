@@ -43,7 +43,6 @@ finding 위치는 실제 입력에서 해석 가능한 **선행 ``/`` 없는** J
 from __future__ import annotations
 
 import argparse
-import contextlib
 import functools
 import inspect
 import json
@@ -65,9 +64,10 @@ from media_clarity.schema_core import (
     SchemaContractError,
     SchemaValidator,
     load_strict as _load_strict,
-    loads_strict as _loads_strict,
     sort_findings,
 )
+from media_clarity.schema_core import _reject_constant as _REJECT_CONSTANT
+from media_clarity.schema_core import _reject_duplicate_keys as _REJECT_DUPLICATE_KEYS
 from media_clarity.schema_core import SchemaSet as _CoreSchemaSet
 
 
@@ -3843,40 +3843,13 @@ class FixtureOutcome:
 NUMBER_PROFILE_ID = "num-profile-v1"
 
 #: 정수 리터럴의 유효 자릿수 상한. **계약 상수**이며 런타임 설정이 아니다.
-#: 넘는 값은 `int()`를 부르기 **전에** 거부하므로 환경의 `ValueError`가 새지 않는다.
+#: 넘는 값은 변환을 시도하기 **전에** 거부하므로 환경의 `ValueError`가 새지 않는다.
 NUMBER_MAX_INTEGER_DIGITS = 4300
 
-
-@contextlib.contextmanager
-def _contract_integer_limit():
-    """정수 파싱 구간에서만 `int(str)` 자릿수 상한을 **계약값**으로 올린다.
-
-    CPython의 `int(str)` 자릿수 상한은 `PYTHONINTMAXSTRDIGITS`와
-    `sys.set_int_max_str_digits()`로 낮출 수 있는 **프로세스 전역 설정**이다. 그 값을 640으로
-    낮춘 환경에서는 계약이 허용하는 641~4,300자리 정수가 표준 라이브러리 `ValueError`로
-    거부됐다 — 같은 입력이 환경에 따라 다르게 판정된 것이다 (REVIEW-027 R-02).
-
-    `num-profile-v1`의 상한은 계약이 정하고 `_profile_integer()`가 **변환 전에** 강제한다.
-    그러니 파싱하는 동안만 전역 상한을 계약값까지 올려 두고 원래 값을 되돌린다. 상한을
-    없애지 않으므로 4,301자리 이상은 그대로 `NumberProfileError`다.
-
-    이미 계약값 이상이거나 무제한(0)인 환경에서는 아무것도 바꾸지 않는다.
-    """
-
-    getter = getattr(sys, "get_int_max_str_digits", None)
-    setter = getattr(sys, "set_int_max_str_digits", None)
-    if getter is None or setter is None:  # pragma: no cover - 3.11+에는 항상 있다
-        yield
-        return
-    previous = getter()
-    if previous == 0 or previous >= NUMBER_MAX_INTEGER_DIGITS:
-        yield
-        return
-    setter(NUMBER_MAX_INTEGER_DIGITS)
-    try:
-        yield
-    finally:
-        setter(previous)
+#: CPython이 **항상** `int(str)`로 변환해 주는 자릿수. `sys.set_int_max_str_digits()`는
+#: 이 값(`sys.int_info.str_digits_check_threshold`, 640) 미만으로 내릴 수 없고 0은 무제한이다.
+#: 그래서 이 이하 자릿수는 어떤 런타임 설정에서도 안전하게 `int()`를 쓸 수 있다.
+_ALWAYS_CONVERTIBLE_DIGITS = getattr(sys.int_info, "str_digits_check_threshold", 640)
 
 
 class NumberProfileError(JsonInputError):
@@ -3889,13 +3862,28 @@ class NumberProfileError(JsonInputError):
 
 
 def _profile_integer(literal: str) -> int:
+    """정수 리터럴을 **프로세스 전역 설정과 무관하게** 결정적으로 변환한다.
+
+    `int(str)`의 자릿수 상한만이 `PYTHONINTMAXSTRDIGITS`·`sys.set_int_max_str_digits()`로
+    바뀌는 프로세스 전역 설정이다. 이전 판은 파싱 구간에서 그 전역을 잠시 올렸다가 되돌렸는데,
+    겹치는 loader 호출끼리 서로의 복원에 걸려 유효한 입력이 실패했고 무관한 thread의 정수
+    파싱 정책도 그동안 달라졌다 (REVIEW-027 R-02C).
+
+    지금은 전역을 **읽지도 쓰지도 않는다.** 640자리 이하는 어떤 설정에서도 변환되므로 `int()`를
+    그대로 쓰고, 그보다 긴 리터럴만 `Decimal`을 거쳐 만든다. `Decimal` → `int` 변환은 문자열
+    변환이 아니라서 그 상한에 걸리지 않는다. 계약 상한은 변환 **전에** 강제하므로 4,301자리
+    이상은 그대로 거부된다.
+    """
+
     digits = literal.lstrip("+-")
     if len(digits) > NUMBER_MAX_INTEGER_DIGITS:
         raise NumberProfileError(
             f"{NUMBER_PROFILE_ID}: 정수 리터럴 유효 자릿수 {len(digits)}가 상한 "
             f"{NUMBER_MAX_INTEGER_DIGITS}를 넘는다"
         )
-    return int(literal)
+    if len(digits) <= _ALWAYS_CONVERTIBLE_DIGITS:
+        return int(literal)
+    return int(Decimal(literal))
 
 
 def _profile_decimal(literal: str) -> float:
@@ -3926,22 +3914,43 @@ def _profile_decimal(literal: str) -> float:
     return value
 
 
+def _parse_documents(text: str) -> Any:
+    """TASK-029의 **유일한** raw JSON 파서.
+
+    `schema_core.loads_strict()`가 쓰는 **바로 그 두 hook을 그대로 합성한다** —
+    `_reject_duplicate_keys`와 `_reject_constant`. 다시 구현하지도, 약화하지도 않는다.
+    거기에 `num-profile-v1`의 숫자 hook을 더한 것이 이 함수의 전부다.
+
+    hook을 직접 합성하는 이유는 하나다. 표준 `json.loads`의 기본 정수 변환은 `int(str)`이고,
+    그 자릿수 상한만이 **프로세스 전역 설정**이다. `loads_strict()`는 `parse_int`를 받지
+    않으므로, 그 함수를 그대로 부르면서 계약 상한(4,300자리)을 지키려면 전역을 건드리는
+    수밖에 없었다. 전역을 건드리면 겹치는 호출끼리 서로의 복원에 걸리고 무관한 thread의
+    정수 파싱 정책까지 바뀐다 (REVIEW-027 R-02C). 그래서 전역 대신 **hook**을 바꾼다.
+
+    두 hook이 `loads_strict()`의 것과 같다는 사실은 계약 test가 소스와 실제 동작 양쪽으로
+    고정한다 (`StrictLoaderCompositionTests`). schema_core가 구성을 바꾸면 그 test가 먼저
+    실패하므로 이 합성이 조용히 갈라지지 않는다.
+    """
+
+    return json.loads(
+        text,
+        object_pairs_hook=_REJECT_DUPLICATE_KEYS,
+        parse_constant=_REJECT_CONSTANT,
+        parse_int=_profile_integer,
+        parse_float=_profile_decimal,
+    )
+
+
 def assert_number_profile(text: str) -> None:
     """raw JSON 본문의 **모든 숫자 리터럴**을 profile로 검사한다.
 
-    `parse_int`/`parse_float` hook이 리터럴 문자열을 그대로 준다. 정수는 `int()`를 부르기
-    전에 자릿수를 보므로 4,301자리 입력이 표준 라이브러리 `ValueError`로 터지지 않는다.
-    JSON 구문 오류는 여기서 판단하지 않고 strict loader의 canonical message에 맡긴다.
+    `parse_int`/`parse_float` hook이 리터럴 문자열을 그대로 준다. 정수는 변환하기 전에
+    자릿수를 보므로 4,301자리 입력이 표준 라이브러리 `ValueError`로 터지지 않는다.
+    **profile 위반만** 올려보내고, 구문 오류·중복 key·상수 거부는 여기서 판단하지 않는다.
     """
 
     try:
-        with _contract_integer_limit():
-            json.loads(
-                text,
-                parse_int=_profile_integer,
-                parse_float=_profile_decimal,
-                parse_constant=lambda name: None,
-            )
+        _parse_documents(text)
     except NumberProfileError:
         raise
     except (ValueError, RecursionError):
@@ -3951,17 +3960,18 @@ def assert_number_profile(text: str) -> None:
 def loads_documents(text: str) -> Any:
     """TASK-029의 **raw JSON 입력 경계**. 실패는 언제나 `JsonInputError`다.
 
-    traceback으로 끝나는 경로를 남기지 않는다 (REVIEW-026 R-02). `schema_core`의 strict loader는
-    그대로 쓰고(중복 key·NaN/Infinity 거부), 그 바깥에서 profile 검사와 예외 정규화만 한다.
+    traceback으로 끝나는 경로를 남기지 않는다 (REVIEW-026 R-02). 중복 key·NaN/Infinity 거부는
+    `schema_core`의 hook을 그대로 써서 유지하고, 숫자는 `num-profile-v1`이 판정한다.
 
     **이것이 TASK-029의 공개 입력 경계다.** profile을 지나지 않는 `loads_strict`를 이 모듈의
     공개 API로 다시 내보내지 않는다 (REVIEW-027 R-02).
+
+    이 경로는 `sys.set_int_max_str_digits()`를 **호출하지 않는다.** 전역 정수 파싱 정책은
+    호출 전·중·후가 같고, 겹치는 호출도 서로를 방해하지 않는다 (REVIEW-027 R-02C).
     """
 
-    assert_number_profile(text)
     try:
-        with _contract_integer_limit():
-            return _loads_strict(text)
+        return _parse_documents(text)
     except JsonInputError:
         raise
     except json.JSONDecodeError as exc:

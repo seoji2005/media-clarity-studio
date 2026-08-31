@@ -1614,3 +1614,133 @@ PB-07은 여기에 더해 **실제로 존재하지 않는 leaf**를 가리키지
 §17.8의 오너 결정 항목 아홉 개는 그대로 열려 있다. 그중 5번(`loads_strict()` duplicate-key
 message의 전체 CLI 비식별화)은 `schema_core`의 message 정책이므로 이번 공개 API 정리로
 해소되지 않는다 — 이름만 내부 alias로 바뀌었을 뿐이다.
+
+
+## 21. REVIEW-027 재검토 반영 기록 (같은 브랜치의 일곱 번째 후속 커밋)
+
+이번 재검토가 지목한 차단 결함은 **R-02C·R-03C 둘뿐**이다. §19의 D-04 option 3(ADR-0029),
+EVALS의 공식 LID 정확도 `unsupported` 계약, ARCHITECTURE의 `document_refs` 공개 계약,
+§20의 R-01 공개 경계 probe(`PB-01`~`PB-08`)와 `VM-145`는 그대로 보존한다.
+
+### 21.1 R-02C — 공개 loader가 프로세스 전역 정수 정책을 바꿨다
+
+§20.2의 `_contract_integer_limit()`은 파싱하는 동안 `sys.set_int_max_str_digits()`를 올렸다가
+되돌렸다. 그 값은 **프로세스 전역**이므로,
+
+- 겹치는 두 loader 호출 중 먼저 끝난 쪽이 640으로 복원하면 나머지 호출이 계약 안 입력을
+  `NumberProfileError`로 실패시킬 수 있고,
+- loader가 도는 동안 **무관한 thread**의 `int("1" * 641)`이 일시적으로 성공한다.
+
+두 번째는 이 저장소에서 직접 재현했다 — 이전 고정 HEAD `c0dec2e`에서 loader 6 thread가 도는
+동안 관찰 thread의 계약 밖 정수 변환이 **8,693회** 성공했다. lock으로 감싸는 방식은 외부
+thread의 정책을 여전히 바꾸므로 해결이 아니다.
+
+**전역 대신 hook을 바꿨다.**
+
+| 무엇 | 어떻게 |
+|---|---|
+| 정수 변환 | `int(str)`의 자릿수 상한만이 전역 설정이다. 640자리(`sys.int_info.str_digits_check_threshold`, 어떤 설정에서도 변환되는 하한) 이하는 `int()`를 그대로 쓰고, 그보다 긴 리터럴만 `Decimal`을 거쳐 만든다. `Decimal` → `int`는 문자열 변환이 아니라 그 상한에 걸리지 않는다 |
+| 계약 상한 | `_profile_integer()`가 **변환 전에** 자릿수를 본다. 4,301자리 이상은 그대로 `NumberProfileError` → CLI `E_JSON` · exit 2 · traceback 0건 |
+| 중복 key·NaN/Infinity | `schema_core.loads_strict()`가 쓰는 **바로 그 두 hook**(`_reject_duplicate_keys`·`_reject_constant`)을 그대로 합성한다 |
+
+**왜 `loads_strict()`를 그대로 부르지 않는가.** 그 함수는 `parse_int`를 받지 않는다. 그러니
+계약 상한(4,300자리)을 지키면서 그 함수를 쓰려면 전역을 건드리는 수밖에 없었다. 그래서 함수가
+아니라 **그 함수의 구성요소**를 쓴다. 다시 구현하지도, 약화하지도 않는다. `schema_core.py`는
+무변경이다.
+
+이 선택이 조용히 갈라지지 않도록 `StrictLoaderCompositionTests`가 셋을 함께 고정한다.
+
+1. 합성에 쓰는 두 callable이 `schema_core`의 것과 **같은 객체**인가 (`assertIs`)
+2. `schema_core.loads_strict()`의 구성이 그대로인가 — 두 hook을 쓰고 `parse_int`/`parse_float`는
+   받지 않는가 (받게 되면 합성할 이유가 사라지므로 그때 다시 판단해야 한다)
+3. 정상·중복 key·`NaN`/`Infinity`·구문 오류·비객체 root 10건에서 두 경로의 **결과와 예외가
+   같은가** (차등 test)
+
+**확인한 불변식**
+
+| 불변식 | 확인 |
+|---|---|
+| 공개 loader가 전역 상한을 읽지도 쓰지도 않는다 | AST에 `set_int_max_str_digits`·`get_int_max_str_digits` 호출 0건 · 실제 loader 실행 중 setter spy 호출 **0회** |
+| 겹치는 실제 loader 호출이 결정적이다 | 전역 상한 640에서 6 thread × 20회 × 4,300자리 → 실패 **0건** |
+| 무관한 thread의 정책이 전·중·후 동일하다 | 관찰 thread의 641자리 `int()` 성공 **0회**, 관측된 전역 상한 집합 `{640}` |
+| 639·641·4,300자리 성공 | 유지 |
+| 4,301자리 이상 거부 | `E_JSON num-profile-v1 …` · traceback 0건 |
+| 중복 key·`NaN`/`Infinity`·lossy decimal 거부 | 유지 |
+| `load_strict`/`loads_strict` 공개 금지 | `__all__`과 module attribute 양쪽에 없음 |
+
+- 새 source mutant **`VM-146`**(정수 변환을 전역에 다시 종속시킨다) → `RJ-19`·`RJ-20`이 kill.
+- 새 source mutant **`VM-147`**(합성 parse에서 중복 key hook 제거) → `RJ-16`이 kill.
+- 새 source mutant **`VM-148`**(합성 parse에서 상수 거부 hook 제거) → `RJ-17`이 kill.
+  뒤 둘이 strict-loader 계약이 합성 경로에서 **실제로 살아 있음**을 증명한다.
+
+### 21.2 R-03C — 분류가 첫 candidate에서 조기 성공했다
+
+`_probe_defense()`는 위반 후보를 순서대로 시도하다가 **처음** 탐지된 후보에서 곧바로 반환했다.
+그 후보가 같은 노드의 다른 제약에 먼저 걸리면 `subsumed=True`가 되고, 뒤에 있는 진짜 witness는
+검사되지 않았다.
+
+재검토가 제시한 반례를 그대로 재현했다 — `extension_id.pattern`을
+`^x-(?:[A-Za-z0-9][A-Za-z0-9._:-]*)?$`로 바꾸면 `aa`는 pattern에 걸리지만 `x-`는 길이 2라서
+**`minLength: 3`만** 어긴다.
+
+| 단계 | 이전 고정 HEAD `c0dec2e` | 새 고정 HEAD |
+|---|---|---|
+| `--classification-check` | **0** (stale equivalent 유지) | **1** |
+| `--manifest-check` | 1 | 1 |
+| `--write-manifest` | **0** (stale 분류를 그대로 씀) | **1** (쓰지 않음) |
+| `--write-manifest --reclassify` | — | **0** — killable 292 / equivalent 1로 옳게 재분류 |
+| 재분류 뒤 `--manifest-check` · `--classification-check` | — | **0 · 0** |
+
+> `--check-only`는 이 반례에서 이전에도 지금도 exit 0이다. 그 명령은 fixture·input mutation·
+> leak·depth·raw JSON·공개 경계 probe만 돌리며 **분류 inventory를 포함하지 않는다.**
+> 분류의 gate는 `--classification-check`와 `make audit-task-029`이고, 둘 다 이 반례에서
+> 실패한다. 이 사실을 숨기지 않고 여기 적는다.
+
+바꾼 것:
+
+1. **모든 후보를 평가한다.** 독립적으로 killable한 witness가 하나라도 있으면 그것이 정답이며
+   `equivalent`로 판정하지 않는다. 탐지된 후보가 전부 가려진 경우에만 `subsumed`다.
+2. **instance site 루프에도 같은 우선순위를 적용한다.** 어떤 instance에서 가려졌다고 다른
+   instance에서도 가려지는 것은 아니다.
+3. 정본 schema에서는 두 `minLength`가 그대로 `equivalent`다 — 과잉 재분류가 일어나지 않는다는
+   것도 test로 고정했다.
+
+### 21.3 R-03C — manifest 원자성
+
+이전 판은 `path`에 **먼저 쓰고** 자기검증했다. 그래서 `^.*$`처럼 방어 자체가 죽은 반례에서
+`--write-manifest --reclassify`가 exit 1로 끝나면서도 파일은 이미 바뀌어 있었다.
+
+지금은 **임시 sibling(`defense-manifest.json.staging`)에 staging**하고,
+`--manifest-check` 자기검증과 **분류 inventory**가 둘 다 통과한 뒤에만 `os.replace()`로
+원자적으로 교체한다. 하나라도 실패하면 staging만 지우고 기존 bytes는 그대로 둔다.
+
+| 반례 | exit | manifest bytes | staging 잔여물 |
+|---|---|---|---|
+| `^.*$` + `--write-manifest` | 1 (`MF-10`·`MF-11`) | **보존** | 없음 |
+| `^.*$` + `--write-manifest --reclassify` | 1 (`MF-10`·`MF-11`) | **보존** | 없음 |
+| alternate pattern + `--write-manifest` | 1 (`MF-09`) | **보존** | 없음 |
+| alternate pattern + `--write-manifest --reclassify` | 0 | 재분류 반영 | 없음 |
+| 정본 schema + `--write-manifest` | 0 | 동일 내용 | 없음 |
+
+- 자기검증에 **`MF-11`**(자기검증을 모두 통과한 뒤에만 원자적으로 교체한다)을 더했다.
+  `--manifest-check`의 분모는 여전히 `MF-01`~`MF-08`이고, `MF-09`~`MF-11`은 갱신 도구의
+  자기검증이다.
+- drift 자기검증에 **`SD-16`**(alternate pattern 반례 6단계)을 더했다. `SD-15`에는 재분류
+  실패 뒤 `--manifest-check`가 여전히 1인지 확인하는 단계를 더했다. 분모 15 → **16**.
+
+### 21.4 보존 확인
+
+- §19의 D-04 option 3·ADR-0029, EVALS §4.5의 LID `unsupported` 계약,
+  ARCHITECTURE §2.1.1·§3.0.2는 **diff 0**이다.
+- §20의 `PB-01`~`PB-08` non-vacuous probe와 `VM-145`는 그대로다.
+- `schema_core.py`·`artifact_store.py`·`job_runtime.py`(`CACHE_KEY_FIELDS` 포함)·
+  `common-v1`·`job-v1`·다섯 신규 정본 schema는 무변경이다.
+- 신규 dependency·model·network·CI **0**, 새 error code **0**,
+  기존 test 삭제·skip·완화 **0건**.
+
+### 21.5 이 반영에서 정하지 않은 것
+
+§17.8의 오너 결정 항목 아홉 개는 그대로 열려 있다. `schema_core.loads_strict()`에
+`parse_int`/`parse_float` hook을 추가할지는 **schema_core 소유자의 결정**이며 여기서 바꾸지
+않았다. 추가된다면 이 모듈은 hook 합성을 그만두고 그 함수를 그대로 부르면 된다 —
+`StrictLoaderCompositionTests`가 그 시점을 실패로 알려 준다.

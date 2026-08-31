@@ -24,6 +24,7 @@ import argparse
 import copy
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -3240,13 +3241,23 @@ def validator_mutants() -> list[SourceMutant]:
         signature = inspect.signature(function)""",
             ("PB-01", "PB-02", "PB-03", "PB-04", "PB-05", "PB-06", "PB-07", "PB-08"),
         ),
-        # --- REVIEW-027 R-02: 계약 상한이 런타임 전역 설정에 종속되지 않는다 -------------
+        # --- REVIEW-027 R-02·R-02C: 전역 설정에 종속되지 않는 계약 상한 -------------------
         SourceMutant(
-            "VM-146", "정수 자릿수 상한을 런타임 전역 설정에 다시 종속시킨다", target,
-            "    setter(NUMBER_MAX_INTEGER_DIGITS)\n    try:\n        yield\n    finally:\n"
-            "        setter(previous)",
-            "    yield",
+            "VM-146", "정수 변환을 런타임 전역 설정에 다시 종속시킨다", target,
+            "    if len(digits) <= _ALWAYS_CONVERTIBLE_DIGITS:\n"
+            "        return int(literal)\n"
+            "    return int(Decimal(literal))",
+            "    return int(literal)",
             ("RJ-19", "RJ-20"),
+        ),
+        # 합성 parse가 schema_core의 두 hook을 **실제로** 쓰고 있는지 (R-02C).
+        SourceMutant(
+            "VM-147", "합성 parse에서 중복 key 거부 hook을 뺀다", target,
+            "        object_pairs_hook=_REJECT_DUPLICATE_KEYS,\n", "", ("RJ-16",),
+        ),
+        SourceMutant(
+            "VM-148", "합성 parse에서 NaN/Infinity 거부 hook을 뺀다", target,
+            "        parse_constant=_REJECT_CONSTANT,\n", "", ("RJ-17",),
         ),
         # --- 오너 결정 option 3 (REVIEW-026 D-04): language span 정규형 --------------
         SourceMutant(
@@ -4956,13 +4967,21 @@ def _defense_rows(fixture_dir: Path, schema_dir: Path) -> list[dict[str, Any]]:
             # 그 방어는 살아 있다. 전부 실패하면 마지막 실패 사유를 남긴다.
             outcome: dict[str, Any] = {}
             base_name, where = sites[0]
+            subsumed_site: tuple[dict[str, Any], str] | None = None
             for candidate_base, candidate_where in sites:
                 outcome = _probe_defense(
                     defense, sources[candidate_base], candidate_where, schemas, weakened, schema_dir
                 )
                 base_name, where = candidate_base, candidate_where
                 if outcome.get("detected"):
-                    break
+                    if not outcome.get("subsumed"):
+                        break
+                    # 어떤 instance에서 가려졌다고 다른 instance에서도 가려지는 것은 아니다.
+                    # 독립 witness가 있는 site를 계속 찾는다 (REVIEW-027 R-03C).
+                    subsumed_site = subsumed_site or (outcome, candidate_where)
+            else:
+                if subsumed_site is not None:
+                    outcome, where = subsumed_site
             (work / defense.schema_file).write_text(
                 originals[defense.schema_file], encoding="utf-8"
             )
@@ -5068,6 +5087,7 @@ def _probe_defense(
     # uniqueItems 위반은 **중복된 원소 위치**로 보고된다. 배열 위치가 아니다.
     spot = f"{where}/{len(current)}" if kind == "uniqueItems" and isinstance(current, list) else where
     last: dict[str, Any] | None = None
+    subsumed: dict[str, Any] | None = None
     for candidate in _violation_candidates(node, kind, current):
         def build_value(documents: dict, value: Any = candidate) -> str:
             _apply_at(documents, where, lambda _old: copy.deepcopy(value))
@@ -5077,9 +5097,17 @@ def _probe_defense(
         if result is None:
             continue
         if result.get("detected"):
-            return result
+            if not result.get("subsumed"):
+                # **독립 witness**를 찾았다. 이 방어는 단독으로 kill된다.
+                return result
+            # 첫 후보가 같은 노드의 다른 제약에 먼저 걸렸을 뿐일 수 있다. 남은 후보에
+            # 독립 witness가 있으면 그것이 정답이므로 여기서 멈추지 않는다
+            # (REVIEW-027 R-03C). 예: pattern이 `x-`를 허용하도록 바뀌면 `aa`는 pattern에
+            # 걸리지만 `x-`는 minLength만 어긴다.
+            subsumed = subsumed or result
+            continue
         last = result
-    return last or {"note": "이 방어를 깨는 입력 후보를 만들 수 없다"}
+    return subsumed or last or {"note": "이 방어를 깨는 입력 후보를 만들 수 없다"}
 
 
 # ---------------------------------------------------------------------------
@@ -5391,24 +5419,46 @@ def write_defense_manifest(
         "killable": killable,
         "equivalent": equivalent,
     }
-    path.write_text(
+    # **원자적 교체** (REVIEW-027 R-03C). 임시 sibling에 staging하고, manifest 자기검증과
+    # 분류 inventory가 **둘 다** 통과한 뒤에만 제자리로 옮긴다. 하나라도 실패하면 staging
+    # 파일만 지우고 기존 manifest bytes는 그대로 남는다 — 실패한 갱신이 저장소 상태를
+    # 반쯤 바꿔 놓지 않는다.
+    staged = path.with_name(path.name + ".staging")
+    staged.write_text(
         json.dumps(manifest, ensure_ascii=False, indent=1) + "\n", encoding="utf-8"
     )
-
-    self_check = run_manifest_check(schema_dir, path)
-    # 쓴 직후 **분류 inventory도** 다시 돌린다. drift 검사만으로는 방어가 아예 죽은
-    # 경우(위반 입력을 만들 수 없다)를 잡지 못한다 (REVIEW-027 R-03).
-    inventory = apply_defense_allowlist(
-        classify_schema_defenses(fixture_dir, schema_dir), path
-    )
-    broken = [row for row in inventory if not row["passed"]]
+    try:
+        self_check = run_manifest_check(schema_dir, staged)
+        # drift 검사만으로는 방어가 아예 죽은 경우(위반 입력을 만들 수 없다)를 잡지 못한다.
+        inventory = apply_defense_allowlist(
+            classify_schema_defenses(fixture_dir, schema_dir), staged
+        )
+        broken = [row for row in inventory if not row["passed"]]
+        self_check.append({
+            "check_id": "MF-10",
+            "title": "staging manifest에서 분류 inventory가 통과한다",
+            "passed": not broken,
+            "note": "" if not broken else "; ".join(
+                f"{row['defense_id']}: {row['note']}" for row in broken[:3]
+            ),
+        })
+        if not all(row["passed"] for row in self_check):
+            self_check.append({
+                "check_id": "MF-11",
+                "title": "자기검증에 실패한 갱신은 기존 manifest를 바꾸지 않는다",
+                "passed": False,
+                "note": "staging만 버리고 기존 manifest bytes를 보존했다",
+            })
+            return None, self_check
+        os.replace(staged, path)
+    finally:
+        if staged.exists():
+            staged.unlink()
     self_check.append({
-        "check_id": "MF-10",
-        "title": "쓴 직후 분류 inventory가 통과한다",
-        "passed": not broken,
-        "note": "" if not broken else "; ".join(
-            f"{row['defense_id']}: {row['note']}" for row in broken[:3]
-        ),
+        "check_id": "MF-11",
+        "title": "자기검증을 모두 통과한 뒤에만 원자적으로 교체한다",
+        "passed": True,
+        "note": "",
     })
     return manifest, self_check
 
@@ -5614,9 +5664,32 @@ _DEFENSE_SELF_TESTS: tuple[DriftSelfTest, ...] = (
           _change_pattern(_TRANSCRIPT_EXTENSION_POINTER, "^.*$")),),
         steps=(
             # minLength는 killable로 옳게 재분류되지만, pattern 방어가 죽어 분류
-            # inventory가 통과하지 못한다. 쓴 직후 자기검증이 그것을 잡는다.
+            # inventory가 staging 단계에서 통과하지 못한다. 기존 manifest는 그대로다.
             (("--write-manifest", "--reclassify"), 1),
             (("--classification-check",), 1),
+            (("--manifest-check",), 1),
+        ),
+        protect=(_MANIFEST_RELATIVE,),
+    ),
+    # --- REVIEW-027 R-03C: 첫 candidate 조기 성공으로 stale equivalent가 유지됐다 ---------
+    DriftSelfTest(
+        "SD-16",
+        "pattern이 `x-`를 허용하도록 바뀌어 minLength가 독립 방어가 되면 "
+        "분류 검사가 stale equivalent를 잡고, 명시적 재분류만이 일관된 파일을 만든다",
+        (("schemas/transcript-v1.schema.json",
+          _change_pattern(
+              _TRANSCRIPT_EXTENSION_POINTER, "^x-(?:[A-Za-z0-9][A-Za-z0-9._:-]*)?$"
+          )),),
+        steps=(
+            # `aa`는 pattern에 먼저 걸리지만 `x-`는 minLength만 어긴다. 첫 후보에서
+            # 멈추면 이 세 줄이 전부 0으로 잘못 통과한다.
+            (("--classification-check",), 1),
+            (("--manifest-check",), 1),
+            (("--write-manifest",), 1),
+            # 재분류를 명시하면 minLength가 killable로 옮겨가고 전부 일관되게 통과한다.
+            (("--write-manifest", "--reclassify"), 0),
+            (("--manifest-check",), 0),
+            (("--classification-check",), 0),
         ),
         protect=(_MANIFEST_RELATIVE,),
     ),
@@ -5729,9 +5802,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.schemas, fixture_dir=args.fixtures, reclassify=args.reclassify
         )
         if manifest is None:
-            # 분류가 바뀌었는데 명시적 승인이 없다. **쓰지 않고** 끝낸다.
+            # 쓰지 않았다 — 명시적 재분류 승인이 없거나(MF-09) staging 자기검증이
+            # 실패했다(MF-10·MF-11). 어느 쪽이든 기존 manifest bytes는 그대로다.
             for row in self_check:
-                print(f"WRITE-REFUSED {row['check_id']}: {row['title']} — {row['note']}")
+                if not row["passed"]:
+                    print(f"WRITE-REFUSED {row['check_id']}: {row['title']} — {row['note']}")
             return 1
         print(
             f"defense manifest 갱신 — killable {len(manifest['killable'])}건 · "
