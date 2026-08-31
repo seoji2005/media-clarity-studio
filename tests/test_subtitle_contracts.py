@@ -20,18 +20,25 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from media_clarity.schema_core import SCHEMA_DIALECT, SUPPORTED_KEYWORDS, SchemaContractError
+from media_clarity.schema_core import (
+    SCHEMA_DIALECT,
+    SUPPORTED_KEYWORDS,
+    SchemaContractError,
+    load_strict,
+)
 from media_clarity.subtitle_contracts import (
     ALLOWED_LINE_BREAK_SCALARS,
     DOCUMENT_KEYS,
     ERROR_CODES,
     EXPECTED_CASE_IDS,
+    JsonInputError,
     LID_GRID_INTERVAL_SECONDS,
     LID_GRID_ORIGIN_SECONDS,
     LID_METRIC_IDS,
     LID_NONFINITE_MESSAGE,
     LID_UNSUPPORTED_REASON,
     SCHEMA_FILES,
+    NumberProfileError,
     TARGET_LANGUAGE,
     ZERO_DENOMINATOR_REASON,
     SchemaSet,
@@ -44,8 +51,9 @@ from media_clarity.subtitle_contracts import (
     lid_frame_range,
     lid_has_simultaneous_conflict,
     lid_scoring_result,
+    load_documents,
     load_fixture,
-    load_strict,
+    loads_documents,
     normalize_language_spans,
     validate_documents,
     zero_denominator_result,
@@ -568,7 +576,8 @@ class ValidatorBoundaryTests(ContractCase):
         )
         imported = set(re.findall(r"^(?:from|import)\s+([A-Za-z_][A-Za-z0-9_.]*)", source, re.M))
         allowed = {
-            "__future__", "argparse", "functools", "inspect", "json", "math", "shutil",
+            "__future__", "argparse", "contextlib", "functools", "inspect", "json", "math",
+            "shutil",
             "subprocess", "sys", "tempfile", "dataclasses", "decimal", "pathlib", "typing",
             "media_clarity", "media_clarity.schema_core",
         }
@@ -578,8 +587,11 @@ class ValidatorBoundaryTests(ContractCase):
         source = (REPO_ROOT / "src" / "media_clarity" / "subtitle_contracts.py").read_text(
             encoding="utf-8"
         )
-        for name in ("SchemaValidator", "Finding", "load_strict", "sort_findings"):
+        for name in ("SchemaValidator", "Finding", "sort_findings"):
             self.assertIn(f"    {name},", source, f"{name}를 schema_core에서 재사용하지 않는다")
+        # strict loader는 재사용하되 **공개 API로 다시 내보내지 않는다** (REVIEW-027 R-02).
+        self.assertIn("    load_strict as _load_strict,", source)
+        self.assertIn("    loads_strict as _loads_strict,", source)
         self.assertNotIn("class SchemaValidator", source)
         self.assertNotIn("def sort_findings", source)
 
@@ -1774,6 +1786,277 @@ class LidScoringContract(unittest.TestCase):
             result = validate_documents(documents, schemas)
             self.assertFalse(result.valid)
             self.assertIn(("E_OFFSET_ORDER", location), result.pairs)
+
+
+
+
+# ---------------------------------------------------------------------------
+# REVIEW-027 R-01 — 공개 경계 probe는 vacuous하지 않다
+# ---------------------------------------------------------------------------
+
+
+class PublicBoundaryProbeTests(ContractCase):
+    """probe가 finding을 한 건도 내지 않으면 비노출 판정이 실행되지도 않는다."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.verify = _load_verify_script()
+
+    def test_every_probe_produces_findings_and_matches_its_contract(self) -> None:
+        rows = self.verify.run_boundary_probes(FIXTURE_DIR)
+        self.assertEqual(len(rows), 8)
+        for row in rows:
+            with self.subTest(row["probe_id"]):
+                self.assertTrue(row["passed"], row.get("note"))
+                self.assertGreaterEqual(row["findings"], row["min_findings"])
+                self.assertGreaterEqual(row["min_findings"], 1)
+                self.assertEqual(row["observed"], row["expected"])
+
+    def test_probes_cover_every_public_boundary_entry_point(self) -> None:
+        source = (REPO_ROOT / "src" / "media_clarity" / "subtitle_contracts.py").read_text(
+            encoding="utf-8"
+        )
+        decorated = source.count("@_public_boundary(")
+        probes = self.verify._boundary_cases(
+            self.verify._base_documents(FIXTURE_DIR)
+        )
+        self.assertEqual(len(probes), decorated)
+
+    def test_each_probe_folds_a_location_the_raw_check_would_expose(self) -> None:
+        """접힌 location이 raw location과 **실제로 다르다.**
+
+        이것이 참이어야 `_public_boundary`를 identity decorator로 바꾼 mutant가 probe에
+        잡힌다. mutant를 돌려 사후에 확인하는 대신 그 감도를 여기서 직접 고정한다.
+        """
+
+        probes = self.verify._boundary_cases(
+            self.verify._base_documents(FIXTURE_DIR)
+        )
+        for probe in probes:
+            with self.subTest(probe.probe_id):
+                folded = {(f.code, f.location) for f in probe.call()}
+                self.assertEqual(folded, set(probe.expected))
+                locations = {location for _, location in folded}
+                self.assertNotIn(probe.raw_location, locations)
+                self.assertNotEqual(probe.raw_location, "")
+
+    def test_identity_decorator_mutant_declares_every_probe_as_a_kill(self) -> None:
+        mutant = next(
+            item for item in self.verify.validator_mutants() if item.mutant_id == "VM-145"
+        )
+        self.assertEqual(
+            set(mutant.kills), {f"PB-0{index}" for index in range(1, 9)}
+        )
+        source = (REPO_ROOT / "src" / "media_clarity" / "subtitle_contracts.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(source.count(mutant.old), 1)
+
+    def test_boundary_probe_failures_reach_the_check_only_exit_code(self) -> None:
+        """probe가 실패하면 `--check-only`가 nonzero여야 한다."""
+
+        self.assertFalse(
+            self.verify._all_passed({"boundary_probes": [{"passed": False}]})
+        )
+        self.assertFalse(self.verify._all_passed({"raw_probes": [{"passed": False}]}))
+
+
+# ---------------------------------------------------------------------------
+# REVIEW-027 R-02 — 공개 입력 경계와 런타임 전역 설정
+# ---------------------------------------------------------------------------
+
+
+class PublicInputBoundaryTests(unittest.TestCase):
+    """profile을 지나지 않는 loader를 공개하지 않고, 계약 상한을 전역 설정에 맡기지 않는다."""
+
+    def test_strict_loader_is_not_part_of_the_public_api(self) -> None:
+        import media_clarity.subtitle_contracts as module
+
+        for name in ("load_strict", "loads_strict"):
+            self.assertNotIn(name, module.__all__)
+            self.assertFalse(hasattr(module, name), f"{name}가 아직 공개돼 있다")
+
+    def test_safe_input_boundary_is_public(self) -> None:
+        import media_clarity.subtitle_contracts as module
+
+        for name in ("load_documents", "loads_documents", "assert_number_profile"):
+            self.assertIn(name, module.__all__)
+            self.assertTrue(callable(getattr(module, name)))
+        self.assertIn("NumberProfileError", module.__all__)
+
+    def _fixture(self, documents: str) -> str:
+        return (
+            '{"case_id":"K-XX","title":"t","expected":{"valid":true,"findings":[]},'
+            f'"documents":{documents}}}'
+        )
+
+    def test_contract_limit_does_not_follow_a_lowered_runtime_global(self) -> None:
+        """640으로 낮춘 환경에서도 계약이 허용하는 자릿수는 거부되지 않는다."""
+
+        previous = sys.get_int_max_str_digits()
+        try:
+            sys.set_int_max_str_digits(640)
+            for digits in (639, 641, 4300):
+                with self.subTest(digits=digits):
+                    loads_documents(self._fixture('{"speech_segments":%s}' % ("1" * digits)))
+            with self.assertRaises(NumberProfileError):
+                loads_documents(self._fixture('{"speech_segments":[%s]}' % ("1" * 4301)))
+            # 계약 상한을 올려 두고 **되돌린다** — 전역 설정을 영구히 바꾸지 않는다.
+            self.assertEqual(sys.get_int_max_str_digits(), 640)
+        finally:
+            sys.set_int_max_str_digits(previous)
+
+    def test_lowered_runtime_global_does_not_relax_the_other_rejections(self) -> None:
+        previous = sys.get_int_max_str_digits()
+        try:
+            sys.set_int_max_str_digits(640)
+            for literal, _label in (
+                ('{"transcript":{},"transcript":{}}', "중복 key"),
+                ('{"speech_segments":[{"start_seconds":NaN}]}', "NaN"),
+                ('{"speech_segments":[{"start_seconds":Infinity}]}', "Infinity"),
+            ):
+                with self.subTest(literal[:24]):
+                    with self.assertRaises(JsonInputError):
+                        loads_documents(self._fixture(literal))
+            with self.assertRaises(NumberProfileError):
+                loads_documents(self._fixture('{"transcript":{"confidence":1.0000000000000001}}'))
+        finally:
+            sys.set_int_max_str_digits(previous)
+
+    def test_fixture_runner_passes_under_a_lowered_runtime_global(self) -> None:
+        """in-process 조작이 아니라 **실제 환경 변수**로도 같아야 한다."""
+
+        import subprocess
+
+        proc = subprocess.run(
+            [
+                sys.executable, "-m", "media_clarity.subtitle_contracts",
+                "--fixtures", str(FIXTURE_DIR), "--require-all-cases",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            env={
+                "PYTHONPATH": "src",
+                "PATH": "/usr/bin:/bin",
+                "HOME": str(REPO_ROOT),
+                "PYTHONIOENCODING": "utf-8",
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "PYTHONINTMAXSTRDIGITS": "640",
+            },
+            timeout=600,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout[-2000:] + proc.stderr[-2000:])
+        self.assertNotIn("Traceback", proc.stderr)
+
+
+# ---------------------------------------------------------------------------
+# REVIEW-027 R-03 — 갱신 도구가 stale equivalent를 물려받지 않는다
+# ---------------------------------------------------------------------------
+
+
+class ManifestWriterClassificationTests(ContractCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.verify = _load_verify_script()
+
+    def test_drift_is_computed_from_observation_not_from_ids(self) -> None:
+        previous = {
+            "killable": [{"defense_id": "a"}],
+            "equivalent": [{"defense_id": "b", "reason": "…"}],
+        }
+        present = {"a", "b", "c"}
+        # 관측이 이전 파일과 같으면 drift가 없다.
+        self.assertEqual(
+            self.verify._classification_drift(
+                previous, {"a": False, "b": True, "c": False}, present
+            ),
+            [],
+        )
+        # equivalent였던 b가 단독 kill 가능해지면 drift다 — ID만으로 물려받지 않는다.
+        self.assertEqual(
+            self.verify._classification_drift(
+                previous, {"a": False, "b": False, "c": False}, present
+            ),
+            ["b"],
+        )
+        # 새 방어가 처음부터 equivalent면 사람이 사유를 써야 하므로 drift다.
+        self.assertEqual(
+            self.verify._classification_drift(
+                previous, {"a": False, "b": True, "c": True}, present
+            ),
+            ["c"],
+        )
+        # 사라진 방어는 drift가 아니다 (삭제는 삭제다).
+        self.assertEqual(
+            self.verify._classification_drift(
+                previous, {"a": False}, {"a"}
+            ),
+            [],
+        )
+
+    def test_writer_refuses_stale_equivalent_without_explicit_reclassification(self) -> None:
+        """pattern을 `^.*$`로 약화하면 minLength가 독립 방어가 된다.
+
+        갱신 도구는 이전 분류를 ID로 물려받지 않고 **쓰지 않은 채** 실패해야 한다.
+        """
+
+        import shutil
+        import tempfile
+
+        with tempfile.TemporaryDirectory(prefix="mcs-029-writer-") as tmp:
+            work = Path(tmp)
+            schemas = work / "schemas"
+            shutil.copytree(SCHEMA_DIR, schemas)
+            manifest = work / "defense-manifest.json"
+            source = FIXTURE_DIR / "defense-manifest.json"
+            manifest.write_bytes(source.read_bytes())
+
+            name = "transcript-v1.schema.json"
+            document = json.loads((schemas / name).read_text(encoding="utf-8"))
+            document["$defs"]["extension_id"]["pattern"] = "^.*$"
+            (schemas / name).write_text(
+                json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
+
+            before = manifest.read_bytes()
+            written, rows = self.verify.write_defense_manifest(
+                schemas, manifest, fixture_dir=FIXTURE_DIR, reclassify=False
+            )
+            self.assertIsNone(written, "분류가 바뀌었는데 manifest를 썼다")
+            self.assertEqual(manifest.read_bytes(), before, "거부했는데 파일이 바뀌었다")
+            self.assertFalse(all(row["passed"] for row in rows))
+            self.assertIn("MF-09", {row["check_id"] for row in rows})
+
+    def test_write_self_check_includes_the_classification_inventory(self) -> None:
+        import shutil
+        import tempfile
+
+        with tempfile.TemporaryDirectory(prefix="mcs-029-writer-ok-") as tmp:
+            work = Path(tmp)
+            schemas = work / "schemas"
+            shutil.copytree(SCHEMA_DIR, schemas)
+            manifest = work / "defense-manifest.json"
+            manifest.write_bytes((FIXTURE_DIR / "defense-manifest.json").read_bytes())
+            written, rows = self.verify.write_defense_manifest(
+                schemas, manifest, fixture_dir=FIXTURE_DIR, reclassify=False
+            )
+            self.assertIsNotNone(written)
+            check_ids = {row["check_id"] for row in rows}
+            self.assertIn("MF-10", check_ids)
+            self.assertTrue(all(row["passed"] for row in rows))
+
+    def test_stale_equivalent_self_tests_are_declared(self) -> None:
+        declared = {item.selftest_id: item for item in self.verify._DEFENSE_SELF_TESTS}
+        self.assertIn("SD-14", declared)
+        self.assertIn("SD-15", declared)
+        # 갱신 도구는 두 경로 모두 nonzero여야 한다.
+        self.assertIn((("--write-manifest",), 1), declared["SD-14"].steps)
+        self.assertIn((("--write-manifest", "--reclassify"), 1), declared["SD-15"].steps)
+        # 성공 경로(SD-13)는 분류 inventory까지 통과해야 한다.
+        self.assertIn((("--classification-check",), 0), declared["SD-13"].steps)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 {
- "note": "TASK-029 schema 방어의 고정 기준. production schema에서 다시 생성하지 않는다 (REVIEW-025 R-06). 좌표와 의미값(fingerprint)을 함께 고정한다 (REVIEW-026 R-03). 갱신은 이 파일의 명시적 diff로만 한다.",
+ "note": "TASK-029 schema 방어의 고정 기준. production schema에서 다시 생성하지 않는다 (REVIEW-025 R-06). 좌표와 의미값(fingerprint)을 함께 고정한다 (REVIEW-026 R-03). killable/equivalent 분류는 갱신할 때마다 현재 schema에서 다시 관측한다 (REVIEW-027 R-03). 갱신은 이 파일의 명시적 diff로만 한다.",
  "digest": "sha256:0bc99acd6c6efaa74975282c5d34a9e950f0fb7351660a78ec0e75011187a6be",
  "killable": [
   {

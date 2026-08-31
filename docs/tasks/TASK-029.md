@@ -1484,3 +1484,133 @@ field는 적었지만, **어느 문서 조합에서 무엇이 필수인지**, `k
 - `schema_core.py`·`artifact_store.py`·`job_runtime.py`·`CACHE_KEY_FIELDS`·`common-v1`·
   `job-v1`은 계속 diff 0이고, 다섯 신규 정본 schema도 이전 고정 HEAD 대비 **diff 0**이다.
 - 새 dependency·model·network **0**, 새 error code **0**, 기존 test 삭제·skip·완화 **0건**.
+
+
+## 20. REVIEW-027 변경 요청 반영 기록 (같은 브랜치의 여섯 번째 후속 커밋)
+
+REVIEW-027이 지목한 차단 결함은 **R-01·R-02·R-03 셋뿐**이다. D-04(option 3 / ADR-0029),
+EVALS의 LID 미지원 계약, ARCHITECTURE의 `document_refs` 공개 계약, 다섯 정본 schema는
+그대로 보존한다.
+
+### 20.1 R-01 — 공개 경계 probe가 vacuous했다
+
+이전 고정 HEAD의 `PB-01`~`PB-08`은 **정상 문서를 그대로** 넣었다. 여덟 probe 모두 finding이 0건이라
+비노출 판정(`_unsafe_public_location`)이 한 번도 실행되지 않았고, `not bad`가 자동으로 참이었다.
+그래서 `_public_boundary`를 통째로 identity decorator로 바꿔도 probe가 통과했다.
+
+이제 각 probe는 **실제 결함**을 담고 네 가지를 함께 검증한다.
+
+1. finding이 `min_findings` 이상 — vacuous probe 자체를 금지한다
+2. 접힌 뒤의 `(code, location)` 집합이 정확히 계약대로다
+3. 남은 location이 정본 경로 패턴 안이다
+4. 민감 문자열이 location에도 message에도 없다
+
+| probe | 넣은 결함 | 접힌 location | wrapper가 없을 때의 raw location |
+|---|---|---|---|
+| `PB-01` `check_subtitle_document` | `language_overrides`의 동적 key가 표시시간 불변식을 깬다 | `subtitle_document/resolved_style/language_overrides` | `…/language_overrides/en-x-<민감값>/max_duration_seconds` |
+| `PB-02` `check_transcript` | segment duration이 0 · 호출자가 준 `location` | `""` | `<민감값>/streams/0/segments/0/end_seconds` |
+| `PB-03` `check_speech_segments` | `segment_id` 중복 · 호출자가 준 `location` | `""` | `<민감값>/1/segment_id` |
+| `PB-04` `check_translated_transcript` | `target_language="en"` · 호출자가 준 `location` | `""` | `<민감값>/target_language` |
+| `PB-05` `check_asr_capability_binding` | `feature_status.nbest`가 capability와 모순 · 호출자가 준 `location` | `""` | `<민감값>/feature_status/nbest` |
+| `PB-06` `check_translation_capability_binding` | `feature_status.translation_confidence` 모순 · 호출자가 준 `location` | `""` | `<민감값>/feature_status/translation_confidence` |
+| `PB-07` `check_document_ref_identity` | 컨텍스트 없음 + 문서에 그 leaf가 없다 | `translated_transcript` | `translated_transcript/source_transcript` |
+| `PB-08` `check_artifact_consistency` | 사용자 제어 최상위 key 아래 충돌 `ArtifactRef` | `""` | `<민감값>/byte_size` |
+
+세 유출 축을 함께 덮는다.
+
+- **문서 안의 동적 key** — `language_overrides`의 사용자 제어 tag (PB-01).
+- **호출자가 준 `location` 인자** — 호출자가 넘긴 문자열도 사용자 제어 값이며, 정본 어휘가
+  아니면 root로 접힌다 (PB-02~PB-06).
+- **문서 집합의 최상위 key** — `check_artifact_consistency`는 입력 mapping을 그대로 훑으므로
+  사용자 key가 location에 그대로 실릴 수 있다 (PB-08).
+
+PB-07은 여기에 더해 **실제로 존재하지 않는 leaf**를 가리키지 않는다는 §8 계약을 고정한다.
+
+- 새 source mutant **`VM-145`** — `_public_boundary`를 identity decorator로 만든다.
+  `PB-01`~`PB-08` **여덟 개 전부**를 kill 조건으로 선언했고, 임시 사본에서 여덟 개가 모두 실패해
+  `--check-only`가 nonzero로 끝난다.
+- `run_source_mutants()`의 `caught`에 **raw JSON probe와 공개 경계 probe 실패를 더했다.**
+  이 둘이 빠져 있으면 그 축만 깨는 mutant를 "잡히지 않음"으로 세게 된다.
+
+### 20.2 R-02 — 공개 입력 경계와 런타임 전역 설정
+
+**공개 API에서 strict loader를 뺐다.** `load_strict`/`loads_strict`는 `num-profile-v1`을 지나지
+않으므로 TASK-029의 입력 경계가 아니다. 이제 내부 alias(`_load_strict`/`_loads_strict`)로만 쓰고,
+공개하는 것은 `load_documents`·`loads_documents`·`assert_number_profile`·`NumberProfileError`·
+`NUMBER_PROFILE_ID`·`NUMBER_MAX_INTEGER_DIGITS`다. `schema_core`는 여전히 **무변경**이며 재구현도
+하지 않는다.
+
+**계약 상한을 런타임 전역 설정에서 떼어냈다.** CPython의 `int(str)` 자릿수 상한은
+`PYTHONINTMAXSTRDIGITS`와 `sys.set_int_max_str_digits()`로 낮출 수 있는 프로세스 전역 설정이다.
+그 값이 계약을 바꾸면 같은 입력이 환경에 따라 다르게 판정된다.
+
+| 입력 | 이전 고정 HEAD (`PYTHONINTMAXSTRDIGITS=640`) | 새 고정 HEAD (같은 환경) |
+|---|---|---|
+| 639자리 정수 | 통과 | 통과 |
+| **641자리 정수** | **`NumberProfileError`(잘못된 거부)** | **통과** |
+| **4,300자리 정수** | **`NumberProfileError`(잘못된 거부)** | **통과 — 계약 경계가 정확하다** |
+| 4,301자리 정수 | `NumberProfileError` | `NumberProfileError` · traceback 0건 |
+| 10,000자리 정수 | `NumberProfileError` | `NumberProfileError` · traceback 0건 |
+
+`_contract_integer_limit()`는 **파싱하는 동안만** 전역 상한을 계약값(4,300)까지 올리고
+`finally`에서 원래 값을 되돌린다. 상한을 없애지 않으므로 4,301자리 이상은 그대로 profile 거부다.
+이미 계약값 이상이거나 무제한(0)인 환경에서는 아무것도 바꾸지 않는다.
+
+- 새 raw JSON probe **`RJ-18`~`RJ-21`** — 전역 상한을 640으로 낮춘 채 production을 그대로 부른다
+  (639 대조군 / 641 / 4,300 / 4,301). 분모 17 → **21**.
+- 새 source mutant **`VM-146`** — 상한을 다시 전역 설정에 종속시킨다. `RJ-19`·`RJ-20`이 kill한다.
+- **완화 없음**: 중복 key·`NaN`/`Infinity`·lossy decimal 거부는 낮춘 상한 아래에서도 그대로다.
+  계약 test가 그 넷을 직접 확인한다.
+
+### 20.3 R-03 — 갱신 도구가 분류를 **다시 관측**한다
+
+이전 판의 `--write-manifest`는 이전 파일의 `defense_id`만 보고 equivalent 여부와 사유를 그대로
+옮겼다. 그래서 `extension_id`의 pattern을 `^.*$`로 약화해 `minLength`가 독립 방어가 된 뒤에도
+갱신 도구가 stale equivalent를 보존한 채 **exit 0**으로 끝났고 직후 `--manifest-check`도 통과했다.
+분류 오류는 전체 감사에서만 드러났다.
+
+| 단계 | 이전 고정 HEAD | 새 고정 HEAD |
+|---|---|---|
+| `--manifest-check` (약화 직후) | 1 | 1 |
+| `--write-manifest` | **0 · stale equivalent 보존** | **1 · 파일을 쓰지 않는다** (`MF-09`) |
+| `--write-manifest --reclassify` | — | **1** — `minLength`는 killable로 옳게 재분류되지만 pattern 방어가 죽어 분류 inventory가 통과하지 못한다 (`MF-10`) |
+| `--manifest-check` (write 뒤) | 0 (거짓 통과) | 1 |
+| `--classification-check` | — | 1 |
+
+바꾼 것:
+
+1. **분류의 정본은 관측이다.** `classify_schema_defenses()`가 manifest를 읽지 않고 현재
+   schema에서 각 방어의 `subsumed`를 다시 관측한다. manifest는 그 관측을 **고정**할 뿐이다.
+2. 관측이 이전 파일의 분류와 다르면 — 새 방어가 처음부터 equivalent인 경우 포함 —
+   `--reclassify` 없이는 **쓰지 않고** exit 1이다 (`MF-09`). 사라진 방어는 drift가 아니다.
+3. 쓴 직후 자기검증이 `--manifest-check`뿐 아니라 **분류 inventory까지** 돌린다 (`MF-10`).
+   둘 다 통과할 때만 exit 0이다. drift 검사만으로는 방어가 아예 죽은 경우를 잡지 못한다.
+4. 재분류로 새로 equivalent가 된 방어의 사유는 이전 사유를 물려받지 않고 **재분류 표식**을
+   붙여 사람이 diff에서 바로 알아보게 한다.
+5. 새 CLI `--classification-check` — 관측과 manifest 분류의 일치만 따로 확인한다.
+
+- `--manifest-check`의 분모는 `MF-01`~`MF-08` 그대로다. `--write-manifest`의 **자기검증**에
+  `MF-09`(명시적 재분류 없이 쓰지 않는다)와 `MF-10`(쓴 직후 분류 inventory가 통과한다)이
+  더해졌다.
+- drift 자기검증에 **`SD-14`**(재분류 승인 없이 갱신 거부)와 **`SD-15`**(승인해도 죽은 방어는
+  성공하지 못함)를 더했고, 성공 경로인 `SD-13`에 `--classification-check` 단계를 더했다.
+  분모 13 → **15**.
+- `AS-04`(갱신 도구가 stale digest를 쓰면 스스로 실패)는 그대로 유지된다.
+
+### 20.4 보존 확인
+
+- D-04 option 3와 **ADR-0029**, EVALS §4.5의 공식 LID 정확도 `unsupported` 계약, §19가 고정한
+  다섯 경계는 **문구·기계 정본 모두 무변경**이다.
+- ARCHITECTURE §2.1.1의 `document_refs` 공개 계약도 무변경이다.
+- 다섯 신규 정본 schema는 이전 고정 HEAD 대비 **diff 0**이고, `schema_core.py`·
+  `artifact_store.py`·`job_runtime.py`(`CACHE_KEY_FIELDS` 포함)·`common-v1`·`job-v1`은
+  `main` 대비 **diff 0**이다.
+- 신규 dependency·model·network·CI **0**, 새 error code **0**.
+- **기존 test 삭제·skip·완화 0건.** `defense-manifest.json`의 변경은 `note` 한 줄뿐이며
+  `killable`/`equivalent` 목록과 digest는 그대로다.
+
+### 20.5 이 반영에서 정하지 않은 것
+
+§17.8의 오너 결정 항목 아홉 개는 그대로 열려 있다. 그중 5번(`loads_strict()` duplicate-key
+message의 전체 CLI 비식별화)은 `schema_core`의 message 정책이므로 이번 공개 API 정리로
+해소되지 않는다 — 이름만 내부 alias로 바뀌었을 뿐이다.

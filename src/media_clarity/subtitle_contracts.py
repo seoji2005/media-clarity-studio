@@ -43,6 +43,7 @@ finding 위치는 실제 입력에서 해석 가능한 **선행 ``/`` 없는** J
 from __future__ import annotations
 
 import argparse
+import contextlib
 import functools
 import inspect
 import json
@@ -63,8 +64,8 @@ from media_clarity.schema_core import (
     JsonInputError,
     SchemaContractError,
     SchemaValidator,
-    load_strict,
-    loads_strict,
+    load_strict as _load_strict,
+    loads_strict as _loads_strict,
     sort_findings,
 )
 from media_clarity.schema_core import SchemaSet as _CoreSchemaSet
@@ -91,11 +92,15 @@ __all__ = [
     "SCHEMA_VERSION",
     "SchemaContractError",
     "SchemaSet",
+    "NUMBER_MAX_INTEGER_DIGITS",
+    "NUMBER_PROFILE_ID",
+    "NumberProfileError",
     "SchemaValidator",
     "TARGET_LANGUAGE",
     "UNDETERMINED_LANGUAGE",
     "ZERO_DENOMINATOR_REASON",
     "ValidationResult",
+    "assert_number_profile",
     "check_asr_capability_binding",
     "check_artifact_consistency",
     "check_document_ref_identity",
@@ -118,8 +123,8 @@ __all__ = [
     "lid_frame_range",
     "lid_has_simultaneous_conflict",
     "lid_scoring_result",
-    "load_strict",
-    "loads_strict",
+    "load_documents",
+    "loads_documents",
     "normalize_language_spans",
     "sort_findings",
     "validate_documents",
@@ -236,7 +241,7 @@ def _schema_documents() -> dict[str, Any]:
         documents: dict[str, Any] = {}
         for name in SCHEMA_FILES:
             try:
-                documents[name] = load_strict(DEFAULT_SCHEMA_DIR / name)
+                documents[name] = _load_strict(DEFAULT_SCHEMA_DIR / name)
             except (JsonInputError, OSError):  # pragma: no cover - 정본이 없으면 어휘가 빈다
                 continue
         _SCHEMA_DOCUMENTS = documents
@@ -3837,9 +3842,41 @@ class FixtureOutcome:
 #: 문서 계약은 TASK-029 §18에 있다.
 NUMBER_PROFILE_ID = "num-profile-v1"
 
-#: 정수 리터럴의 유효 자릿수 상한. CPython 기본 `int` 문자열 변환 상한과 같은 값을 계약으로
-#: 고정한다. 넘는 값은 `int()`를 부르기 **전에** 거부하므로 환경의 `ValueError`가 새지 않는다.
+#: 정수 리터럴의 유효 자릿수 상한. **계약 상수**이며 런타임 설정이 아니다.
+#: 넘는 값은 `int()`를 부르기 **전에** 거부하므로 환경의 `ValueError`가 새지 않는다.
 NUMBER_MAX_INTEGER_DIGITS = 4300
+
+
+@contextlib.contextmanager
+def _contract_integer_limit():
+    """정수 파싱 구간에서만 `int(str)` 자릿수 상한을 **계약값**으로 올린다.
+
+    CPython의 `int(str)` 자릿수 상한은 `PYTHONINTMAXSTRDIGITS`와
+    `sys.set_int_max_str_digits()`로 낮출 수 있는 **프로세스 전역 설정**이다. 그 값을 640으로
+    낮춘 환경에서는 계약이 허용하는 641~4,300자리 정수가 표준 라이브러리 `ValueError`로
+    거부됐다 — 같은 입력이 환경에 따라 다르게 판정된 것이다 (REVIEW-027 R-02).
+
+    `num-profile-v1`의 상한은 계약이 정하고 `_profile_integer()`가 **변환 전에** 강제한다.
+    그러니 파싱하는 동안만 전역 상한을 계약값까지 올려 두고 원래 값을 되돌린다. 상한을
+    없애지 않으므로 4,301자리 이상은 그대로 `NumberProfileError`다.
+
+    이미 계약값 이상이거나 무제한(0)인 환경에서는 아무것도 바꾸지 않는다.
+    """
+
+    getter = getattr(sys, "get_int_max_str_digits", None)
+    setter = getattr(sys, "set_int_max_str_digits", None)
+    if getter is None or setter is None:  # pragma: no cover - 3.11+에는 항상 있다
+        yield
+        return
+    previous = getter()
+    if previous == 0 or previous >= NUMBER_MAX_INTEGER_DIGITS:
+        yield
+        return
+    setter(NUMBER_MAX_INTEGER_DIGITS)
+    try:
+        yield
+    finally:
+        setter(previous)
 
 
 class NumberProfileError(JsonInputError):
@@ -3894,16 +3931,17 @@ def assert_number_profile(text: str) -> None:
 
     `parse_int`/`parse_float` hook이 리터럴 문자열을 그대로 준다. 정수는 `int()`를 부르기
     전에 자릿수를 보므로 4,301자리 입력이 표준 라이브러리 `ValueError`로 터지지 않는다.
-    JSON 구문 오류는 여기서 판단하지 않고 `loads_strict`의 canonical message에 맡긴다.
+    JSON 구문 오류는 여기서 판단하지 않고 strict loader의 canonical message에 맡긴다.
     """
 
     try:
-        json.loads(
-            text,
-            parse_int=_profile_integer,
-            parse_float=_profile_decimal,
-            parse_constant=lambda name: None,
-        )
+        with _contract_integer_limit():
+            json.loads(
+                text,
+                parse_int=_profile_integer,
+                parse_float=_profile_decimal,
+                parse_constant=lambda name: None,
+            )
     except NumberProfileError:
         raise
     except (ValueError, RecursionError):
@@ -3913,13 +3951,17 @@ def assert_number_profile(text: str) -> None:
 def loads_documents(text: str) -> Any:
     """TASK-029의 **raw JSON 입력 경계**. 실패는 언제나 `JsonInputError`다.
 
-    traceback으로 끝나는 경로를 남기지 않는다 (REVIEW-026 R-02). `schema_core.loads_strict`는
+    traceback으로 끝나는 경로를 남기지 않는다 (REVIEW-026 R-02). `schema_core`의 strict loader는
     그대로 쓰고(중복 key·NaN/Infinity 거부), 그 바깥에서 profile 검사와 예외 정규화만 한다.
+
+    **이것이 TASK-029의 공개 입력 경계다.** profile을 지나지 않는 `loads_strict`를 이 모듈의
+    공개 API로 다시 내보내지 않는다 (REVIEW-027 R-02).
     """
 
     assert_number_profile(text)
     try:
-        return loads_strict(text)
+        with _contract_integer_limit():
+            return _loads_strict(text)
     except JsonInputError:
         raise
     except json.JSONDecodeError as exc:

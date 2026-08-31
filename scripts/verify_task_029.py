@@ -3230,6 +3230,24 @@ def validator_mutants() -> list[SourceMutant]:
             "            if len(matches) != 1 or not (\n                matches[0] in _declared_children(position)\n                or (matches[0][:2].isalpha() and matches[0][:2].islower())\n            ):",
             ("LOCATION", "IM-231", "IM-232"),
         ),
+        # --- REVIEW-027 R-01: 공개 경계 wrapper -------------------------------------
+        SourceMutant(
+            "VM-145", "_public_boundary를 identity decorator로 만든다", target,
+            """    def decorate(function):
+        signature = inspect.signature(function)""",
+            """    def decorate(function):
+        return function
+        signature = inspect.signature(function)""",
+            ("PB-01", "PB-02", "PB-03", "PB-04", "PB-05", "PB-06", "PB-07", "PB-08"),
+        ),
+        # --- REVIEW-027 R-02: 계약 상한이 런타임 전역 설정에 종속되지 않는다 -------------
+        SourceMutant(
+            "VM-146", "정수 자릿수 상한을 런타임 전역 설정에 다시 종속시킨다", target,
+            "    setter(NUMBER_MAX_INTEGER_DIGITS)\n    try:\n        yield\n    finally:\n"
+            "        setter(previous)",
+            "    yield",
+            ("RJ-19", "RJ-20"),
+        ),
         # --- 오너 결정 option 3 (REVIEW-026 D-04): language span 정규형 --------------
         SourceMutant(
             "VM-144", "맞닿은 같은 언어 span의 정규형 검사 제거", target,
@@ -3823,8 +3841,8 @@ def run_defense_coverage(schemas: SchemaSet, fixture_dir: Path) -> list[dict[str
         for probe in probes:
             probe.unit()
         # 공개 경계의 정규화도 방어면이다 — 직접 호출로 발화시킨다.
-        for _, _, call in boundary:
-            call()
+        for probe in boundary:
+            probe.call()
     finally:
         sys.settrace(previous)
 
@@ -3861,40 +3879,58 @@ def _raw_fixture(documents_literal: str) -> str:
 #: `(probe_id, 설명, raw JSON 본문, 기대)`.
 #: 기대는 `("profile", …)` = `num-profile-v1` 거부, `("input", …)` = 그 밖의 안정 입력 오류,
 #: `("pairs", [...])` = 파싱 성공 뒤 정확한 `(code, location)` 집합.
-_RAW_PROBES: tuple[tuple[str, str, str, tuple[str, Any]], ...] = (
+#: 런타임 전역 `int(str)` 자릿수 상한을 낮춘 환경. 계약 상한(4,300)보다 낮게 잡아
+#: 같은 입력이 환경에 따라 다르게 판정되지 않는지 본다 (REVIEW-027 R-02).
+_LOW_INT_LIMIT = 640
+
+#: `(probe_id, title, raw text, (kind, expected pairs), 전역 int 상한|None)`
+_RAW_PROBES: tuple[tuple[str, str, str, tuple[str, Any], int | None], ...] = (
     ("RJ-01", "4,301자리 양의 정수", _raw_fixture('{"speech_segments":[%s]}' % _OVER_LIMIT_DIGITS),
-     ("profile", None)),
+     ("profile", None), None),
     ("RJ-02", "4,301자리 음의 정수", _raw_fixture('{"speech_segments":[-%s]}' % _OVER_LIMIT_DIGITS),
-     ("profile", None)),
+     ("profile", None), None),
     ("RJ-03", "10,000자리 양의 정수", _raw_fixture('{"speech_segments":[%s]}' % _HUGE_DIGITS),
-     ("profile", None)),
+     ("profile", None), None),
     ("RJ-04", "10,000자리 음의 정수", _raw_fixture('{"speech_segments":[-%s]}' % _HUGE_DIGITS),
-     ("profile", None)),
+     ("profile", None), None),
     ("RJ-05", "4,300자리 정수는 profile 안이다 — 경계가 정확하다",
      _raw_fixture('{"speech_segments":%s}' % ("1" * 4300)),
-     ("pairs", [("E_SCHEMA", "speech_segments")])),
+     ("pairs", [("E_SCHEMA", "speech_segments")]), None),
     ("RJ-06", "confidence 1.0000000000000001이 1.0으로 반올림된다",
-     _raw_fixture('{"transcript":{"confidence":1.0000000000000001}}'), ("profile", None)),
+     _raw_fixture('{"transcript":{"confidence":1.0000000000000001}}'), ("profile", None), None),
     ("RJ-07", "시작 시각 -1e-400이 -0.0으로 반올림된다",
-     _raw_fixture('{"speech_segments":[{"start_seconds":-1e-400}]}'), ("profile", None)),
+     _raw_fixture('{"speech_segments":[{"start_seconds":-1e-400}]}'), ("profile", None), None),
     ("RJ-08", "min_gap_seconds -1e-400이 -0.0으로 반올림된다",
      _raw_fixture('{"subtitle_document":{"resolved_style":{"min_gap_seconds":-1e-400}}}'),
-     ("profile", None)),
+     ("profile", None), None),
     ("RJ-09", "max_cps 1e-400이 0.0으로 반올림된다",
      _raw_fixture('{"subtitle_document":{"resolved_style":{"max_cps":1e-400}}}'),
-     ("profile", None)),
+     ("profile", None), None),
     ("RJ-10", "1e400은 binary64에서 유한하지 않다",
-     _raw_fixture('{"speech_segments":[{"start_seconds":1e400}]}'), ("profile", None)),
+     _raw_fixture('{"speech_segments":[{"start_seconds":1e400}]}'), ("profile", None), None),
     ("RJ-11", "정상 표기 decimal은 profile이 막지 않는다",
      _raw_fixture('{"speech_segments":[{"start_seconds":0.1,"end_seconds":0.30000000000000004}]}'),
-     ("pairs", None)),
-    ("RJ-12", "documents가 빈 배열이다", _raw_fixture("[]"), ("pairs", [("E_SCHEMA", "")])),
-    ("RJ-13", "documents가 null이다", _raw_fixture("null"), ("pairs", [("E_SCHEMA", "")])),
-    ("RJ-14", "documents가 정수다", _raw_fixture("7"), ("pairs", [("E_SCHEMA", "")])),
-    ("RJ-15", "JSON 구문 오류", '{"case_id": ', ("input", None)),
-    ("RJ-16", "중복 key", _raw_fixture('{"transcript":{},"transcript":{}}'), ("input", None)),
+     ("pairs", None), None),
+    ("RJ-12", "documents가 빈 배열이다", _raw_fixture("[]"), ("pairs", [("E_SCHEMA", "")]), None),
+    ("RJ-13", "documents가 null이다", _raw_fixture("null"), ("pairs", [("E_SCHEMA", "")]), None),
+    ("RJ-14", "documents가 정수다", _raw_fixture("7"), ("pairs", [("E_SCHEMA", "")]), None),
+    ("RJ-15", "JSON 구문 오류", '{"case_id": ', ("input", None), None),
+    ("RJ-16", "중복 key", _raw_fixture('{"transcript":{},"transcript":{}}'), ("input", None), None),
     ("RJ-17", "NaN 상수", _raw_fixture('{"speech_segments":[{"start_seconds":NaN}]}'),
-     ("input", None)),
+     ("input", None), None),
+    # --- REVIEW-027 R-02: 계약 상한이 런타임 전역 설정에 종속되지 않는다 -----------------
+    ("RJ-18", "전역 상한 640에서 639자리 정수 (전역 상한 아래 — 대조군)",
+     _raw_fixture('{"speech_segments":%s}' % ("1" * 639)),
+     ("pairs", [("E_SCHEMA", "speech_segments")]), _LOW_INT_LIMIT),
+    ("RJ-19", "전역 상한 640에서 641자리 정수 — 계약이 허용하므로 거부하지 않는다",
+     _raw_fixture('{"speech_segments":%s}' % ("1" * 641)),
+     ("pairs", [("E_SCHEMA", "speech_segments")]), _LOW_INT_LIMIT),
+    ("RJ-20", "전역 상한 640에서 4,300자리 정수 — 계약 경계는 그대로다",
+     _raw_fixture('{"speech_segments":%s}' % ("1" * 4300)),
+     ("pairs", [("E_SCHEMA", "speech_segments")]), _LOW_INT_LIMIT),
+    ("RJ-21", "전역 상한 640에서 4,301자리 정수 — 계약 상한은 여전히 profile 거부다",
+     _raw_fixture('{"speech_segments":[%s]}' % _OVER_LIMIT_DIGITS),
+     ("profile", None), _LOW_INT_LIMIT),
 )
 
 
@@ -3905,8 +3941,13 @@ def run_raw_input_probes(schemas: SchemaSet) -> list[dict[str, Any]]:
     """
 
     rows: list[dict[str, Any]] = []
-    for probe_id, title, text, (kind, expected) in _RAW_PROBES:
+    for probe_id, title, text, (kind, expected), limit in _RAW_PROBES:
         note = ""
+        restore = sys.get_int_max_str_digits()
+        if limit is not None:
+            # **production을 그대로 부른다.** 전역 상한만 낮춰 두고, 계약이 그 설정에
+            # 종속되는지 본다 (REVIEW-027 R-02).
+            sys.set_int_max_str_digits(limit)
         try:
             fixture = contracts.loads_documents(text)
         except contracts.NumberProfileError as exc:
@@ -3929,6 +3970,9 @@ def run_raw_input_probes(schemas: SchemaSet) -> list[dict[str, Any]]:
             except Exception as exc:  # noqa: BLE001
                 observed, note = "crash", f"{type(exc).__name__}: {exc}"
 
+        if limit is not None:
+            sys.set_int_max_str_digits(restore)
+
         passed = observed == kind
         if passed and kind == "pairs" and expected is not None:
             passed = pairs == sorted([code, location] for code, location in expected)
@@ -3938,6 +3982,7 @@ def run_raw_input_probes(schemas: SchemaSet) -> list[dict[str, Any]]:
             "expected": kind,
             "observed": observed,
             "pairs": pairs,
+            "int_max_str_digits": limit,
             "passed": passed,
             "note": note if not passed else "",
         })
@@ -3952,55 +3997,200 @@ def run_raw_input_probes(schemas: SchemaSet) -> list[dict[str, Any]]:
 # 같은 raw key가 그대로 간다. 공개 진입점 각각을 직접 호출해 확인한다.
 
 
-def _boundary_cases(sources: dict[str, dict]) -> list[tuple[str, str, Callable[[], Any]]]:
-    documents = copy.deepcopy(sources["base"])
-    subtitle = documents["subtitle_document"]
-    subtitle["resolved_style"]["language_overrides"]["en-x-secret"] = {"max_cps": -1}
-    refs = dict(documents.get(contracts.REF_CONTEXT_KEY) or {})
-    refs["speaker_label"] = SENSITIVE_PROBE
-    leaky_documents = dict(documents)
-    leaky_documents[contracts.REF_CONTEXT_KEY] = refs
-    segments = copy.deepcopy(documents["speech_segments"])
-    transcript = copy.deepcopy(documents["transcript"])
-    translated = copy.deepcopy(documents["translated_transcript"])
+@dataclass(frozen=True)
+class BoundaryProbe:
+    """공개 `check_*` 진입점 하나에 대한 **non-vacuous** probe (REVIEW-027 R-01).
+
+    이전 판은 정상 문서를 그대로 넣어 finding이 **0건**이었다. finding이 없으면 비노출
+    판정이 한 번도 실행되지 않으므로, `_public_boundary`를 통째로 identity decorator로
+    바꿔도 probe가 통과했다. 이제 각 probe는
+
+    1. 반드시 **실제 finding을 낸다** (`min_findings`),
+    2. 접힌 뒤의 `(code, location)`이 정확히 `expected`와 같아야 하며,
+    3. 그 location이 정본 경로 패턴 안이고 민감 문자열을 담지 않아야 한다.
+
+    `expected`의 location은 전부 **접힌 뒤** 값이다. wrapper가 없으면 raw location이 그대로
+    나오므로 (2)가 깨진다.
+    """
+
+    probe_id: str
+    title: str
+    call: Callable[[], Any]
+    expected: tuple[tuple[str, str], ...]
+    min_findings: int
+    raw_location: str
+
+
+def _boundary_cases(sources: dict[str, dict]) -> list[BoundaryProbe]:
+    """8개 공개 경계 각각에 **실제 결함**을 넣는다.
+
+    두 가지 유출 축을 함께 덮는다.
+
+    - **문서 안의 동적 key** — `language_overrides`의 사용자 제어 tag (PB-01).
+    - **호출자가 준 `location` 인자** — 정본 어휘가 아니면 root로 접혀야 한다
+      (PB-02~PB-06). 호출자가 준 문자열도 사용자 제어 값이다.
+    - **문서 집합의 최상위 key와 실제로 존재하지 않는 leaf** (PB-07·PB-08).
+    """
+
+    base = sources["base"]
+
+    # PB-01 — 문서 안의 동적 key. override가 표시시간 불변식을 깬다.
+    subtitle = copy.deepcopy(base["subtitle_document"])
+    subtitle["resolved_style"]["language_overrides"][f"en-x-{SENSITIVE_PROBE}"] = {
+        "max_duration_seconds": 0.1
+    }
+    pb01_transcript = copy.deepcopy(base["transcript"])
+    pb01_translated = copy.deepcopy(base["translated_transcript"])
+
+    # PB-02 — 시간 불변식 위반 + 호출자가 준 location
+    pb02_transcript = copy.deepcopy(base["transcript"])
+    pb02_segment = pb02_transcript["streams"][0]["segments"][0]
+    pb02_segment["end_seconds"] = pb02_segment["start_seconds"]
+    pb02_segments = copy.deepcopy(base["speech_segments"])
+
+    # PB-03 — SpeechSegment ID 중복 + 호출자가 준 location
+    pb03_segments = copy.deepcopy(base["speech_segments"])
+    pb03_segments[1]["segment_id"] = pb03_segments[0]["segment_id"]
+
+    # PB-04 — 번역 target language 위반 + 호출자가 준 location
+    pb04_translated = copy.deepcopy(base["translated_transcript"])
+    pb04_translated["target_language"] = "en"
+    pb04_transcript = copy.deepcopy(base["transcript"])
+
+    # PB-05 — capability ↔ feature_status 모순 + 호출자가 준 location
+    pb05_transcript = copy.deepcopy(base["transcript"])
+    pb05_transcript["feature_status"]["nbest"] = "not_supported"
+
+    # PB-06 — 번역 capability ↔ feature_status 모순 + 호출자가 준 location
+    pb06_translated = copy.deepcopy(base["translated_transcript"])
+    pb06_translated["feature_status"]["translation_confidence"] = "not_supported"
+    pb06_transcript = copy.deepcopy(base["transcript"])
+
+    # PB-07 — 컨텍스트가 없고 문서에도 그 leaf가 없다. 존재하지 않는 경로를 가리키면 안 된다.
+    pb07_documents = {
+        key: copy.deepcopy(base[key])
+        for key in ("speech_segments", "transcript", "translated_transcript")
+    }
+    pb07_documents["translated_transcript"].pop("source_transcript", None)
+
+    # PB-08 — 사용자 제어 최상위 key 아래에 충돌하는 ArtifactRef가 있다.
+    pb08_documents = {
+        key: copy.deepcopy(base[key]) for key in ("transcript", "translated_transcript")
+    }
+    pb08_clash = copy.deepcopy(base[contracts.REF_CONTEXT_KEY]["transcript"])
+    pb08_clash["byte_size"] = int(pb08_clash["byte_size"]) + 1
+    pb08_documents[SENSITIVE_PROBE] = pb08_clash
+
     return [
-        ("PB-01", "check_subtitle_document",
-         lambda: contracts.check_subtitle_document(subtitle, transcript, translated)),
-        ("PB-02", "check_transcript",
-         lambda: contracts.check_transcript(transcript, segments)),
-        ("PB-03", "check_speech_segments",
-         lambda: contracts.check_speech_segments(segments)),
-        ("PB-04", "check_translated_transcript",
-         lambda: contracts.check_translated_transcript(translated, transcript)),
-        ("PB-05", "check_asr_capability_binding",
-         lambda: contracts.check_asr_capability_binding(transcript)),
-        ("PB-06", "check_translation_capability_binding",
-         lambda: contracts.check_translation_capability_binding(translated, transcript=transcript)),
-        ("PB-07", "check_document_ref_identity",
-         lambda: contracts.check_document_ref_identity(leaky_documents, refs)),
-        ("PB-08", "check_artifact_consistency",
-         lambda: contracts.check_artifact_consistency(leaky_documents)),
+        BoundaryProbe(
+            "PB-01", "check_subtitle_document — language override 동적 key",
+            lambda: contracts.check_subtitle_document(
+                subtitle, pb01_transcript, pb01_translated
+            ),
+            (("E_TIME_RANGE", "subtitle_document/resolved_style/language_overrides"),), 1,
+            f"subtitle_document/resolved_style/language_overrides/en-x-{SENSITIVE_PROBE}"
+            "/max_duration_seconds",
+        ),
+        BoundaryProbe(
+            "PB-02", "check_transcript — 호출자가 준 location",
+            lambda: contracts.check_transcript(
+                pb02_transcript, pb02_segments, location=SENSITIVE_PROBE
+            ),
+            (("E_TIME_RANGE", ""),), 1,
+            f"{SENSITIVE_PROBE}/streams/0/segments/0/end_seconds",
+        ),
+        BoundaryProbe(
+            "PB-03", "check_speech_segments — 호출자가 준 location",
+            lambda: contracts.check_speech_segments(pb03_segments, location=SENSITIVE_PROBE),
+            (("E_SCHEMA", ""),), 1,
+            f"{SENSITIVE_PROBE}/1/segment_id",
+        ),
+        BoundaryProbe(
+            "PB-04", "check_translated_transcript — 호출자가 준 location",
+            lambda: contracts.check_translated_transcript(
+                pb04_translated, pb04_transcript, location=SENSITIVE_PROBE
+            ),
+            (("E_TARGET_LANGUAGE", ""),), 1,
+            f"{SENSITIVE_PROBE}/target_language",
+        ),
+        BoundaryProbe(
+            "PB-05", "check_asr_capability_binding — 호출자가 준 location",
+            lambda: contracts.check_asr_capability_binding(
+                pb05_transcript, location=SENSITIVE_PROBE
+            ),
+            (("E_CAPABILITY_MISMATCH", ""),), 1,
+            f"{SENSITIVE_PROBE}/feature_status/nbest",
+        ),
+        BoundaryProbe(
+            "PB-06", "check_translation_capability_binding — 호출자가 준 location",
+            lambda: contracts.check_translation_capability_binding(
+                pb06_translated, location=SENSITIVE_PROBE, transcript=pb06_transcript
+            ),
+            (("E_CAPABILITY_MISMATCH", ""),), 1,
+            f"{SENSITIVE_PROBE}/feature_status/translation_confidence",
+        ),
+        BoundaryProbe(
+            "PB-07", "check_document_ref_identity — 존재하지 않는 leaf로 접힌다",
+            lambda: contracts.check_document_ref_identity(pb07_documents, {}),
+            (("E_SOURCE_REF", "translated_transcript"),), 1,
+            "translated_transcript/source_transcript",
+        ),
+        BoundaryProbe(
+            "PB-08", "check_artifact_consistency — 사용자 제어 최상위 key",
+            lambda: contracts.check_artifact_consistency(pb08_documents),
+            (("E_SOURCE_REF", ""),), 1,
+            f"{SENSITIVE_PROBE}/byte_size",
+        ),
     ]
 
 
 def run_boundary_probes(fixture_dir: Path) -> list[dict[str, Any]]:
     sources = _base_documents(fixture_dir)
     rows: list[dict[str, Any]] = []
-    for probe_id, title, call in _boundary_cases(sources):
+    for probe in _boundary_cases(sources):
+        row: dict[str, Any] = {
+            "probe_id": probe.probe_id, "title": probe.title,
+            "expected": [list(pair) for pair in probe.expected],
+            "min_findings": probe.min_findings,
+        }
         try:
-            findings = call()
+            findings = list(probe.call())
         except Exception as exc:  # noqa: BLE001
-            rows.append({"probe_id": probe_id, "title": title, "passed": False,
-                         "note": f"{type(exc).__name__}: {exc}"})
+            rows.append({**row, "passed": False, "note": f"{type(exc).__name__}: {exc}"})
             continue
-        bad = [
-            f"{finding.code}@{finding.location}"
-            for finding in findings
-            if _unsafe_public_location(finding.location)
-        ]
+        observed = tuple(sorted({(f.code, f.location) for f in findings}))
+        problems: list[str] = []
+        # (1) vacuous probe 금지 — finding이 없으면 비노출 판정이 실행되지도 않는다.
+        if len(findings) < probe.min_findings:
+            problems.append(
+                f"finding {len(findings)}건 (최소 {probe.min_findings}건이어야 한다)"
+            )
+        # (2) 접힌 뒤의 code/location이 정확히 계약대로다.
+        if observed != tuple(sorted(probe.expected)):
+            problems.append(
+                "기대 "
+                + ", ".join(f"{c}@{l}" for c, l in sorted(probe.expected))
+                + " / 관측 "
+                + ", ".join(f"{c}@{l}" for c, l in observed)
+            )
+        # (3) 정본이 선언하지 않은 구간이 남지 않는다.
+        problems.extend(
+            f"{f.code}@{f.location}"
+            for f in findings
+            if _unsafe_public_location(f.location)
+        )
+        # (4) 민감 문자열이 location에도 message에도 남지 않는다.
+        problems.extend(
+            f"민감값 노출: {f.code}@{f.location}"
+            for f in findings
+            if SENSITIVE_PROBE in f.location or SENSITIVE_PROBE in f.message
+        )
         rows.append({
-            "probe_id": probe_id, "title": title, "passed": not bad,
-            "note": "; ".join(bad[:3]),
+            **row,
+            "observed": [list(pair) for pair in observed],
+            "findings": len(findings),
+            "passed": not problems,
+            "note": "; ".join(problems[:3]),
         })
     return rows
 
@@ -4127,10 +4317,25 @@ def run_source_mutants(mutants: Sequence[SourceMutant], label: str) -> list[dict
                 for item in observed.get("depth_probes", [])
                 if not item["passed"]
             }
+            # raw JSON 경계와 공개 경계 probe도 kill 근거다. 이 둘이 `caught`에 없으면
+            # 그 축만 깨는 mutant를 "잡히지 않음"으로 세게 된다 (REVIEW-027 R-01·R-02).
+            failed_raw = {
+                item["probe_id"]
+                for item in observed.get("raw_probes", [])
+                if not item["passed"]
+            }
+            failed_boundary = {
+                item["probe_id"]
+                for item in observed.get("boundary_probes", [])
+                if not item["passed"]
+            }
             # mutant 실행에서 관측된 sentinel 실패도 이 mutant의 sentinel 실패다.
             sentinel_ok = not (valid_cases & failed_cases) and not bad_sentinels(observed)
             expected_kills = set(mutant.kills)
-            caught = failed_cases | failed_mutations | failed_leaks | failed_depth
+            caught = (
+                failed_cases | failed_mutations | failed_leaks | failed_depth
+                | failed_raw | failed_boundary
+            )
             if expected_kills:
                 # 선언된 kill case 중 하나만 잡혀도 killed로 세면 나머지 방어면이
                 # 증명되지 않는다 (REVIEW-023 B-03). **전부** 잡혀야 killed다.
@@ -4282,12 +4487,8 @@ _SELF_TESTS: tuple[tuple[str, str, str, str], ...] = (
 _WRITER_SELF_TESTS: tuple[tuple[str, str, str, str, tuple[str, ...], int], ...] = (
     (
         "AS-04", "갱신 도구가 목록과 다른 digest를 쓰면 write 자체가 실패한다",
-        "            \"갱신은 이 파일의 명시적 diff로만 한다.\"\n"
-        "        ),\n"
-        '        "digest": _manifest_digest(killable, equivalent),',
-        "            \"갱신은 이 파일의 명시적 diff로만 한다.\"\n"
-        "        ),\n"
-        '        "digest": "sha256:" + "0" * 64,',
+        '        "digest": _manifest_digest(killable, equivalent),\n        "killable": killable,',
+        '        "digest": "sha256:" + "0" * 64,\n        "killable": killable,',
         ("--write-manifest",), 1,
     ),
 )
@@ -4672,7 +4873,26 @@ def _add_key_at(documents: dict, where: str, key: str) -> None:
     node[key] = {}
 
 
-def run_schema_defense_inventory(fixture_dir: Path, schema_dir: Path) -> list[dict[str, Any]]:
+def classify_schema_defenses(fixture_dir: Path, schema_dir: Path) -> list[dict[str, Any]]:
+    """manifest와 **무관하게** 현재 schema에서 각 방어의 분류를 관측한다.
+
+    `subsumed`가 참이면 같은 노드의 다른 제약이 이 방어를 함의해 단독 kill이 불가능하다
+    (equivalent). 거짓이면 단독 kill이 가능해야 한다 (killable). manifest는 이 관측을
+    **고정**할 뿐이고, 관측 자체는 manifest를 읽지 않는다 (REVIEW-027 R-03).
+    """
+
+    return _defense_rows(fixture_dir, schema_dir)
+
+
+def run_schema_defense_inventory(
+    fixture_dir: Path, schema_dir: Path, manifest_path: Path | None = None
+) -> list[dict[str, Any]]:
+    """관측된 분류를 고정 manifest의 allowlist와 대조한다."""
+
+    return apply_defense_allowlist(_defense_rows(fixture_dir, schema_dir), manifest_path)
+
+
+def _defense_rows(fixture_dir: Path, schema_dir: Path) -> list[dict[str, Any]]:
     """모든 schema 방어를 하나씩 약화하고 대응 위반 입력이 통과해 버리는지 본다.
 
     각 방어마다 세 가지를 함께 요구한다.
@@ -4758,13 +4978,25 @@ def run_schema_defense_inventory(fixture_dir: Path, schema_dir: Path) -> list[di
                 row["note"] = "약화한 schema에서 정상 fixture가 거부됐다"
             rows.append(row)
 
-    # killable / equivalent 분모를 **고정 allowlist 기준으로** 나눈다.
-    # 단독 kill이 불가능한 방어를 killable 분모에 섞으면 kill rate가 부정확해진다
-    # (REVIEW-025 R-06). allowlist가 조용히 늘거나 줄면 그 자체가 실패다.
+    return rows
+
+
+def apply_defense_allowlist(
+    rows: list[dict[str, Any]], manifest_path: Path | None = None
+) -> list[dict[str, Any]]:
+    """killable / equivalent 분모를 **고정 allowlist 기준으로** 나눈다.
+
+    단독 kill이 불가능한 방어를 killable 분모에 섞으면 kill rate가 부정확해진다
+    (REVIEW-025 R-06). allowlist가 조용히 늘거나 줄면 그 자체가 실패다.
+    """
+
     try:
         allowlist = {
             str(entry.get("defense_id"))
-            for entry in (load_defense_manifest().get("equivalent") or [])
+            for entry in (
+                load_defense_manifest(manifest_path or DEFENSE_MANIFEST_PATH).get("equivalent")
+                or []
+            )
         }
     except (OSError, json.JSONDecodeError):  # pragma: no cover - MF-00이 따로 보고한다
         allowlist = set()
@@ -5025,13 +5257,77 @@ def run_manifest_check(
     return rows
 
 
+#: 관측으로 분류가 바뀐 방어를 `--reclassify` 없이 쓸 때 붙이는 사유. 사람이 diff에서
+#: 바로 알아볼 수 있어야 하므로 이전 사유를 그대로 물려주지 않는다.
+_RECLASSIFY_REASON = (
+    "재분류(--reclassify): 현재 schema에서 같은 노드의 다른 제약이 이 방어를 함의한다. "
+    "자동 판정이므로 사람이 근거를 직접 확인하고 이 사유를 구체화할 것."
+)
+
+
+def observed_defense_classification(
+    fixture_dir: Path, schema_dir: Path
+) -> dict[str, bool]:
+    """`defense_id` → 현재 schema에서 **실제로** 단독 kill이 불가능한가(=equivalent)."""
+
+    return {
+        row["defense_id"]: bool(row.get("subsumed"))
+        for row in classify_schema_defenses(fixture_dir, schema_dir)
+    }
+
+
+def _classification_drift(
+    previous: Mapping[str, Any], observed: Mapping[str, bool], present: set[str]
+) -> list[str]:
+    """이전 manifest의 분류와 현재 관측이 어긋나는 `defense_id` 목록.
+
+    사라진 방어는 drift가 아니다 (삭제는 그냥 삭제다). 새로 생긴 방어라도 **관측상
+    equivalent면** 사람이 사유를 써야 하므로 drift로 센다.
+    """
+
+    recorded_equivalent = {
+        str(entry.get("defense_id")) for entry in _manifest_entries(previous, "equivalent")
+    }
+    recorded_killable = {
+        str(entry.get("defense_id")) for entry in _manifest_entries(previous, "killable")
+    }
+    recorded = recorded_equivalent | recorded_killable
+
+    drift: list[str] = []
+    for defense_id in sorted(present):
+        now_equivalent = observed.get(defense_id, False)
+        if defense_id in recorded:
+            if now_equivalent != (defense_id in recorded_equivalent):
+                drift.append(defense_id)
+        elif now_equivalent:
+            # 새 방어가 처음부터 equivalent면 사유가 필요하다. 조용히 쓰지 않는다.
+            drift.append(defense_id)
+    return drift
+
+
 def write_defense_manifest(
-    schema_dir: Path = SCHEMA_DIR, path: Path = DEFENSE_MANIFEST_PATH
-) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    schema_dir: Path = SCHEMA_DIR,
+    path: Path = DEFENSE_MANIFEST_PATH,
+    fixture_dir: Path = FIXTURE_DIR,
+    reclassify: bool = False,
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
     """manifest를 현재 schema 기준으로 다시 쓴다 (사람이 diff로 검토하는 명시적 갱신).
 
-    digest는 **실제로 쓰는 entry**에서 계산하고, 쓴 직후 같은 파일로 자기검증을 돌린다.
-    갱신 도구가 스스로 불일치 파일을 만들 수 없어야 한다 (REVIEW-026 R-03 2번).
+    **equivalent 분류를 ID로 물려받지 않는다** (REVIEW-027 R-03). 이전 판은 이전 파일의
+    `defense_id`만 보고 equivalent 여부와 사유를 그대로 옮겼다. 그래서 pattern을 `^.*$`로
+    약화해 `minLength`가 독립 방어가 된 뒤에도 갱신 도구가 stale equivalent를 보존한 채
+    exit 0으로 끝났고, 직후 `--manifest-check`도 통과했다. 분류 오류는 전체 감사에서만
+    드러났다.
+
+    지금은 세 가지를 한다.
+
+    1. **현재 schema에서 분류를 다시 관측한다** (`classify_schema_defenses`).
+    2. 관측이 이전 파일의 분류와 다르면 — 즉 재분류가 필요하면 — `reclassify`가 없는 한
+       **쓰지 않고 nonzero로 끝난다.** 어느 ID가 왜 바뀌었는지 함께 보고한다.
+    3. 쓴 뒤에는 `--manifest-check`뿐 아니라 **분류 inventory까지** 다시 돌려 둘 다
+       통과할 때만 성공이다.
+
+    digest는 **실제로 쓰는 entry**에서 계산한다 (REVIEW-026 R-03 2번).
     """
 
     previous: dict[str, Any] = {}
@@ -5046,22 +5342,50 @@ def write_defense_manifest(
     }
     observed = sorted(collect_schema_defenses(schema_dir), key=lambda item: item.defense_id)
     seen: set[str] = set()
-    killable: list[dict[str, Any]] = []
-    equivalent: list[dict[str, Any]] = []
+    ordered: list[SchemaDefense] = []
     for defense in observed:
         if defense.defense_id in seen:
             continue
         seen.add(defense.defense_id)
+        ordered.append(defense)
+
+    # **관측이 분류의 정본이다.** manifest는 그것을 고정할 뿐이다.
+    classification = observed_defense_classification(fixture_dir, schema_dir)
+    drift = _classification_drift(previous, classification, seen)
+    if drift and not reclassify:
+        return None, [{
+            "check_id": "MF-09",
+            "title": "분류가 바뀐 방어는 명시적 재분류 없이 쓰지 않는다",
+            "passed": False,
+            "note": (
+                "현재 schema 관측과 기존 manifest의 killable/equivalent 분류가 다르다: "
+                + ", ".join(
+                    f"{defense_id} → "
+                    + ("equivalent" if classification.get(defense_id) else "killable")
+                    for defense_id in drift[:6]
+                )
+                + (" …" if len(drift) > 6 else "")
+                + ". 근거를 확인한 뒤 --reclassify와 함께 다시 실행할 것."
+            ),
+        }]
+
+    killable: list[dict[str, Any]] = []
+    equivalent: list[dict[str, Any]] = []
+    for defense in ordered:
         entry = {"defense_id": defense.defense_id, "fingerprint": defense.fingerprint}
-        if defense.defense_id in reasons:
-            equivalent.append({**entry, "reason": reasons[defense.defense_id]})
+        if classification.get(defense.defense_id):
+            equivalent.append({
+                **entry,
+                "reason": reasons.get(defense.defense_id) or _RECLASSIFY_REASON,
+            })
         else:
             killable.append(entry)
     manifest = {
         "note": (
             "TASK-029 schema 방어의 고정 기준. production schema에서 다시 생성하지 않는다 "
             "(REVIEW-025 R-06). 좌표와 의미값(fingerprint)을 함께 고정한다 (REVIEW-026 R-03). "
-            "갱신은 이 파일의 명시적 diff로만 한다."
+            "killable/equivalent 분류는 갱신할 때마다 현재 schema에서 다시 관측한다 "
+            "(REVIEW-027 R-03). 갱신은 이 파일의 명시적 diff로만 한다."
         ),
         "digest": _manifest_digest(killable, equivalent),
         "killable": killable,
@@ -5070,7 +5394,23 @@ def write_defense_manifest(
     path.write_text(
         json.dumps(manifest, ensure_ascii=False, indent=1) + "\n", encoding="utf-8"
     )
-    return manifest, run_manifest_check(schema_dir, path)
+
+    self_check = run_manifest_check(schema_dir, path)
+    # 쓴 직후 **분류 inventory도** 다시 돌린다. drift 검사만으로는 방어가 아예 죽은
+    # 경우(위반 입력을 만들 수 없다)를 잡지 못한다 (REVIEW-027 R-03).
+    inventory = apply_defense_allowlist(
+        classify_schema_defenses(fixture_dir, schema_dir), path
+    )
+    broken = [row for row in inventory if not row["passed"]]
+    self_check.append({
+        "check_id": "MF-10",
+        "title": "쓴 직후 분류 inventory가 통과한다",
+        "passed": not broken,
+        "note": "" if not broken else "; ".join(
+            f"{row['defense_id']}: {row['note']}" for row in broken[:3]
+        ),
+    })
+    return manifest, self_check
 
 
 # ---------------------------------------------------------------------------
@@ -5097,6 +5437,11 @@ class _TempTree:
         path.write_text(
             json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
+
+    def protect(self, relative: str) -> None:
+        """고치지는 않지만 step이 덮어쓸 수 있는 파일을 미리 저장한다."""
+
+        self._save(self.root / relative)
 
     def restore(self) -> None:
         for path, text in self._saved.items():
@@ -5188,6 +5533,8 @@ class DriftSelfTest:
     edits: tuple[tuple[str, Callable[[Any], None]], ...]
     #: `(인자, 기대 exit code)` 순서대로 실행한다.
     steps: tuple[tuple[tuple[str, ...], int], ...] = ((("--manifest-check",), 1),)
+    #: 훼손하지는 않지만 step이 덮어쓸 수 있는 파일. 자기검증 뒤 원상복구한다.
+    protect: tuple[str, ...] = ()
 
 
 #: `line_break_policy` enum과 `extension_id` pattern은 REVIEW-026 R-03이 직접 지목한 자리다.
@@ -5235,7 +5582,43 @@ _DEFENSE_SELF_TESTS: tuple[DriftSelfTest, ...] = (
         "stale digest가 아닌 일관된 파일을 만든다",
         (("schemas/transcript-v1.schema.json",
           lambda document: _node_at(document, _TRANSCRIPT_EXTENSION_POINTER).pop("minLength")),),
-        steps=((("--manifest-check",), 1), (("--write-manifest",), 0), (("--manifest-check",), 0)),
+        steps=(
+            (("--manifest-check",), 1),
+            (("--write-manifest",), 0),
+            (("--manifest-check",), 0),
+            (("--classification-check",), 0),
+        ),
+        protect=(_MANIFEST_RELATIVE,),
+    ),
+    # --- REVIEW-027 R-03: 갱신 도구가 stale equivalent를 물려받지 않는다 ------------------
+    DriftSelfTest(
+        "SD-14",
+        "pattern을 ^.*$로 약화해 minLength가 독립 방어가 되면, 명시적 재분류 없이는 "
+        "갱신 도구가 stale equivalent를 보존한 채 성공하지 못한다",
+        (("schemas/transcript-v1.schema.json",
+          _change_pattern(_TRANSCRIPT_EXTENSION_POINTER, "^.*$")),),
+        steps=(
+            (("--manifest-check",), 1),
+            # 재분류 승인이 없으므로 **쓰지 않고** 거부한다.
+            (("--write-manifest",), 1),
+            # 거부했으므로 manifest는 그대로다 — 여전히 stale drift가 보인다.
+            (("--manifest-check",), 1),
+            (("--classification-check",), 1),
+        ),
+        protect=(_MANIFEST_RELATIVE,),
+    ),
+    DriftSelfTest(
+        "SD-15",
+        "명시적 재분류를 해도 방어가 아예 죽었으면 갱신 도구는 성공하지 않는다",
+        (("schemas/transcript-v1.schema.json",
+          _change_pattern(_TRANSCRIPT_EXTENSION_POINTER, "^.*$")),),
+        steps=(
+            # minLength는 killable로 옳게 재분류되지만, pattern 방어가 죽어 분류
+            # inventory가 통과하지 못한다. 쓴 직후 자기검증이 그것을 잡는다.
+            (("--write-manifest", "--reclassify"), 1),
+            (("--classification-check",), 1),
+        ),
+        protect=(_MANIFEST_RELATIVE,),
     ),
 )
 
@@ -5262,6 +5645,8 @@ def run_defense_drift_self_tests() -> list[dict[str, Any]]:
         tree = _TempTree(root)
         for selftest in _DEFENSE_SELF_TESTS:
             try:
+                for relative in selftest.protect:
+                    tree.protect(relative)
                 for relative, mutate in selftest.edits:
                     tree.edit_json(relative, mutate)
             except (AssertionError, KeyError, OSError) as exc:
@@ -5327,10 +5712,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="현재 schema 기준으로 defense manifest를 다시 쓴다 (명시적 갱신)",
     )
+    parser.add_argument(
+        "--reclassify",
+        action="store_true",
+        help="--write-manifest와 함께 쓴다. killable↔equivalent 분류 변경을 명시적으로 승인한다",
+    )
+    parser.add_argument(
+        "--classification-check",
+        action="store_true",
+        help="현재 schema 관측과 manifest의 killable/equivalent 분류가 일치하는지만 확인한다",
+    )
     args = parser.parse_args(argv)
 
     if args.write_manifest:
-        manifest, self_check = write_defense_manifest(args.schemas)
+        manifest, self_check = write_defense_manifest(
+            args.schemas, fixture_dir=args.fixtures, reclassify=args.reclassify
+        )
+        if manifest is None:
+            # 분류가 바뀌었는데 명시적 승인이 없다. **쓰지 않고** 끝낸다.
+            for row in self_check:
+                print(f"WRITE-REFUSED {row['check_id']}: {row['title']} — {row['note']}")
+            return 1
         print(
             f"defense manifest 갱신 — killable {len(manifest['killable'])}건 · "
             f"equivalent {len(manifest['equivalent'])}건 · digest {manifest['digest']}"
@@ -5340,6 +5742,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             if not row["passed"]:
                 print(f"WRITE-SELFCHECK {row['check_id']}: {row['title']} — {row['note']}")
         return 0 if all(row["passed"] for row in self_check) else 1
+
+    if args.classification_check:
+        rows = run_schema_defense_inventory(args.fixtures, args.schemas)
+        for row in rows:
+            if not row["passed"]:
+                print(f"CLASSIFICATION {row['defense_id']}: {row['note']}")
+        if args.json:
+            print(json.dumps(rows, ensure_ascii=False))
+        return 0 if all(row["passed"] for row in rows) else 1
 
     if args.manifest_check:
         rows = run_manifest_check(args.schemas)
