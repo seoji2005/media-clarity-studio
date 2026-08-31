@@ -1618,6 +1618,10 @@ message의 전체 CLI 비식별화)은 `schema_core`의 message 정책이므로 
 
 ## 21. REVIEW-027 재검토 반영 기록 (같은 브랜치의 일곱 번째 후속 커밋)
 
+> **정정 (§22 후속 기록).** 아래 "R-02C·R-03C 둘뿐"은 **그 시점의 기록**이다. 같은 고정
+> HEAD `0fcb22b`에서 이후 **R-01C**(공개 `check_*`의 `__wrapped__` 우회)가 추가로 발견됐다.
+> 아래 문장을 지우지 않고 그대로 두며, 발견과 대응은 **§22**에 적는다.
+
 이번 재검토가 지목한 차단 결함은 **R-02C·R-03C 둘뿐**이다. §19의 D-04 option 3(ADR-0029),
 EVALS의 공식 LID 정확도 `unsupported` 계약, ARCHITECTURE의 `document_refs` 공개 계약,
 §20의 R-01 공개 경계 probe(`PB-01`~`PB-08`)와 `VM-145`는 그대로 보존한다.
@@ -1744,3 +1748,83 @@ thread의 정책을 여전히 바꾸므로 해결이 아니다.
 `parse_int`/`parse_float` hook을 추가할지는 **schema_core 소유자의 결정**이며 여기서 바꾸지
 않았다. 추가된다면 이 모듈은 hook 합성을 그만두고 그 함수를 그대로 부르면 된다 —
 `StrictLoaderCompositionTests`가 그 시점을 실패로 알려 준다.
+
+
+## 22. REVIEW-027 R-01C 반영 기록 (같은 브랜치의 여덟 번째 후속 커밋)
+
+§21은 그 시점의 차단 결함을 R-02C·R-03C 둘로 기록했다. 그 기록은 그대로 둔다. 같은 고정
+HEAD `0fcb22b`에서 **R-01C**가 추가로 발견됐고, 이번 커밋은 **그 하나만** 반영한다.
+
+### 22.1 무엇이 열려 있었나
+
+§8.2는 비식별화 계약이 schema finding·domain finding·container 조기 반환·**공개 `check_*`
+진입점**에 모두 같게 적용된다고 규정한다. `_public_boundary()`는 그 접기를 수행하지만
+`functools.wraps(function)`을 썼고, 그 decorator는 편의를 위해 `wrapper.__wrapped__`에
+**접기 전 구현을 공개 attribute로 그대로 노출**한다.
+
+| 호출 경로 | `0fcb22b`의 결과 |
+|---|---|
+| `check_transcript(..., location="PATIENT_SECRET")` | `E_TIME_RANGE @ ""` — 계약대로 |
+| `check_transcript.__wrapped__(...)` | `E_TIME_RANGE @ PATIENT_SECRET/streams/0/segments/0/end_seconds` |
+| `inspect.unwrap(check_transcript)(...)` | 위와 동일 |
+
+여덟 공개 함수 **전부**에서 `callable(fn.__wrapped__)`가 참이고
+`inspect.unwrap(fn) is fn`이 거짓이었다. 이 경계 코드는 `c0dec2e`와 `0fcb22b` 사이에서
+바뀌지 않았고, 기존 `PB-01`~`PB-08`과 `VM-145`는 **정상 wrapper 호출**과
+**identity-decorator 변형**만 봤기 때문에 이 표준 introspection 우회를 잡지 못했다.
+
+### 22.2 무엇을 바꿨나
+
+`_public_boundary()`에서 `functools.wraps` decorator를 쓰지 않는다. 이름·docstring·annotation은
+`functools.update_wrapper()`로 그대로 유지하고, 그 함수가 **마지막에 붙이는 raw 구현 참조만**
+지운다. `inspect.signature()`가 계속 실제 서명을 보도록 `__signature__`를 직접 붙인다.
+
+```
+functools.update_wrapper(wrapper, function)
+del wrapper.__wrapped__
+wrapper.__signature__ = signature
+```
+
+**범위를 넓히지 않았다.** 이것은 Python의 임의 private introspection 전체를 보안 경계로
+선언하는 것이 아니다. closure cell처럼 문서화되지 않은 내부 접근은 어떤 wrapper로도 막을 수
+없고 여기서 막았다고 주장하지 않는다. 닫은 것은 **공개 callable에 표준 attribute로 노출되던
+우회 하나**다.
+
+| 확인 | 여덟 함수 전부 |
+|---|---|
+| `callable(fn.__wrapped__)` | **거짓** (attribute 자체가 없음) |
+| `inspect.unwrap(fn) is fn` | **참** |
+| `fn.__name__` · `fn.__doc__` · `inspect.signature(fn)` | 유지 |
+| 민감 문자열로 호출한 finding의 location·message | sentinel 없음 |
+| 접힌 location | §8.2 정본 경로와 정확히 일치 |
+
+### 22.3 감사 증거를 함께 고쳤다
+
+test assertion만 늘리지 않고 **audit 자체**가 이 우회를 보게 했다.
+
+- `BoundaryProbe`에 **공개 함수 객체**(`public`)를 담고, `run_boundary_probes()`가 호출 결과를
+  보기 **전에** 그 객체의 introspection 표면을 검사한다 — callable `__wrapped__`가 있거나
+  `inspect.unwrap()`이 다른 callable을 돌려주면 그 probe는 즉시 실패다.
+- 새 source mutant **`VM-149`** — `del wrapper.__wrapped__`와 `__signature__` 부착을 지워
+  `functools.wraps`와 동등한 상태로 되돌린다. `PB-01`~`PB-08` **여덟 개 전부**를 kill 조건으로
+  선언했고, 저장소 밖 임시 사본에서 여덟 probe가 모두 실패하며 `--check-only`가 exit 1이다.
+- validator code mutant 분모 143 → **144**. `VM-145`(identity decorator)는 그대로 유지된다 —
+  두 mutant는 서로 다른 우회를 본다.
+
+### 22.4 보존 확인
+
+- §21의 **R-02C** 정수 parsing과 프로세스 전역 격리, **R-03C**의 전체 candidate 분류와 원자적
+  manifest 교체는 코드·자기검증 모두 무변경이다.
+- §19의 D-04 option 3·ADR-0029, EVALS의 공식 LID 정확도 `unsupported` 계약,
+  ARCHITECTURE §2.1.1의 `document_refs` 공개 계약은 **diff 0**이다.
+- `PB-01`~`PB-08`의 기존 non-vacuous 검증(실제 finding·정확한 code/location·경로 패턴·민감
+  문자열 비노출)은 그대로이고 여기에 introspection 검사가 **더해졌다**.
+- §8의 안정 error code 22개, 다섯 정본 schema, `schema_core.py`·`artifact_store.py`·
+  `job_runtime.py`, dependency·model·network·CI 경계 모두 무변경이다.
+- 기존 test 삭제·skip·완화 **0건**. `defense-manifest.json`은 새 schema 방어가 없으므로
+  갱신 대상이 아니다 (무변경).
+
+### 22.5 이 반영에서 정하지 않은 것
+
+§17.8의 오너 결정 항목 아홉 개는 그대로 열려 있다. closure cell을 포함한 문서화되지 않은
+introspection 경로는 이 계약의 보증 대상이 아니며, 그렇게 주장하지도 않는다.

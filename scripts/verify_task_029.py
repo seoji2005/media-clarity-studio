@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import copy
 import hashlib
+import inspect
 import json
 import os
 import re
@@ -3241,6 +3242,17 @@ def validator_mutants() -> list[SourceMutant]:
         signature = inspect.signature(function)""",
             ("PB-01", "PB-02", "PB-03", "PB-04", "PB-05", "PB-06", "PB-07", "PB-08"),
         ),
+        # --- REVIEW-027 R-01C: `__wrapped__` 우회 ------------------------------------
+        SourceMutant(
+            "VM-149", "functools.wraps를 되살려 raw 구현을 __wrapped__로 노출한다", target,
+            """        functools.update_wrapper(wrapper, function)
+        # `update_wrapper`가 마지막에 붙이는 raw 구현 참조를 제거한다. 이 한 줄이 없으면
+        # `__wrapped__`/`inspect.unwrap()`으로 비식별화 전 구현을 직접 부를 수 있다.
+        del wrapper.__wrapped__
+        wrapper.__signature__ = signature  # type: ignore[attr-defined]""",
+            "        functools.update_wrapper(wrapper, function)",
+            ("PB-01", "PB-02", "PB-03", "PB-04", "PB-05", "PB-06", "PB-07", "PB-08"),
+        ),
         # --- REVIEW-027 R-02·R-02C: 전역 설정에 종속되지 않는 계약 상한 -------------------
         SourceMutant(
             "VM-146", "정수 변환을 런타임 전역 설정에 다시 종속시킨다", target,
@@ -4019,6 +4031,8 @@ class BoundaryProbe:
     1. 반드시 **실제 finding을 낸다** (`min_findings`),
     2. 접힌 뒤의 `(code, location)`이 정확히 `expected`와 같아야 하며,
     3. 그 location이 정본 경로 패턴 안이고 민감 문자열을 담지 않아야 한다.
+    4. 공개 함수에 **callable `__wrapped__` 우회가 없고** `inspect.unwrap()`이 자기 자신을
+       돌려줘야 한다 (REVIEW-027 R-01C). `functools.wraps`를 다시 도입하면 여기서 실패한다.
 
     `expected`의 location은 전부 **접힌 뒤** 값이다. wrapper가 없으면 raw location이 그대로
     나오므로 (2)가 깨진다.
@@ -4030,6 +4044,9 @@ class BoundaryProbe:
     expected: tuple[tuple[str, str], ...]
     min_findings: int
     raw_location: str
+    #: 검사 대상 **공개 함수 자체**. probe는 호출 결과뿐 아니라 이 객체의 introspection
+    #: 표면도 본다 — `__wrapped__`로 비식별화 전 구현이 노출되면 안 된다 (REVIEW-027 R-01C).
+    public: Callable[..., Any]
 
 
 def _boundary_cases(sources: dict[str, dict]) -> list[BoundaryProbe]:
@@ -4101,6 +4118,7 @@ def _boundary_cases(sources: dict[str, dict]) -> list[BoundaryProbe]:
             (("E_TIME_RANGE", "subtitle_document/resolved_style/language_overrides"),), 1,
             f"subtitle_document/resolved_style/language_overrides/en-x-{SENSITIVE_PROBE}"
             "/max_duration_seconds",
+            contracts.check_subtitle_document,
         ),
         BoundaryProbe(
             "PB-02", "check_transcript — 호출자가 준 location",
@@ -4109,12 +4127,14 @@ def _boundary_cases(sources: dict[str, dict]) -> list[BoundaryProbe]:
             ),
             (("E_TIME_RANGE", ""),), 1,
             f"{SENSITIVE_PROBE}/streams/0/segments/0/end_seconds",
+            contracts.check_transcript,
         ),
         BoundaryProbe(
             "PB-03", "check_speech_segments — 호출자가 준 location",
             lambda: contracts.check_speech_segments(pb03_segments, location=SENSITIVE_PROBE),
             (("E_SCHEMA", ""),), 1,
             f"{SENSITIVE_PROBE}/1/segment_id",
+            contracts.check_speech_segments,
         ),
         BoundaryProbe(
             "PB-04", "check_translated_transcript — 호출자가 준 location",
@@ -4123,6 +4143,7 @@ def _boundary_cases(sources: dict[str, dict]) -> list[BoundaryProbe]:
             ),
             (("E_TARGET_LANGUAGE", ""),), 1,
             f"{SENSITIVE_PROBE}/target_language",
+            contracts.check_translated_transcript,
         ),
         BoundaryProbe(
             "PB-05", "check_asr_capability_binding — 호출자가 준 location",
@@ -4131,6 +4152,7 @@ def _boundary_cases(sources: dict[str, dict]) -> list[BoundaryProbe]:
             ),
             (("E_CAPABILITY_MISMATCH", ""),), 1,
             f"{SENSITIVE_PROBE}/feature_status/nbest",
+            contracts.check_asr_capability_binding,
         ),
         BoundaryProbe(
             "PB-06", "check_translation_capability_binding — 호출자가 준 location",
@@ -4139,18 +4161,21 @@ def _boundary_cases(sources: dict[str, dict]) -> list[BoundaryProbe]:
             ),
             (("E_CAPABILITY_MISMATCH", ""),), 1,
             f"{SENSITIVE_PROBE}/feature_status/translation_confidence",
+            contracts.check_translation_capability_binding,
         ),
         BoundaryProbe(
             "PB-07", "check_document_ref_identity — 존재하지 않는 leaf로 접힌다",
             lambda: contracts.check_document_ref_identity(pb07_documents, {}),
             (("E_SOURCE_REF", "translated_transcript"),), 1,
             "translated_transcript/source_transcript",
+            contracts.check_document_ref_identity,
         ),
         BoundaryProbe(
             "PB-08", "check_artifact_consistency — 사용자 제어 최상위 key",
             lambda: contracts.check_artifact_consistency(pb08_documents),
             (("E_SOURCE_REF", ""),), 1,
             f"{SENSITIVE_PROBE}/byte_size",
+            contracts.check_artifact_consistency,
         ),
     ]
 
@@ -4164,6 +4189,18 @@ def run_boundary_probes(fixture_dir: Path) -> list[dict[str, Any]]:
             "expected": [list(pair) for pair in probe.expected],
             "min_findings": probe.min_findings,
         }
+        # (0) **introspection 우회 금지** (REVIEW-027 R-01C). 호출 결과를 보기 전에
+        # 공개 함수 자체를 본다 — `functools.wraps`가 노출하던 raw 구현이 남아 있으면
+        # 비식별화 계약이 그 경로로 통째로 우회된다.
+        bypass: list[str] = []
+        raw = getattr(probe.public, "__wrapped__", None)
+        if callable(raw):
+            bypass.append("__wrapped__로 비식별화 전 구현이 노출된다")
+        if inspect.unwrap(probe.public) is not probe.public:
+            bypass.append("inspect.unwrap()이 다른 callable을 돌려준다")
+        if bypass:
+            rows.append({**row, "passed": False, "note": "; ".join(bypass)})
+            continue
         try:
             findings = list(probe.call())
         except Exception as exc:  # noqa: BLE001
@@ -4200,6 +4237,7 @@ def run_boundary_probes(fixture_dir: Path) -> list[dict[str, Any]]:
             **row,
             "observed": [list(pair) for pair in observed],
             "findings": len(findings),
+            "wrapped_bypass": False,
             "passed": not problems,
             "note": "; ".join(problems[:3]),
         })

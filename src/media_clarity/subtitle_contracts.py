@@ -438,12 +438,24 @@ def _public_boundary(root_builder):
 
     `location` 인자를 정본 문서 key가 아닌 값으로 바꿔 부르면 어휘를 알 수 없으므로 root로
     접힌다. 안전한 방향이며 내부 호출은 모두 기본값을 쓴다.
+
+    **`functools.wraps`를 쓰지 않는다** (REVIEW-027 R-01C). 그 decorator는 편의를 위해
+    `wrapper.__wrapped__`에 **접기 전 구현을 그대로 공개 attribute로 노출**한다. 그래서
+    `check_transcript.__wrapped__(...)`나 `inspect.unwrap(check_transcript)(...)`로 부르면
+    경계를 지나지 않은 raw location이 그대로 나왔다 —
+    `E_TIME_RANGE @ <호출자가 준 문자열>/streams/0/segments/0/end_seconds`.
+
+    이름·docstring·annotation은 `update_wrapper`로 유지하고 그 **한 attribute만** 지운다.
+    `inspect.signature()`가 여전히 실제 서명을 보도록 `__signature__`를 직접 붙인다.
+
+    이것은 Python의 임의 private introspection 전체를 경계로 선언하는 것이 아니다. closure
+    cell처럼 문서화되지 않은 내부 접근까지 막을 수는 없다. 여기서 닫는 것은 **공개 callable에
+    표준 attribute로 노출되던 우회 하나**다.
     """
 
     def decorate(function):
         signature = inspect.signature(function)
 
-        @functools.wraps(function)
         def wrapper(*args: Any, **kwargs: Any) -> list[Finding]:
             findings = function(*args, **kwargs)
             bound = signature.bind(*args, **kwargs)
@@ -460,6 +472,11 @@ def _public_boundary(root_builder):
                 )
             )
 
+        functools.update_wrapper(wrapper, function)
+        # `update_wrapper`가 마지막에 붙이는 raw 구현 참조를 제거한다. 이 한 줄이 없으면
+        # `__wrapped__`/`inspect.unwrap()`으로 비식별화 전 구현을 직접 부를 수 있다.
+        del wrapper.__wrapped__
+        wrapper.__signature__ = signature  # type: ignore[attr-defined]
         return wrapper
 
     return decorate

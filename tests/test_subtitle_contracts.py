@@ -2164,6 +2164,134 @@ class ManifestWriterClassificationTests(ContractCase):
 
 
 # ---------------------------------------------------------------------------
+# REVIEW-027 R-01C — 공개 경계에 `__wrapped__` 우회가 없다
+# ---------------------------------------------------------------------------
+
+
+class PublicBoundaryIntrospectionTests(ContractCase):
+    """`functools.wraps`는 `__wrapped__`에 **접기 전 구현을 공개 attribute로** 노출했다.
+
+    그래서 `check_transcript.__wrapped__(...)`나 `inspect.unwrap(check_transcript)(...)`로
+    부르면 §8.2의 비식별화 계약을 지나지 않은 raw location이 그대로 나왔다.
+
+    이 test는 표준 introspection 경로만 본다. closure cell처럼 문서화되지 않은 내부 접근까지
+    보안 경계로 선언하지 않는다 — 이번 finding은 **공개 callable에 표준 attribute로 노출되던
+    우회 하나**다.
+    """
+
+    #: TASK-029 §8이 정한 공개 검증 진입점 여덟 개.
+    PUBLIC_NAMES = (
+        "check_asr_capability_binding",
+        "check_artifact_consistency",
+        "check_document_ref_identity",
+        "check_speech_segments",
+        "check_subtitle_document",
+        "check_transcript",
+        "check_translated_transcript",
+        "check_translation_capability_binding",
+    )
+    SENSITIVE = "PATIENT_SECRET"
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.verify = _load_verify_script()
+
+    def _public(self, name: str):
+        import media_clarity.subtitle_contracts as module
+
+        return getattr(module, name)
+
+    def test_every_public_entry_point_is_covered(self) -> None:
+        source = (REPO_ROOT / "src" / "media_clarity" / "subtitle_contracts.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(len(self.PUBLIC_NAMES), source.count("@_public_boundary("))
+        for name in self.PUBLIC_NAMES:
+            with self.subTest(name):
+                self.assertIn(name, __import__(
+                    "media_clarity.subtitle_contracts", fromlist=["x"]
+                ).__all__)
+
+    def test_no_callable_wrapped_bypass(self) -> None:
+        for name in self.PUBLIC_NAMES:
+            with self.subTest(name):
+                function = self._public(name)
+                raw = getattr(function, "__wrapped__", None)
+                self.assertFalse(
+                    callable(raw), f"{name}이 __wrapped__로 raw 구현을 노출한다"
+                )
+
+    def test_inspect_unwrap_returns_the_public_function_itself(self) -> None:
+        import inspect as inspect_module
+
+        for name in self.PUBLIC_NAMES:
+            with self.subTest(name):
+                function = self._public(name)
+                self.assertIs(inspect_module.unwrap(function), function)
+
+    def test_introspection_metadata_is_still_useful(self) -> None:
+        """우회만 지운다 — 이름·docstring·서명은 그대로 쓸 수 있어야 한다."""
+
+        import inspect as inspect_module
+
+        for name in self.PUBLIC_NAMES:
+            with self.subTest(name):
+                function = self._public(name)
+                self.assertEqual(function.__name__, name)
+                self.assertTrue(function.__doc__)
+                parameters = inspect_module.signature(function).parameters
+                self.assertNotEqual(list(parameters), ["args", "kwargs"])
+
+    def test_sensitive_caller_location_never_reaches_a_finding(self) -> None:
+        """민감 문자열로 부른 여덟 경계 전부에서 location·message가 깨끗하다."""
+
+        rows = self.verify.run_boundary_probes(FIXTURE_DIR)
+        self.assertEqual(len(rows), len(self.PUBLIC_NAMES))
+        for row in rows:
+            with self.subTest(row["probe_id"]):
+                self.assertTrue(row["passed"], row.get("note"))
+                self.assertGreaterEqual(row["findings"], 1)
+                self.assertEqual(row["observed"], row["expected"])
+                self.assertFalse(row["wrapped_bypass"])
+
+    def test_redacted_location_matches_the_canonical_contract(self) -> None:
+        """접힌 location이 §8.2의 정본 경로와 정확히 같다 — 우회 경로와 다르다."""
+
+        import copy
+
+        base = self.verify._base_documents(FIXTURE_DIR)["base"]
+        transcript = copy.deepcopy(base["transcript"])
+        segments = copy.deepcopy(base["speech_segments"])
+        segment = transcript["streams"][0]["segments"][0]
+        segment["end_seconds"] = segment["start_seconds"]
+
+        findings = self._public("check_transcript")(
+            transcript, segments, location=self.SENSITIVE
+        )
+        self.assertEqual(
+            [(finding.code, finding.location) for finding in findings],
+            [("E_TIME_RANGE", "")],
+        )
+        for finding in findings:
+            self.assertNotIn(self.SENSITIVE, finding.location)
+            self.assertNotIn(self.SENSITIVE, finding.message)
+
+    def test_reintroducing_wraps_is_declared_as_a_killable_mutant(self) -> None:
+        mutant = next(
+            item for item in self.verify.validator_mutants() if item.mutant_id == "VM-149"
+        )
+        self.assertEqual(set(mutant.kills), {f"PB-0{index}" for index in range(1, 9)})
+        source = (REPO_ROOT / "src" / "media_clarity" / "subtitle_contracts.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(source.count(mutant.old), 1)
+        # production은 `functools.wraps` decorator를 쓰지 않는다.
+        self.assertNotIn("@functools.wraps(", source)
+        self.assertIn("del wrapper.__wrapped__", source)
+
+
+# ---------------------------------------------------------------------------
 # REVIEW-027 R-02C — 공개 loader가 프로세스 전역 정수 정책을 건드리지 않는다
 # ---------------------------------------------------------------------------
 
