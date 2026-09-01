@@ -4,11 +4,11 @@
 |---|---|
 | **ID** | TASK-031 |
 | **결정자** | 사람 제품 오너 (2026-09-01, U-22 A-min 확정) |
-| **Owner / Author** | Lean Root Author |
-| **Reviewer** | 작성자와 다른 fresh GPT/Codex 세션 — 최종 fixed-HEAD Gate H 독립 검토 |
+| **Owner / Author** | Lean Root Author (TASK 전체). **이번 H-01·H-02 제한 remediation의 작성자는 Claude Code specialist** — `AGENTS.md` §3 trigger 3 (아래 escalation 기록) |
+| **Reviewer** | 작성자와 다른 fresh GPT/Codex 세션 — 최종 fixed-HEAD Gate H 독립 검토. 이번 remediation의 작성자가 Claude이므로 그 reviewer도 Claude가 아닌 fresh 세션이다 (R8) |
 | **Phase** | Phase 1a — 첫 실제 자막 vertical slice와 calibration |
 | **Gate** | H — 외부 모델·dependency, 12 GB GPU, Windows, cache/resume와 품질 판정 |
-| **Status** | `In review` — 잔여 H-01·H-02 제한 수정 완료, 새 fixed-HEAD 재검토 대기; 실제 반입·실행 금지 |
+| **Status** | `In review` — H-01·H-02의 남은 네 우회 경로를 계약에서 닫음, 새 fixed-HEAD 재검토 대기; 실제 반입·실행 금지 |
 | **기준 main** | `356b964505c3d852e9a264d79da12f15e5e707e0` (PR #49 merge commit) |
 
 ## 목표
@@ -31,13 +31,27 @@ vertical slice다. 모델 우열이나 제품 완성도를 테스트 수로 주�
 | Author / Reviewer | Lean Root Author / fresh GPT·Codex session |
 | Approved scope | U-22 A-min 계약 기록, 실행 준비, 실제 10분 로컬 calibration과 보고 |
 | PR / branch | #50 Draft / `lean-root/task-031-a-min-calibration` |
-| Current checkpoint | fixed HEAD `6c3df57…` 재검토의 잔여 H-01·H-02만 계약에 반영, 새 fixed-HEAD 재검토 인계 |
+| Current checkpoint | fixed HEAD `111f118…` 재검토의 잔여 H-01·H-02 우회 경로를 계약에 반영, 새 fixed-HEAD 재검토 인계 |
 | Blocker | dependency manifest, 모델 weight 다운로드, 외부 network 사용은 별도 owner gate 전 금지 |
 | Next allowed action | PR #50 live base·새 HEAD를 고정한 H-01·H-02와 prohibited drift 제한 재검토 |
 | Forbidden now | 모델/weight 다운로드, dependency 설치·manifest 추가, 원격 추론, 사용자 미디어 commit, merge, 자기 승인 |
 
 이 파일은 자신을 포함하는 commit SHA를 내장하지 않는다. reviewer는 PR #50의 live HEAD와 base를 조회해
 고정하고, PR 본문의 compact handoff와 repository tree를 대조한다.
+
+### escalation 기록 — `AGENTS.md` §3 trigger 3
+
+같은 객관적 결함(H-01·H-02)을 GPT 제한 수정이 **두 번** 닫지 못했다. §3 trigger 3에 따라 세 번째 GPT
+반복을 금지하고 Claude Code specialist에게 이 remediation을 배정했다. 두 attempt의 HEAD·잔여 결함·표적
+검사는 다음과 같다.
+
+| attempt | fixed HEAD | 닫으려 한 것 | 재검토에서 남은 결함 | 표적 검사 |
+|---|---|---|---|---|
+| 1 | `6c3df57ae60ae411baef546a42f3f51509559ee7` | H-01 성능 record ↔ candidate stage 결박, H-02 lazy iterator 소비와 NVML frozen identity | H-01: stage/workload lineage와 exact matrix coverage 미완결. H-02: lazy timing과 Windows/WDDM 측정 경계 미완결 | `6c3df57` 계약 본문의 stage lineage·matrix coverage·timing 문구 검사 |
+| 2 | `111f118bf88f1913b10a04123b53bbc193b8d6ca` | 위 잔여 H-01·H-02 | H-01: (a) `job_id`·runtime `stage_id`·canonical attempt_path/attempt-record ref 부재로 measurement가 실행에 결박되지 않음, (b) runtime attempt identity 유일성 규정 부재이며 CAS 중복 제거와 실행 재사용을 구분하지 않음, (c) `final_pipeline_output_refs`의 내용·순서·계보·non-empty 미정의로 **빈 tuple이 동일성 검사를 통과**. H-02: (d) `output-materialized` event가 byte length만 결박해 timed-end 뒤 **same-length 교체가 검출되지 않음**, (e) NVML sample record가 measurement에 결박되지 않아 **하나의 unscoped record를 ASR·MT가 공유**해도 통과 | `111f118` 본문에 대한 텍스트 probe: `job_id` 출현 0회, `attempt_path` 0회, CAS dedup 구분 문구 0회, `final_pipeline_output_refs`의 정의·non-empty·ancestry 규정 0회, materialization event의 digest 결박 0회, sample record의 scope field 0회 |
+
+이번 remediation은 위 (a)~(e) 다섯 우회 경로만 닫는다. 계약 범위를 넓히거나 §11의 구현 경계, 모델·
+dependency·network gate를 바꾸지 않는다.
 
 ## 1. 고정 입력
 
@@ -173,9 +187,9 @@ adapter-native raw bytes는 실제 형식의 media type을 별도로 기록한�
 | candidate identity | 순서 있는 adapter role, official model ID·full revision, weight CAS hash, backend/runtime package·source identity, precision·quantization, decoding/VAD/chunk/context config hash와 그 ordered record의 `candidate_chain_hash` |
 | environment | `EnvironmentRecord/v1` ref와 Windows build, GPU UUID·model·total memory, driver·CUDA·NVML, Python, sampler/runner source commit |
 | inputs | calibration pack manifest/audio ref와 정확히 600초 timebase; 독립 MT는 benchmark input ref, end-to-end는 upstream `Transcript/v1` 등 실제 product document refs |
-| outputs | candidate stage마다 ordered adapter-native `raw_output_refs`, normalized product 또는 benchmark output refs, ordered `final_pipeline_output_refs`, axis별 accepted corrected output·correction record refs, alignment evidence ref가 필요한 run이면 그 ref |
+| outputs | candidate stage마다 ordered adapter-native `raw_output_refs`, normalized product 또는 benchmark output refs, `end_to_end`이면 §5.1.2의 네 원소 ordered `final_pipeline_output_refs`, axis별 accepted corrected output·correction record refs, alignment evidence ref가 필요한 run이면 그 ref |
 | measurements | stage별 `PerformanceMeasurement/v1` refs와 quality event refs; 숫자를 manifest에 자유롭게 재기입하지 않음 |
-| recovery | stage ID·unit ID·cache key·attempt record·artifact refs와, 배정된 end-to-end run의 `InterruptionRecord/v1` ref |
+| recovery | §5.1.1의 unit별 runtime identity tuple(`job_id`, `runtime_stage_id`, `attempt_id`, `attempt_record_ref`, `cache_key`, `stage_spec_fingerprint`)과 artifact refs, 배정된 end-to-end run의 `InterruptionRecord/v1` ref |
 | config | pack hash, candidate config hash, calibration-only style hash, chunk/stitch hash, pipeline source commit |
 
 `candidate_chain_hash`는 single candidate도 포함해 ordered adapter identity/config record의 canonical hash다.
@@ -202,6 +216,76 @@ measurement**가 필요하다. forced alignment와 subtitle composition은 이 1
 measurement ref·`measurement_id`·candidate stage identity는 전역에서 유일하며 다른 run이나 stage에 재사용할 수
 없다. validator는 runtime attempt record와 manifest와 measurement의 unit/attempt/cache/input/raw/aggregate output
 tuple을 exact equality로 비교한다.
+
+#### 5.1.1 measured candidate stage의 runtime identity 결박 (H-01)
+
+`attempt_ids`만으로는 측정을 어느 실행에 결박할 수 없다. attempt ID는 그 자체로 전역 유일이 아니고,
+가리키는 runtime record가 실제로 존재하는지도 증명하지 않는다. 그래서 12개 measured candidate stage는
+각 unit마다 다음 **runtime identity tuple**을 manifest와 `PerformanceMeasurement/v1` 양쪽에 같은 순서로
+가진다.
+
+| field | 내용 |
+|---|---|
+| `job_id` | 그 unit을 실행한 TASK-028 runtime job의 ID |
+| `runtime_stage_id` | runtime이 그 job 안에서 쓴 stage ID. calibration의 `candidate_stage_id`와 다른 축이며 둘 다 기록한다 |
+| `attempt_id` | 그 unit의 실행 attempt ID |
+| `attempt_record_ref` | 그 attempt record의 **canonical attempt_path 또는 immutable attempt-record CAS ref**. 둘 중 하나를 실행 전에 골라 전 run에 동일하게 적용하고 environment record에 그 선택을 남긴다 |
+| `cache_key` | 그 unit의 cache key |
+| `stage_spec_fingerprint` | 그 unit의 `StageSpec` fingerprint |
+| `input_ref_tuple` | 그 attempt가 실제로 소비한 ordered input refs |
+| `raw_output_ref` | 그 attempt가 실제로 생산한 adapter-native raw output ref |
+
+validator는 `attempt_record_ref`를 **실제로 읽어** 그 record의 `job_id`·`runtime_stage_id`·`attempt_id`·
+`cache_key`·`stage_spec_fingerprint`·ordered input refs·ordered output refs가 manifest·measurement의 같은
+자리 값과 exact equality인지 확인한다. record를 읽을 수 없거나 한 자리라도 다르면 그 stage measurement는
+`invalid`이고 run은 `completed`가 될 수 없다.
+
+**runtime attempt-record identity는 12개 stage에서 유일하다.** 어떤 `(job_id, runtime_stage_id, attempt_id)`
+삼중항 또는 `attempt_record_ref`도 서로 다른 두 candidate stage, 두 run, 두 `matrix_cell_id`에 나타날 수
+없다. 한 실행을 두 measurement로 세는 것을 금지한다.
+
+**CAS 중복 제거와 실행 재사용을 혼동하지 않는다.** 두 stage의 `raw_output_ref`나
+`aggregate_normalized_output_ref`가 **같은 digest**인 것은 bytes가 같다는 뜻일 뿐이고 그 자체로 결함이
+아니다 — content-addressed store의 정상 동작이다. 결함은 두 stage가 **같은 실행 attempt**를 가리키는
+것이다. 따라서 판정 기준은 output digest가 아니라 위 runtime identity tuple이다.
+
+그 결과 다음이 따라온다.
+
+- measured candidate stage의 모든 unit attempt는 **그 measurement window 안에서 실제로 실행된
+  attempt**여야 한다. cache hit로 실행을 건너뛴 unit이 하나라도 있으면 그 stage는 성능 measurement로
+  쓸 수 없고 `rtf_status`·`vram_status`가 `invalid`다. cache hit 자체를 금지하는 것이 아니라, 실행하지
+  않은 것을 실행 시간으로 보고하는 것을 금지한다.
+- 서로 다른 end-to-end run이 같은 ASR 후보를 쓰더라도 각 run은 자기 measured ASR stage의 실행 attempt를
+  따로 가진다. 두 run이 같은 attempt를 공유하면 12개 coverage가 성립하지 않는다.
+- 같은 후보의 두 실행이 우연히 같은 output digest를 만들어도 attempt·job·stage·cache key identity가
+  다르므로 정상이다. validator는 이 경우를 실패로 판정하지 않는다.
+
+#### 5.1.2 `final_pipeline_output_refs`의 내용과 계보 (H-01)
+
+이전 판은 이 tuple의 **동일성만** 요구했다. 그래서 manifest와 interruption record가 **둘 다 빈 tuple**이면
+동일성 검사를 그대로 통과했고, 다른 run의 ref나 계보가 맞지 않는 ref를 넣어도 막히지 않았다. 아래로
+닫는다.
+
+모든 `end_to_end` run은 `final_pipeline_output_refs`를 **정확히 네 원소의 non-empty ordered tuple**로 가진다.
+
+| 순서 | artifact | producer |
+|---|---|---|
+| 1 | `Transcript/v1` | 그 run의 measured ASR candidate stage |
+| 2 | `TranslatedTranscript/v1` | 그 run의 measured MT candidate stage |
+| 3 | `SubtitleDocument/v1` | 그 run의 subtitle composition stage |
+| 4 | SRT export | 그 run의 SRT export stage |
+
+- 빈 tuple, 길이가 4가 아닌 tuple, 순서가 다른 tuple은 **fail-closed**다. 동일성 검사가 통과해도 무효다.
+- 각 ref는 CAS에서 실제로 읽히고 kind·media type이 그 위치의 계약과 맞아야 한다.
+- 네 ref는 전부 **그 run의 `run_id`·`job_id`에 속한 attempt**가 생산해야 한다. 다른 run·다른 job이
+  생산한 ref(foreign-run ref)는 digest가 같더라도 그 자리에 올 수 없다.
+- **producer ancestry를 검사한다.** 2번의 producing attempt의 input tuple은 1번 ref를 포함해야 하고,
+  3번은 2번을, 4번은 3번을 포함해야 한다. 한 단계라도 조상이 끊기거나 다른 문서를 가리키면
+  ancestry-incompatible로 실패한다.
+- 1번과 2번은 각각 그 run의 measured ASR·MT candidate stage의 `aggregate_normalized_output_ref`와
+  같아야 한다. §5.1.1의 runtime identity로 그 stage가 실제 실행이었음이 확인된 경우에만 유효하다.
+- `independent_asr`·`independent_mt` run은 end-to-end pipeline을 완료하지 않으므로
+  `final_pipeline_output_refs`를 갖지 않는다. 이 두 run kind에서 이 field가 존재하면 실패다.
 
 ### 5.2 raw·corrected·독립 MT evidence
 
@@ -252,14 +336,32 @@ controlled interruption을 배정한 네 end-to-end run에는 다음이 필수�
 - 중단 전 completed unit마다 stage ID, unit ID, cache key, attempt ID와 output artifact ref/hash
 - 중단 당시 미완료 unit과 attempt ID, resume attempt ID
 - resume에서 reused unit과 restarted unit, 각각의 cache key·attempt·artifact identity
-- resumed candidate-stage aggregate output ref, manifest와 같은 ordered final pipeline output refs,
-  expected unit coverage/order/duplicate 검사 결과
+- resumed candidate-stage aggregate output ref, manifest와 같은 §5.1.2의 네 원소 ordered
+  `final_pipeline_output_refs`, expected unit coverage/order/duplicate 검사 결과
+- 중단 전·resume 양쪽 unit의 §5.1.1 runtime identity tuple(`job_id`, `runtime_stage_id`, `attempt_id`,
+  `attempt_record_ref`, `cache_key`, `stage_spec_fingerprint`)
 
 validator는 중단 전 completed 집합과 resume reused 집합이 exact identity로 같고, 그 unit에 새 execution attempt가
 없으며 bytes/hash가 불변인지 확인한다. 미완료 unit만 restarted될 수 있고 최종 coverage는 expected unit 집합과
 정확히 같아야 한다. aggregate attempt의 ordered input tuple은 reused/restarted unit의 최종 output tuple과 exact
 equality여야 하고, resumed aggregate output ref는 manifest의 해당 candidate stage normalized output ref와 같아야
-한다. `final_pipeline_output_refs`도 manifest outputs의 동일 ordered tuple과 같아야 한다. 같은 run/config를 적고
+한다. `final_pipeline_output_refs`도 manifest outputs의 동일 ordered tuple과 같아야 한다.
+
+**네 축이 동시에 일치해야 한다 (H-01).** interruption record, runtime attempt record, manifest, 최종 출력이
+서로 exact equality로 합의하지 않으면 실패다. 구체적으로:
+
+- reused/restarted unit의 `attempt_record_ref`를 실제로 읽어 그 record의 `job_id`·`runtime_stage_id`·
+  `attempt_id`·`cache_key`·`stage_spec_fingerprint`·input/output refs가 interruption record와 manifest의 같은
+  자리 값과 일치하는지 확인한다. reused unit은 **중단 전과 같은 attempt record**를 가리켜야 하고 새
+  execution attempt가 없어야 한다. restarted unit은 **중단 전과 다른 새 attempt record**를 가리켜야 한다.
+- reused unit의 output digest가 같은 것은 정상이다(§5.1.1). 판정 기준은 attempt identity이지 digest가 아니다.
+- `final_pipeline_output_refs`는 §5.1.2의 네 원소 non-empty ordered tuple이어야 한다. **빈 tuple은 manifest와
+  interruption record가 둘 다 비어 있어 "일치"하더라도 fail-closed**다.
+- 네 ref가 전부 그 run의 `run_id`·`job_id`에 속한 attempt의 산출물이어야 한다. foreign-run ref는 실패다.
+- §5.1.2의 producer ancestry(`Transcript/v1` → `TranslatedTranscript/v1` → `SubtitleDocument/v1` → SRT)가
+  attempt input tuple로 확인되지 않으면 ancestry-incompatible로 실패한다.
+
+같은 run/config를 적고
 다른 aggregate·최종 output을 가리키거나 중복·누락·dangling attempt가 있거나 report만 성공을 주장하면 실패한다.
 
 ### 5.5 집계의 fail-closed 규칙
@@ -274,6 +376,17 @@ correction time·RTF·VRAM·resume·quality 값은 연결된 record에서 재계
 정확한 matrix coverage나 12개 stage measurement 중 하나라도 없거나, 8개 중 하나라도
 schema/ref/identity/coverage 검증에 실패하거나 필요한 corrected/raw artifact가 없으면 report status는
 `incomplete`이고 TASK 완료나 모델 채택 근거로 쓸 수 없다.
+
+다음도 각각 `incomplete` 사유다.
+
+- 12개 measured candidate stage의 §5.1.1 runtime identity tuple 중 하나라도 없거나, `attempt_record_ref`를
+  읽을 수 없거나, record 값이 manifest·measurement와 다르거나, 같은 attempt identity가 두 stage에 나타남
+- measured stage에 실행하지 않은 cache-hit unit이 섞임
+- `end_to_end` run의 `final_pipeline_output_refs`가 비었거나 §5.1.2의 네 원소 ordered tuple이 아니거나
+  foreign-run ref이거나 producer ancestry가 끊김
+- interruption record·runtime record·manifest·최종 출력 네 축이 exact equality로 합의하지 않음
+- materialization event의 pre-end digest와 저장된 CAS digest가 다름
+- sample artifact ref를 두 measurement가 공유하거나 scope·covered window가 measurement와 맞지 않음
 
 ## 6. RTF·peak VRAM 측정 규약
 
@@ -290,8 +403,8 @@ device-wide와 process attribution에 쓴 exact NVML function symbol, API/struct
   process가 있으면 그 run의 VRAM evidence는 `invalid`다.
 - 순서는 `baseline → external sampler 시작 → process-cold model load → 고정 별도 warm-up input 1회 → pre-sync 완료 →
   timed-start → adapter 호출과 lazy output 완전 소비·lossless in-memory raw buffer materialization →
-  output-materialized event → post-compute device sync → timed-end → raw output hash/CAS commit →
-  model unload/worker 종료 → baseline 복귀 확인`이다.
+  unit별 digest 계산과 output-materialized event → post-compute device sync → timed-end →
+  digest-bound buffer의 CAS commit과 재검증 → model unload/worker 종료 → baseline 복귀 확인`이다.
 - process-cold load와 warm-up은 RTF numerator에서 제외하지만 `process_cold_load_ns`, `warmup_ns`로 따로
   기록한다. 여기서 process-cold는 fresh worker에 model/context가 resident하지 않았다는 뜻이며 OS page cache를
   강제로 비운 disk-cold를 주장하지 않는다. warm-up
@@ -304,10 +417,28 @@ device-wide와 process attribution에 쓴 exact NVML function symbol, API/struct
   event 순서·return을 증명하지 못하면 RTF는 `invalid`다.
 - timed adapter work에는 adapter-owned preprocessing, VAD/chunk/batch scheduling, model inference와 decoding을
   포함한다. generator/iterator를 반환하는 adapter는 이를 끝까지 소비하고 모든 adapter-native raw unit을 lossless
-  in-memory buffer로 materialize해야 timed interval을 끝낼 수 있다. `output-materialized` event는 unit 수·ordered
-  unit identity·buffer byte length와 이후 생성된 ordered `raw_output_refs`를 결박한다. model load·warm-up, 공통
-  media extraction, 사람 교정, forced alignment, materialized buffer의 hash 계산·CAS 쓰기는 제외하고 각각 별도
-  interval로 기록한다. iterator 생성만으로 timer를 끝내거나 timed-end 뒤 inference/decoding을 유발하면 invalid다.
+  in-memory buffer로 materialize해야 timed interval을 끝낼 수 있다. model load·warm-up, 공통
+  media extraction, 사람 교정, forced alignment는 제외하고 각각 별도 interval로 기록한다.
+  iterator 생성만으로 timer를 끝내거나 timed-end 뒤 inference/decoding을 유발하면 invalid다.
+
+**timed buffer substitution을 닫는다 (H-02).** 이전 판의 `output-materialized` event는 unit 수·ordered unit
+identity·**buffer byte length**만 결박했다. byte length는 내용을 결정하지 않으므로, timed-end 뒤 CAS 쓰기
+구간에서 buffer를 **같은 길이의 다른 bytes**로 바꿔치기해도 unit 수·unit identity·length가 전부 그대로였고
+`raw_output_refs`는 바뀐 buffer에서 계산됐다. 어떤 검사도 이를 잡지 못했다. 아래로 닫는다.
+
+- `output-materialized` event는 **timed-end 이전에** 기록되며 unit 수, ordered unit identity, unit별 byte
+  length에 더해 **unit별 content digest**와 ordered digest 전체의 `materialized_digest_tuple_hash`를 담는다.
+  digest 알고리즘과 canonical 직렬화는 첫 결과 전에 freeze해 전 run에 동일하게 적용한다.
+- 이 digest들은 **materialize된 바로 그 immutable buffer에서** timed interval 안에 계산한다. digest 계산을
+  timed interval 밖으로 미루면 substitution 창이 다시 열리므로 허용하지 않는다. digest 계산 비용은
+  `materialization_digest_ns`로 따로 기록해 RTF 해석에 쓸 수 있게 하되 timed interval에서 빼지 않는다.
+- materialize된 buffer는 그 시점 이후 **immutable**이다. 같은 measurement 안에서 다시 쓰거나 교체하지 않는다.
+- **CAS 쓰기는 timed interval 밖에 남을 수 있지만, 그 pre-end digest에 결박된 바로 그 buffer를 소비하고
+  검증해야 한다.** CAS commit 뒤 각 `raw_output_ref`의 실제 저장 digest를 다시 읽어 event의 unit별 digest와
+  ordered digest tuple hash에 exact equality로 대조한다. 하나라도 다르면 그 measurement는 `invalid`이고 run은
+  `completed`가 될 수 없다. 같은 길이의 교체는 digest가 달라지므로 여기서 반드시 검출된다.
+- validator는 event의 ordered unit identity·digest tuple과 manifest·measurement의 ordered `raw_output_refs`가
+  같은 순서로 일대일 대응하는지 확인한다. unit 수·순서가 같아도 digest가 다르면 실패다.
 
 ### 6.2 RTF denominator와 산식
 
@@ -340,6 +471,24 @@ device-wide와 process attribution에 쓴 exact NVML function symbol, API/struct
   process attribution이 `unavailable_wddm`여도 device-wide sample은 계속 필수이며 12 GB hard gate와 후보 간
   primary 비교는 device-wide peak를 쓴다. allocator peak는 backend-specific 보조값일 뿐 서로 다른 backend 간
   순위에 쓰지 않는다.
+**NVML evidence를 측정 단위에 유일하게 결박한다 (H-02).** 이전 판은 measurement가 `sample artifact ref`
+하나를 가리키게만 했고 그 sample record가 **어느 측정의 것인지** 규정하지 않았다. 그래서 end-to-end run
+하나에 sampler record 하나만 만들고 그 run의 ASR measurement와 MT measurement가 **같은 unscoped record**를
+참조해도 둘 다 통과했고, 다른 run의 record를 재사용하는 것도 막히지 않았다. 아래로 닫는다.
+
+- 각 sample record는 자기 scope로 `measurement_id`, `run_id`, `matrix_cell_id`, `candidate_stage_id`,
+  `adapter_role`, §5.1.1의 runtime identity tuple(ordered `job_id`·`runtime_stage_id`·`attempt_id`·
+  `attempt_record_ref`), target GPU UUID, sampler source commit, host clock identity, 그리고 covered
+  monotonic window(`window_start_ns`, `window_end_ns`)를 **필수로** 담는다.
+- 한 sample record는 **정확히 하나의 measurement**가 소유한다. 어떤 sample artifact ref도 두 measurement,
+  두 candidate stage, 두 run에 나타날 수 없다. end-to-end run의 ASR measurement와 MT measurement는 서로 다른
+  sample record를 가진다. 하나를 공유하면 두 measurement 모두 `invalid`다.
+- sample record의 scope field는 그 measurement의 같은 이름 field와 exact equality여야 하고, GPU UUID는
+  environment record의 target GPU UUID와 같아야 한다.
+- 그 measurement의 load·warm-up·timed·post-sync를 모두 포함하는 구간이 sample record의 covered monotonic
+  window **안에** 완전히 들어가야 한다. window 밖의 sample로 peak를 주장할 수 없다.
+- 다른 GPU UUID, 다른 host clock, 다른 run의 sample은 값이 커도 그 measurement의 peak 근거가 아니다.
+
 - 예정 50 ms sample 사이 실제 monotonic gap이 100 ms를 넘거나 load 전부터 post-sync까지 coverage가 없으면
   peak는 `invalid`다. controlled interruption은 중단 전과 resume 후 두 sample stream의 최대 absolute 값을
   해당 run peak로 사용하고 둘 중 하나가 invalid면 전체가 invalid다.
@@ -356,15 +505,22 @@ device-wide와 process attribution에 쓴 exact NVML function symbol, API/struct
 `measurement_id`, `run_id`, `matrix_cell_id`, `candidate_stage_id`, `adapter_role`,
 candidate/config/environment identity와 `candidate_chain_hash`, ordered `unit_ids`·`stage_spec_fingerprints`·
 `attempt_ids`·`cache_keys`·`input_ref_tuples`·`raw_output_refs`, `aggregate_normalized_output_ref`,
+§5.1.1의 unit별 ordered runtime identity tuple(`job_id`·`runtime_stage_id`·`attempt_id`·`attempt_record_ref`),
 `rtf_status`와 `vram_status`(각각
-`measured | excluded_interruption | invalid`), clock·materialization·sync events, load/warm-up/steady timed integer ns,
+`measured | excluded_interruption | invalid`), clock·materialization·sync events, unit별 materialized content
+digest와 `materialized_digest_tuple_hash`, `materialization_digest_ns`, load/warm-up/steady timed integer ns,
 denominator ns와 derived RTF, sampler와 exact NVML query identity·period·coverage, baseline·device total·device peak,
-`process_attribution_status`와 그 status가 `measured`일 때만 process-tree peak bytes, sample artifact ref, unload
+`process_attribution_status`와 그 status가 `measured`일 때만 process-tree peak bytes, 이 measurement가 단독으로
+소유하는 scoped sample artifact ref와 그 covered monotonic window, unload
 결과와 invalid/exclusion reason이다.
 
 validator는 runtime attempt record·manifest candidate stage와 unit/attempt/cache/input/raw/aggregate output tuple을
 exact equality로 비교하고 interval·RTF·sample maximum을 원본 event/sample CAS artifact에서 재계산한다.
-모든 ordered raw output은 timed interval 안의 materialization event에 포함되어야 한다. measurement ref나 identity를
+`attempt_record_ref`를 실제로 읽어 §5.1.1의 runtime identity tuple 전체가 일치하는지 확인하고, 그 identity가
+12개 stage에서 유일한지 검사한다. 실행하지 않은 cache-hit unit이 섞이면 그 stage는 성능 measurement로 쓸 수
+없다(§5.1.1). 모든 ordered raw output은 timed interval 안의 materialization event에 포함되어야 하며, 저장된
+CAS digest가 그 event의 pre-end digest와 일치해야 한다(§6.1). sample artifact ref는 이 measurement가 단독
+소유하고 scope field와 covered window가 §6.3의 조건을 만족해야 한다. measurement ref나 identity를
 다른 stage/run에 재사용할 수 없으며 §5.1의 exact 12개 coverage가 필요하다. controlled-interruption run은 RTF만
 `excluded_interruption`일 수 있고 valid device-wide VRAM evidence는 별도로 유지한다. WDDM의
 `unavailable_wddm` process attribution은 그 자체로 device-wide hard gate를 무효화하지 않지만, required field,
@@ -486,6 +642,10 @@ network·privacy, 비용·사용량, 보존·학습 정책, latency 포함 범�
 - [ ] 네 후보와 aligner의 exact ID·revision·license·환경·설정이 실행 전에 고정됐다.
 - [ ] 독립 MT benchmark input, calibration-only subtitle style과 alignment chunk/stitch contract가 hash로 고정됐다.
 - [ ] exact 8-cell matrix의 unique run manifest와 exact 12개 candidate-stage measurement가 raw/corrected/attempt/interruption CAS lineage를 fail-closed로 검증한다.
+- [ ] 12개 measured candidate stage가 §5.1.1의 runtime identity tuple(`job_id`·`runtime_stage_id`·`attempt_id`·`attempt_record_ref`·cache key·`StageSpec` fingerprint·inputs·outputs)로 실제 실행 attempt에 결박되고, 그 attempt identity가 전역에서 유일하며, CAS 중복 제거와 실행 재사용을 구분한다.
+- [ ] 네 end-to-end run이 §5.1.2의 네 원소 non-empty ordered `final_pipeline_output_refs`와 `Transcript/v1` → `TranslatedTranscript/v1` → `SubtitleDocument/v1` → SRT producer ancestry를 갖고, interruption record·runtime record·manifest·최종 출력이 exact equality로 합의한다.
+- [ ] materialized raw buffer가 timed-end 이전에 digest로 결박되고, CAS commit이 그 digest를 소비·재검증해 same-length 교체가 검출된다.
+- [ ] 각 NVML sample record가 `measurement_id`·`run_id`·`matrix_cell_id`·candidate stage·runtime attempt identity·GPU UUID·monotonic window로 유일하게 결박되고 두 measurement가 공유하지 않는다.
 - [ ] 공통 600초 RTF가 lazy output의 timed materialization·exact sync event에서, external NVML peak VRAM이 frozen query의 raw sample에서 재계산된다.
 - [ ] Windows driver model과 `measured | unavailable_wddm | invalid` process attribution이 정직하게 기록되고, device-wide invalid evidence는 12 GB hard gate를 통과하지 못한다.
 - [ ] 독립 ASR 2회, 독립 번역 2회, end-to-end 4회가 실제로 완료됐다.
