@@ -1,0 +1,285 @@
+# TASK-031 — U-22 A-min 로컬 자막 calibration vertical slice
+
+| 항목 | 값 |
+|---|---|
+| **ID** | TASK-031 |
+| **결정자** | 사람 제품 오너 (2026-09-01, U-22 A-min 확정) |
+| **Owner / Author** | Lean Root Author |
+| **Reviewer** | 작성자와 다른 fresh GPT/Codex 세션 — 최종 fixed-HEAD Gate H 독립 검토 |
+| **Phase** | Phase 1a — 첫 실제 자막 vertical slice와 calibration |
+| **Gate** | H — 외부 모델·dependency, 12 GB GPU, Windows, cache/resume와 품질 판정 |
+| **Status** | `In progress` — 계약 checkpoint 작성; dependency/model/network gate 전 실제 반입·실행 금지 |
+| **기준 main** | `356b964505c3d852e9a264d79da12f15e5e707e0` (PR #49 merge commit) |
+
+## 목표
+
+고정된 대표 10분 입력 하나에서 실제 오디오부터 원문 전사, 한국어 번역, 자막 문서와 calibration용 SRT까지
+완전 로컬로 생성하고, 기존 CAS·lineage·checkpoint/resume 기반에 연결한다. 같은 입력과 고정 설정으로
+ASR 2종 × 번역 2종을 분리·결합 측정해 U-22의 다음 모델 채택 판단에 필요한 정직한 증거를 만든다.
+
+이 TASK는 계약을 더 넓히는 작업이 아니다. 기존 `Transcript/v1`, `TranslatedTranscript/v1`,
+`SubtitleDocument/v1`, artifact store와 stage runtime을 실제 모델이 소비·생성하게 만드는 첫 측정
+vertical slice다. 모델 우열이나 제품 완성도를 테스트 수로 주장하지 않는다.
+
+## execution card
+
+| 항목 | 값 |
+|---|---|
+| Source | live `main@356b964505c3d852e9a264d79da12f15e5e707e0` |
+| Active TASK | TASK-031 / `In progress` |
+| Gate | H |
+| Author / Reviewer | Lean Root Author / fresh GPT·Codex session |
+| Approved scope | U-22 A-min 계약 기록, 실행 준비, 실제 10분 로컬 calibration과 보고 |
+| Current checkpoint | 계약과 allowed/forbidden 경로를 고정해 remote coherent commit으로 보존 |
+| Blocker | dependency manifest, 모델 weight 다운로드, 외부 network 사용은 별도 owner gate 전 금지 |
+| Next allowed action | 계약 checkpoint 검증·commit·push·remote 확인; 그 뒤 별도 gate가 닫히면 preflight smoke부터 구현 |
+| Forbidden now | 모델/weight 다운로드, dependency 설치·manifest 추가, 원격 추론, 사용자 미디어 commit, merge, 자기 승인 |
+
+## 1. 고정 입력
+
+- 총 길이 10분인 content-locked calibration pack 하나를 쓴다.
+- 일본어 일반 발화, 일본어·영어 code-switching, 고유명사·숫자·전문용어, 무음·음악·배경소음,
+  빠른 발화 또는 겹침 중 최소 하나를 포함한다.
+- 여러 구간을 이어도 되지만 입력 파일, 구간 순서·경계, 구성 manifest와 SHA-256을 첫 결과 전에 고정한다.
+- 결과를 본 뒤 구간을 교체하지 않는다. harness 결함으로 pack 자체가 무효라면 기존 pack과 결과를
+  보존하고 새 identity로 전부 다시 시작한다.
+- pack 원본, 모델 weight, 생성 미디어와 민감한 transcript는 Git에 넣지 않는다. 저장소에는 비식별
+  manifest·hash·재현 명령·집계 결과만 남긴다.
+- 이 결과는 단일 입력 engineering calibration이다. 전체 도메인이나 일반적인 모델 우열을 증명하지 않는다.
+
+## 2. 후보와 실행 전 freeze
+
+| 단계 | 후보 |
+|---|---|
+| ASR | faster-whisper large-v3 |
+| ASR | Qwen3-ASR-1.7B |
+| 번역 | MADLAD-400-3B-MT |
+| 번역 | Qwen3.5-4B |
+| 공통 scored alignment | Qwen ForcedAligner |
+
+2026-09-01 계약 checkpoint에서 공식 배포처의 다음 immutable revision을 관측했다. 별도 gate가 승인되면
+다운로드 직전에 동일 identity와 license metadata를 다시 확인하고, calibration manifest에는 full SHA를 쓴다.
+
+| 역할 | 공식 model ID | candidate revision | 배포처 license metadata |
+|---|---|---|---|
+| ASR | `Systran/faster-whisper-large-v3` | `edaa852ec7e145841d8ffdb056a99866b5f0a478` | MIT |
+| ASR | `Qwen/Qwen3-ASR-1.7B` | `7278e1e70fe206f11671096ffdd38061171dd6e5` | Apache-2.0 |
+| 번역 | `google/madlad400-3b-mt` | `fa184c675da0b5c9e1c8694fccd4e12e2d422094` | Apache-2.0 |
+| 번역 | `Qwen/Qwen3.5-4B` | `851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a` | Apache-2.0 |
+| 정렬 | `Qwen/Qwen3-ForcedAligner-0.6B` | `c7cbfc2048c462b0d63a45797104fc9db3ad62b7` | Apache-2.0 |
+
+정본 확인 위치는 각 공식 repository의 commit page다:
+[faster-whisper](https://huggingface.co/Systran/faster-whisper-large-v3/commit/edaa852ec7e145841d8ffdb056a99866b5f0a478),
+[Qwen3-ASR](https://huggingface.co/Qwen/Qwen3-ASR-1.7B/commit/7278e1e70fe206f11671096ffdd38061171dd6e5),
+[MADLAD](https://huggingface.co/google/madlad400-3b-mt/commit/fa184c675da0b5c9e1c8694fccd4e12e2d422094),
+[Qwen3.5](https://huggingface.co/Qwen/Qwen3.5-4B/commit/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a),
+[ForcedAligner](https://huggingface.co/Qwen/Qwen3-ForcedAligner-0.6B/commit/c7cbfc2048c462b0d63a45797104fc9db3ad62b7).
+
+배포처 metadata 기록은 프로젝트 사용·배포 적합성에 대한 법률 결론이 아니다. 각 후보의 precision·quantization,
+decoding, VAD·chunking, context policy, CUDA·PyTorch·Python·Windows·driver 버전뿐 아니라 package version,
+source commit 또는 wheel hash까지 실행 전에 한 manifest에 고정한다. mutable branch나 unpinned package를 실행
+identity로 쓰지 않는다. 결과를 본 뒤 특정 후보만 beam, prompt, chunk 크기 등을 바꾸지 않는다. 공통 harness
+결함을 고쳤다면 영향받은 비교군 전체를 같은 설정으로 다시 실행하고 이전 결과를 보존한다.
+
+모델 후보 확정은 다운로드·재배포·상업 이용 허가가 아니다. license나 사용 조건이 불명확하면 그 후보는
+hard gate에서 멈추고 제품 오너에게 근거를 반환한다.
+
+## 3. 최소 실행 행렬
+
+### 3.1 독립 ASR — 2회
+
+같은 10분 오디오를 faster-whisper large-v3와 Qwen3-ASR-1.7B로 각각 실행한다.
+
+- 치명적 누락·환각의 timestamp와 내용
+- source transcript 수정시간
+- 정상 완료 run의 RTF와 peak VRAM
+- crash·OOM·비결정적 종료 등 Windows 실행 이상
+- 모델 로딩·추론의 local-only 여부
+
+### 3.2 독립 번역 — 2회
+
+ASR 출력이 아니라 pack과 함께 고정한 동일 human-corrected source transcript를 MADLAD-400-3B-MT와
+Qwen3.5-4B에 각각 넣는다.
+
+이 입력은 ASR evidence인 `Transcript/v1`이 아니다. pack SHA와 연결된 task-local benchmark input으로
+별도 저장하고, exact text·고정 segment ID/경계·human-correction provenance·content hash를 기록한다.
+독립 번역 출력도 제품 `TranslatedTranscript/v1`을 가장하지 않는 benchmark evidence다. 실제 end-to-end
+4회만 ASR이 생성한 immutable `Transcript/v1`을 TranslationAdapter에 넣어 `TranslatedTranscript/v1`을 만든다.
+
+- 의미 누락·추가·반전
+- 고유명사·숫자·code-switching 처리
+- target Korean 수정시간
+- 정상 완료 run의 RTF와 peak VRAM
+- Windows 실행 이상과 local-only 여부
+
+### 3.3 end-to-end — 4회
+
+1. faster-whisper × MADLAD
+2. faster-whisper × Qwen3.5
+3. Qwen3-ASR × MADLAD
+4. Qwen3-ASR × Qwen3.5
+
+각 조합은 원본 오디오부터 `Transcript/v1` → `TranslatedTranscript/v1` → `SubtitleDocument/v1` → SRT까지
+실제 pipeline으로 완료한다. 독립 단계 결과를 더해 end-to-end 실행을 대신하지 않는다. 따라서 완료에
+필요한 최소 범위는 총 8개 논리 run이다.
+
+SRT는 이 calibration의 공통 비교 export일 뿐 제품의 최종 출력 형식 결정이 아니다. U-09의
+SRT/VTT/ASS 제품 선택은 계속 미해결로 둔다.
+
+faster-whisper × MADLAD 한 조합의 선행 smoke는 harness 경로 확인용으로 허용하지만 TASK-031 또는
+U-22를 완료하지 않는다.
+
+## 4. 정렬 경계
+
+- 네 end-to-end 조합의 공통 scored alignment는 Qwen ForcedAligner로 통일한다.
+- faster-whisper native timestamp는 동일한 faster-whisper transcript에 한 번의 paired diagnostic으로만 비교한다.
+- 정렬을 세 번째 factorial 축으로 만들지 않고 ASR·번역 점수에 별도 효과로 합산하지 않는다.
+- forced alignment는 별도 immutable artifact이며 원문 `Transcript/v1`의 raw ASR text·timing을 덮어쓰지 않는다.
+- 공식 구현의 단일 입력 상한이 5분이므로 10분 pack을 한 번에 넣지 않는다. 각 committed ASR audio/text
+  segment를 반개구간 `[start, end)`의 결정론적 정렬 단위로 사용하고 각 단위를 300초 이하로 제한한다.
+  300초를 넘는 segment가 생기면 결과를 보기 전에 고정한 ASR chunk 경계에서 나누며 임의 재분할하지 않는다.
+- 각 정렬 단위의 출력은 원본 단위 identity와 time origin을 기록하고, pack 시간축에는 그 origin만 더해 stitch한다.
+  겹치는 중복 단위를 만들지 않으며 입력 단위의 identity·순서·전 범위가 결과에서 정확히 한 번 나타나는지 검증한다.
+- task-local `AlignmentEvidence/v1`은 최소한 source `Transcript/v1` artifact ref, audio artifact ref, aligner의
+  exact model/runtime identity, 정렬 단위 ID와 time origin, source segment ID, exact source text의 Unicode scalar
+  반개구간, 정렬된 start/end seconds, coverage gap과 실패 사유를 담는 닫힌 형식과 validator를 갖는다.
+  source scalar 범위는 겹치거나 사라지지 않고 exact substring과 일치해야 하며 시간 범위는 원본 단위 안에 있어야 한다.
+- 이 evidence는 calibration 전용 별도 CAS artifact다. `Transcript/v1`·`TranslatedTranscript/v1`·기존 token
+  timing을 수정하지 않으며 제품의 장기 alignment schema를 자동 확정하지 않는다. 이 최소 형식과 validator를
+  먼저 만들지 못하면 aligner 실행을 중단하고 계약 finding으로 돌린다.
+- TASK-029에서 공식 LID accuracy는 계속 `unsupported`다. 임의 proxy를 LID라고 기록하지 않는다.
+
+## 5. resume 검증
+
+| end-to-end 조합 | controlled interruption 대상 |
+|---|---|
+| faster-whisper × MADLAD | faster-whisper 처리 중 |
+| faster-whisper × Qwen3.5 | Qwen3.5 번역 중 |
+| Qwen3-ASR × MADLAD | MADLAD 번역 중 |
+| Qwen3-ASR × Qwen3.5 | Qwen3-ASR 처리 중 |
+
+중단은 임의 GPU kernel 내부 복구가 아니라 시스템이 선언한 마지막 committed chunk·segment 경계에서 한다.
+기존 runtime의 stage 완료 checkpoint보다 세밀한 nested checkpoint를 추가하지 않는다. 대신 freeze된 각
+ASR chunk와 번역 segment/batch를 결정적 `StageSpec`으로 만들고, 그 산출물을 모으는 별도 aggregate stage를 둔다.
+controlled interruption은 한 단위 stage가 CAS에 완료된 뒤 다음 단위 전 또는 실행 중인 미완료 단위에서 발생시켜,
+resume가 완료 stage는 재사용하고 미완료 stage만 다시 시작한다. 이 표현으로 증명할 수 없으면 `job_runtime.py`를
+즉석 수정하지 않고 integration finding으로 돌린다.
+
+- 완료 chunk·segment를 다시 수행하지 않는다.
+- 기존 artifact identity와 bytes를 그대로 재사용한다.
+- resume 뒤 최종 산출물이 완료되고 중복·누락 segment가 없다.
+- checkpoint, attempt, artifact identity와 재사용 근거가 로그에서 연결된다.
+- 중단 run의 전체 wall time은 성능 순위에 쓰지 않는다.
+
+## 6. 판정 규칙
+
+### 6.1 hard gate
+
+다음 중 하나라도 실패하면 기본 모델로 채택하지 않는다.
+
+1. network 차단 상태에서 추론할 수 없음
+2. license·사용·배포 조건이 프로젝트 목적과 양립하지 않거나 불명확함
+3. Windows 11 + RTX 4070 SUPER 12 GB에서 OOM 또는 반복 비정상 종료
+4. 목표 Windows 환경의 재현 가능한 실행 경로가 없음
+5. 선언한 checkpoint 경계에서 resume하지 못함
+6. resume가 완료 작업을 불필요하게 다시 수행함
+
+### 6.2 quality veto와 순위
+
+치명적 누락·환각은 평균 속도로 덮지 않는다. timestamp·내용과 함께 후보 제외, 추가 calibration 필요,
+제한 fallback 중 하나로 판정한다. hard gate를 통과한 후보끼리는 다음 순서로 본다.
+
+1. end-to-end source 수정시간 + target 수정시간
+2. source·target 단계별 수정시간
+3. RTF
+4. peak VRAM과 실행 여유
+5. Windows 실행 안정성
+
+반복 측정이 없는 10분 단일 pack이므로 작은 차이로 승자를 만들지 않는다. 오류 양상과 수정시간이
+명확히 갈리지 않으면 `inconclusive`로 남기고 두 adapter를 유지한다.
+
+## 7. 수정시간 통제와 미지원 범위
+
+- 모델명을 숨긴 익명 출력, source·target 각각 무작위 검토 순서, 모든 결과 생성 후 평가 시작을 적용한다.
+- source clock은 동기 재생 가능한 익명 출력이 준비돼 처음 표시될 때 시작하고, evaluator가 수용한
+  human-corrected source를 저장할 때 끝난다. target clock도 고정 source와 익명 한국어 출력이 준비돼
+  처음 표시될 때 시작하고 evaluator가 수용한 한국어를 저장할 때 끝난다.
+- evaluator의 실제 읽기·재생·탐색·편집 시간은 포함한다. 최초 파일 준비·모델 로딩, 도구 failure·reload로
+  작업할 수 없는 시간만 사유와 함께 pause한다. 휴식·중단은 timestamp로 기록하고 후보별로 같은 규칙을 쓴다.
+- 정답 transcript를 참조했는지와 target 교정에서 사용한 source view를 기록한다.
+- 단일 평가자·단일 입력·순서 학습 편향을 결과에 명시한다.
+- `SubtitleDocument/v1` 생성 전에 `style_profile_id`, version과 모든 `resolved_style` 숫자·line-break policy를
+  `calibration-only` profile로 한 번 고정하고 canonical JSON hash를 manifest에 넣는다. 네 조합 모두 같은
+  snapshot을 쓰며 결과를 본 뒤 바꾸지 않는다. 이는 U-18 제품 기본값을 해결하거나 추천하는 결정이 아니다.
+- 공식 LID accuracy와 chrF2는 이 calibration에서 `unsupported`다. 현재 정본 규칙이나 정답 bundle이
+  계산 가능 조건을 충족하지 않으므로 proxy·임의 수치를 같은 이름으로 기록하지 않는다.
+- 통계적으로 유의한 모델 우열, 장르·화자·음질 일반화, 장시간 production 안정성, remote 모델과의
+  공정한 비용·개인정보 비교를 주장하지 않는다.
+
+## 8. remote comparator와 network 경계
+
+Remote Qwen-MT comparator는 TASK-031 채택 근거에서 제외한다. 후속 비교에는 업로드 가능 데이터,
+network·privacy, 비용·사용량, 보존·학습 정책, latency 포함 범위를 제품 오너가 별도로 승인해야 한다.
+모델 weight와 dependency를 승인된 출처에서 준비하는 network 단계와 실제 calibration run을 분리하고,
+실제 run은 network 차단 상태에서 local-only를 증명한다.
+
+## 9. 구현 경계
+
+계약 checkpoint에서 수정 가능한 경로:
+
+- `docs/tasks/TASK-031.md`
+- `STATUS.md`
+- `PLAN.md`
+- `docs/DECISIONS.md`
+
+별도 dependency/model/network gate가 닫힌 뒤 같은 TASK에서 허용할 구현 범위:
+
+- 새 `src/media_clarity/calibration/` package와 전용 CLI
+- 새 focused tests, calibration manifest·report template, `scripts/verify_task_031.py`
+- task-local benchmark input과 `AlignmentEvidence/v1` 닫힌 형식·validator
+- TASK-031 전용 Make target
+- 재현 가능한 dependency manifest와 lock 정보
+- 필요한 최소 TASK-031 상태·결과 기록
+
+기존 `artifact_store.py`, `job_runtime.py`, `subtitle_contracts.py`, `eval_contracts.py`, schema 계약은 우선
+그대로 소비한다. 실제 integration에서 구체적 불일치가 재현되면 즉석 리팩터링하지 않고 finding으로
+분리해 bounded remediation과 새 reviewer 범위를 고정한다.
+
+## 범위 밖
+
+- UI·editor·OCR·VLM·고급 diarization·source separation·시각 재구성
+- 40~120분 장시간 안정성, packaging·installer·auto-update
+- remote 추론 또는 remote comparator
+- 모델 영구 채택과 기본값 변경 — calibration 결과 뒤 Pro challenge와 제품 오너 결정
+- 공식 LID accuracy·chrF2 구현 또는 대체 proxy
+- 사용자 미디어·모델 weight·대용량 생성 artifact의 Git commit
+- unrelated contract/schema/runtime refactor와 운영 Markdown 정리
+
+## 완료 조건
+
+- [ ] content-locked 10분 pack과 human-corrected source가 결과 확인 전에 hash로 고정됐다.
+- [ ] 네 후보와 aligner의 exact ID·revision·license·환경·설정이 실행 전에 고정됐다.
+- [ ] 독립 MT benchmark input, calibration-only subtitle style과 alignment chunk/stitch contract가 hash로 고정됐다.
+- [ ] 독립 ASR 2회, 독립 번역 2회, end-to-end 4회가 실제로 완료됐다.
+- [ ] 네 end-to-end 조합이 기존 CAS·lineage와 자막 spine 문서를 생성·검증했다.
+- [ ] 네 model adapter가 각각 한 controlled interruption/resume 증거를 남겼다.
+- [ ] local-only, Windows 11, RTX 4070 SUPER 12 GB, RTF와 peak VRAM 경계가 직접 측정됐다.
+- [ ] 치명적 누락·환각, source/target 수정시간과 편향 통제가 결과에 기록됐다.
+- [ ] LID·chrF2와 일반화·통계적 우열을 unsupported/미검증으로 정직하게 남겼다.
+- [ ] code·tests·실행 artifact를 포함한 최종 coherent HEAD가 full regression을 통과했다.
+- [ ] 작성자와 다른 fresh reviewer가 fixed HEAD를 Gate H로 승인했다.
+- [ ] 측정 뒤 ChatGPT Pro challenge와 제품 오너 결정 전에는 기본 모델을 확정하지 않았다.
+
+## rollback·stop condition
+
+- contract checkpoint는 이 네 Markdown 파일 한 묶음으로 되돌릴 수 있다.
+- 구현은 calibration 전용 새 package·manifest·tests를 한 rollback 단위로 유지하고 기존 artifact를 삭제하지 않는다.
+- license 불명확, 12 GB/Windows 실행 불가, local-only 위반, 반복 OOM/crash, resume 재실행·중복·누락,
+  pack identity drift가 발생하면 자동 채택하지 않고 해당 후보 또는 TASK를 `Blocked`로 전환한다.
+- 범위를 넓히는 해결책, remote egress, 새 비용·privacy·destructive 작업이 필요하면 제품 오너 gate에서 멈춘다.
+
+## 전환
+
+TASK-031 결과는 모델 채택 결론이 아니라 U-22의 측정 evidence다. calibration report 뒤 ChatGPT Pro가
+한 번 challenge하고, 제품 오너가 기본/fallback/추가 실험을 결정한다. 자막 10분 vertical slice가
+완료되면 다음 기능 후보는 고급 자막 기능보다 먼저 최소 시각 재구성 vertical slice로 평가한다.
