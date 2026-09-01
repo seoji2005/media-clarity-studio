@@ -2,7 +2,7 @@
 
 `media-clarity-studio`의 로드맵입니다.
 
-마지막 갱신: 2026-08-29 (TASK-028 shared runtime foundation 구현 승인·병합)
+마지막 갱신: 2026-09-01 (TASK-029/PR #45 병합과 TASK-030 운영 계약 정합화)
 상태: **제안됨 (Proposed) 유지** — PR #5 병합은 계획 기준선 작업을 완료했지만,
 제안됨 ADR·실행 순서·미해결 U-XX를 자동 승인하거나 해결하지 않습니다
 
@@ -65,7 +65,7 @@ Phase 4  상용화 + 개인 클라우드 내보내기
 ## 2. Phase 0 — Foundation (**완료 — `main`에 병합됨**)
 
 **목표:** 사람과 AI 세션들이 같은 전제 위에서 병렬 작업할 수 있는 문서 기반 확보.
-누가 무엇을 맡는지는 [`AGENTS.md`](AGENTS.md) §3의 현재 운영 구조를 따릅니다 (ADR-0029).
+누가 무엇을 맡는지는 [`AGENTS.md`](AGENTS.md) §3의 현재 운영 구조를 따릅니다 (ADR-0030).
 
 산출물: `README.md`, `AGENTS.md`, `CLAUDE.md`, `PLAN.md`, `STATUS.md`,
 `docs/PRODUCT_SPEC.md`, `docs/ARCHITECTURE.md`, `docs/EVALS.md`, `docs/DECISIONS.md`,
@@ -200,7 +200,10 @@ TASK-006  ReferenceBundle/v1·평가 실행 계약과 schema/validator/fixture �
 TASK-028  content-addressed artifact/cache/resume runtime — 완료 (PR #36)
    │
    ▼
-다음 기능 TASK — 자막 spine 기계 계약 정본화 후보, 오너 승인 전 범위·번호 미확정
+TASK-029  자막 spine 기계 계약·schema·validator·fixture — 완료 (PR #45)
+   │
+   ▼
+다음 기능 TASK — 범위·번호 미확정, 별도 scope 승인 전 착수 금지
 ```
 
 | 노드 | 성격 | **선행 (이 표가 정답)** | 현재 상태 |
@@ -211,7 +214,8 @@ TASK-028  content-addressed artifact/cache/resume runtime — 완료 (PR #36)
 | **TASK-005** | 평가 하네스 설계 명세 (기존 의미 유지) | TASK-003 · U-06 선택 | **Done — PR #25** |
 | **TASK-006** | `ReferenceBundle/v1`·평가 실행 계약과 schema/validator/fixture (기존 의미 유지) | **TASK-005** | **Done — PR #28** |
 | **TASK-028** | 공용 storage·orchestrator 실행 기반 | TASK-006 완료 | **Done — REVIEW-022 승인, PR #36 병합** |
-| 다음 기능 TASK | 자막 spine 기계 계약 정본화 후보 | TASK-028 완료와 별도 TASK 계약 | **제안 — 오너 승인 전 범위·번호 미확정** |
+| **TASK-029** | 자막 spine 기계 계약과 기계 정본 구현 | TASK-028 완료와 별도 TASK 계약 | **Done — Gate H 승인, PR #45 병합 (`6f94705598c1ef57a4d25682938cbcbbaf044732`)** |
+| 다음 기능 TASK | TASK-029 이후 기능 범위 | TASK-029 완료와 별도 TASK 계약 | **미확정 — scope 승인 전 착수 금지** |
 
 **왜 이렇게 보수적으로 두는가**
 
@@ -224,7 +228,8 @@ TASK-028  content-addressed artifact/cache/resume runtime — 완료 (PR #36)
 > **각 TASK는 착수 전에 자기 TASK 파일을 먼저 만듭니다** (`AGENTS.md` §6.2).
 > **TASK-003·005·006은 예약된 번호이며 의미를 바꾸지 않았습니다.**
 > **TASK-028 계약은 PR #34, 구현은 REVIEW-022 승인 뒤 PR #36으로 병합됐습니다.**
-> 다음 기능과 후속 ASR·평가 구현은 별도 TASK 계약과 사람 제품 오너 승인 전에는 시작하지 않습니다. 위의 PR #16 합성 plumbing은
+> **TASK-029 계약·구현은 Gate H 검토와 제품 오너의 exact-HEAD 승인 뒤 PR #45로 병합됐습니다.**
+> 그 다음 기능과 후속 ASR·평가 구현은 별도 TASK 계약과 사람 제품 오너 승인 전에는 시작하지 않습니다. 위의 PR #16 합성 plumbing은
 > 사람 오너가 승인한 좁은 예외이며 일반 ASR·번역·외부 코퍼스 구현 착수를 뜻하지 않습니다.
 > **PR #34와 #36의 승인은 TASK-028에 한정됩니다.** 나머지 실행 순서와 후속 노드는 계속 제안 상태입니다.
 
@@ -297,7 +302,7 @@ TASK-028  content-addressed artifact/cache/resume runtime — 완료 (PR #36)
 ## 7. 역할과 병렬 작업 경계
 
 현재 역할·Claude escalation·동시성·검토·병합 규칙의 정본은
-[`AGENTS.md`](AGENTS.md) §3~§4와 ADR-0029입니다. 이 로드맵은 역할을 재정의하지 않습니다.
+[`AGENTS.md`](AGENTS.md) §3~§4와 ADR-0030입니다. 이 로드맵은 역할을 재정의하지 않습니다.
 작업은 모듈·파일 소유권이 겹치지 않을 때만 병렬화하며 제품 Phase 순서는 그대로 유지합니다.
 
 ---

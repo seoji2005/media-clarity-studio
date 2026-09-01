@@ -12,9 +12,9 @@ Local-first multilingual subtitle generation and AI-assisted media restoration s
 
 로컬 우선(local-first) 미디어 처리 도구를 목표로 합니다.
 
-현재 단계는 **Phase 1a**입니다. 합성 미디어 plumbing, 평가 계약, content-addressed artifact store와
-재개 가능한 local synchronous stage runtime까지 구현·병합됐습니다. 실제 ASR·번역·화자분리·정렬,
-OCR/VLM, 시각 재구성과 제품 UI는 아직 본격 구현 전입니다. 현재 상태의 정본은
+현재 단계는 **Phase 1a**입니다. 합성 미디어 plumbing, 평가 계약, content-addressed artifact store,
+재개 가능한 local synchronous stage runtime, 자막 data spine schema·validator·fixture까지 구현·병합됐습니다.
+실제 ASR·번역·화자분리·정렬, OCR/VLM, 시각 재구성과 제품 UI는 아직 본격 구현 전입니다. 현재 상태의 정본은
 [`STATUS.md`](STATUS.md)입니다.
 
 > **용어 원칙 (반드시 준수)**
@@ -104,7 +104,7 @@ media-clarity-studio/
     └── reviews/           # 고정 HEAD 독립 검토 기록
 ```
 
-- 소스 코드: **있음** — 합성 media slice, 평가 계약 validator, CAS, cache/checkpoint/resume runtime
+- 소스 코드: **있음** — 합성 media slice, 평가·자막 계약 validator, CAS, cache/checkpoint/resume runtime
 - 의존성 매니페스트(`requirements.txt`, `package.json`, `pyproject.toml` 등): **없음**
 - 모델 가중치 / 다운로드 스크립트: **없음**
 - CI 설정: **없음**
@@ -140,7 +140,7 @@ media-clarity-studio/
 개발 경험이 많지 않아도 진행할 수 있도록, 사람이 판단해야 하는 지점만 문서에 모아두었습니다.
 
 1. [`STATUS.md`](STATUS.md) §5의 **차단 항목**에 답하기
-   (예: "정답 자막이 원어인가 번역인가", "제출 기한은 언제인가")
+   (예: "정확한 제출 날짜는 언제인가", "채점 배점표가 공개됐는가")
 2. 에이전트가 조사해 온 **비교표를 보고 고르기** (예: seed 코퍼스 후보 — 조사는 에이전트가 합니다)
 3. 각 에이전트가 올린 **Pull Request를 검토하고 병합 여부 결정**
 

@@ -2,7 +2,7 @@
 
 무엇이 정해졌고, 무엇이 제안일 뿐이며, 무엇이 아직 모르는 것인가.
 
-마지막 갱신: 2026-08-31 (TASK-030 — GPT-primary 운영 계약)
+마지막 갱신: 2026-09-01 (TASK-030 — GPT-primary·run-resilient 운영 계약)
 
 ---
 
@@ -27,11 +27,11 @@
   확인했으므로, 다섯 항목을 전부 제안됨으로 정정했습니다.** 내용은 삭제·기각하지 않고 제안으로 유지합니다.
   **ADR-0027은 실제 오너의 운영 전환 지시에 근거하므로 승인됨을 유지합니다.**
 
-**현재 상태별 개수 (ADR 29건)**
+**현재 상태별 개수 (ADR 30건)**
 
 | 상태 | 수 | 항목 |
 |---|---|---|
-| **승인됨** | **12** | ADR-0001·0002·0003·0005·0006·0007·0008·0009·0010·**0027·0028·0029** |
+| **승인됨** | **13** | ADR-0001·0002·0003·0005·0006·0007·0008·0009·0010·**0027·0028·0029·0030** |
 | **제안됨** | **17** | ADR-0004·0011·0012·0013·0014·0015·0016·0017·0018·**0019**·0020·0021·**0022**·0023·**0024**·**0025**·**0026** |
 
 > 굵게 표시한 다섯 항목(0019·0022·0024·0025·0026)이 2026-08-09에 승인됨에서 정정된 것입니다.
@@ -80,6 +80,9 @@
 
 ### ADR-0006 — 에이전트는 브랜치와 PR로만 협업한다
 
+> **미래 운영 규칙은 ADR-0030과 `AGENTS.md` §3이 대체했습니다. 아래 역할 문구는 승인 당시의
+> 역사 기록이며 현재 배정 근거가 아닙니다.**
+
 **결정:** TASK당 수행 소유자 1개 세션, 리뷰어는 **다른 Claude Code 세션**.
 인계는 저장소 파일과 PR 설명으로만.
 **근거:** 각 세션은 서로의 대화를 볼 수 없다. 저장소가 유일한 공유 매체다.
@@ -101,6 +104,10 @@
 ---
 
 ### ADR-0009 — 에이전트는 병합하지 않는다. 사람 오너는 리뷰 후 병합한다 *(정정됨)*
+
+> **미래 병합 실행 규칙은 ADR-0030과 `AGENTS.md` R1·§4.1이 대체했습니다.** 제품 오너만 병합을
+> 승인하며, Lean Root의 exact-HEAD 일반 merge는 그 승인을 기계적으로 실행하는 예외입니다.
+> 아래 표는 정정 당시의 역사 기록입니다.
 
 **정정 (REVIEW-001):** 이전 판은 "`main`을 병합하지 않는다"를 주체 구분 없이 적어,
 사람 오너의 병합까지 금지하는 것처럼 읽혔다.
@@ -125,6 +132,9 @@
 
 
 ### ADR-0027 — 운영 구조를 네 역할로 전환한다 *(신규 — 오너 지시)*
+
+> **미래 역할·리뷰 규칙은 ADR-0028을 거쳐 ADR-0030으로 대체됐습니다. 아래 미래형 문구는
+> 승인 당시의 역사 기록이며 현재 배정 근거가 아닙니다.**
 
 **맥락:** 이전 운영은 Claude와 Codex 두 에이전트를 대칭적으로 두고, 독립 리뷰를
 Codex(및 Codex Cloud / GitHub `@codex review`)가 맡는 것을 전제했다.
@@ -653,6 +663,9 @@ GPU 비결정 경로에서 동일 출력을 보장하지 않는다.
 
 ### ADR-0028 — Lean Root / Claude Code 분업과 승인 후 통합
 
+> **미래 역할·자원 배정·승인 연속성 규칙은 ADR-0030이 대체했습니다.** PR #45/TASK-029처럼
+> ADR-0028 아래에서 시작한 작업의 당시 소유권·review 기록만 역사 사실로 보존합니다.
+
 - **상태:** 승인됨 (2026-08-24, 사람 제품 오너)
 - **대체 관계:** ADR-0027의 미래 역할·리뷰·통합 규칙을 대체한다. 과거 수행 기록은 변경하지 않는다.
 
@@ -682,9 +695,9 @@ Lean Root가 테스트·검증 스크립트로 시스템화할 수 있다. 병�
 **되돌리기:** 운영 주체를 다시 바꿀 때는 ADR-0028을 삭제하지 않고 새 ADR로 대체 관계를 기록한다.
 진행 중 코드 PR은 기존 작성자·고정 HEAD·승인 경계를 유지한 채 끝내거나 명시적으로 종료한다.
 
-### ADR-0029 — GPT-primary 실행과 제한적 Claude escalation
+### ADR-0030 — GPT-primary 실행, 승인 연속성과 run resilience
 
-- **상태:** 승인됨 (2026-08-31, 사람 제품 오너)
+- **상태:** 승인됨 (2026-08-31 GPT-primary, 2026-09-01 approval continuity·run resilience; 사람 제품 오너)
 - **대체 관계:** ADR-0028의 미래 역할·리뷰·자원 배정 규칙을 대체한다.
   ADR-0006·0009의 협업·병합 절차는 `AGENTS.md`의 현재 규칙으로 좁힌다. 과거 수행 기록은 바꾸지 않는다.
 
@@ -698,9 +711,22 @@ Author와 fresh Reviewer를 분리하고 누구도 자기 변경에 승인 판�
 기계적으로 실행할 수 있다. Claude는 진행 중 기존 계약, 오너의 명시 요청,
 GPT의 동일 결함 제한 수정 2회 실패, Gate S cross-model 검토, Gate H의 구체적 잔여 blocker,
 근거 교환 뒤의 기술적 교착 중 하나를 기록한 경우에만 쓴다. 중요한 계약·제품/아키텍처 선택·측정
-milestone에는 ChatGPT Pro의 bounded 자문을 적극 사용하고, 비단순 작업에는 위험도별 직교형 read-only
-서브에이전트를 기본 사용한다. 둘 다 formal reviewer·저장소 사실·제품 오너 결정을 대신하지 않는다.
+milestone에는 ChatGPT Pro의 bounded 자문을 적극 사용하고, 필요한 직교 증거만 위험도별 상한 안에서
+read-only 서브에이전트로 수집한다. 둘 다 formal reviewer·저장소 사실·제품 오너 결정을 대신하지 않는다.
 상세 절차의 정본은 `AGENTS.md` §3이다.
+
+사람 제품 오너의 구현/remediation 승인은 agent run 하나가 아니라 승인된 TASK/PR scope에 적용한다.
+run·세션·모델 중단, commit·push·검증, Author→fresh Reviewer 전환은 그 승인을 소멸시키지 않으며,
+새 run은 live repository와 durable checkpoint에서 마지막 안전 단계 다음부터 계속한다. 정상 TASK는
+scope 승인 1회와 independent review 뒤 exact PR·HEAD·reviewed base merge 승인 1회를 목표로 한다.
+새 consequential decision, scope 확대, dependency/model/network·cost/privacy·destructive gate,
+기존 승인과 양립 불가능한 blocker만 중간 owner gate를 다시 연다.
+
+중단 복구는 remote coherent commit, local-only commit, coherent uncommitted work, partial/ambiguous work의
+네 상태로 분류한다. 검증은 작은 단계부터 상승하고 같은 HEAD의 신뢰 가능한 성공 증거를 반복하지 않는다.
+동일 HEAD·objective가 두 번 비정상 종료되면 세 번째 실행 방식은 scope·단계·tool·reasoning/model 중
+하나를 바꾼다. Ultra급 reasoning은 consequential decision·어려운 Gate H/S blocker·cross-contract
+ambiguity·adversarial analysis에 한정하고 mechanical work는 안정적인 기본 execution model이 맡는다.
 
 **근거:** 기본 반복 작업을 여유 있는 자원으로 처리하고 Claude를 실패 비용이 큰 지점에만 배치하면
 처리량을 높이면서도 cross-model 검토의 가치를 보존한다. author/reviewer 분리와 exact-HEAD 승인은
@@ -709,7 +735,9 @@ milestone에는 ChatGPT Pro의 bounded 자문을 적극 사용하고, 비단순 
 **결과:** `PLAN.md`·`README.md`·`CLAUDE.md`는 역할 절차를 복제하지 않고 `AGENTS.md`를 참조한다.
 이는 제품 오너가 2026-08-31 명시한 운영 Markdown 최적화에 따른 R2 예외이며, 에이전트가 작성한
 중복 current/future 문구만 축약한다. 완료된 역사 기록과 `README.md` 최초 2줄은 보존한다.
-PR #45/TASK-029는 시작 당시 Claude author / Lean Root reviewer 계약으로 끝내며 새 규칙을 소급 적용하지 않는다.
+PR #45/TASK-029는 시작 당시 Claude author / Lean Root reviewer 계약으로 끝났고, 승인된 HEAD
+`4b0d2cd041d7a133640355dd0b96874ef4329074`가 merge commit
+`6f94705598c1ef57a4d25682938cbcbbaf044732`로 병합됐다. 새 규칙을 그 이력에 소급 적용하지 않는다.
 
-**되돌리기:** ADR-0029를 삭제하지 않고 후속 ADR로 대체한다. 진행 중 작업은 시작 당시 소유권을
+**되돌리기:** ADR-0030을 삭제하지 않고 후속 ADR로 대체한다. 진행 중 작업은 시작 당시 소유권을
 유지해 끝내거나 제품 오너가 명시적으로 종료한다.

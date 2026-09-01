@@ -9,9 +9,9 @@ Lean Root Orchestrator, Codex 작성·리뷰 세션, 제한적으로 호출되�
 - 규칙을 바꾸려면 이 문서를 수정하는 PR을 올려야 합니다. 대화나 커밋 메시지로만 바꿀 수 없습니다.
 - 에이전트는 작업을 시작하기 전에 이 문서를 **처음부터 끝까지** 읽습니다.
 
-마지막 갱신: 2026-08-31 (TASK-030, ADR-0029 — GPT-primary 운영 계약)
+마지막 갱신: 2026-09-01 (TASK-030, ADR-0030 — GPT-primary·run-resilient 운영 계약)
 
-> **이 변경이 `main`에 merge된 뒤 시작하는 작업의 운영 구조는 TASK-030·ADR-0029와 §3을 따릅니다.**
+> **이 변경이 `main`에 merge된 뒤 시작하는 작업의 운영 구조는 TASK-030·ADR-0030과 §3을 따릅니다.**
 > GPT/Codex가 기본 작업·검증 자원이며 Claude는 §3의 폐쇄형 trigger에서만 사용합니다.
 > Lean Root의 병합은 사람 제품 오너가 특정 PR과 고정 HEAD를 명시적으로 승인한 뒤의
 > 일반 merge로만 허용됩니다. 진행 중인 PR은 시작 당시 계약과 소유권을 유지합니다.
@@ -55,7 +55,8 @@ R1–R10은 사람 제품 오너의 명시적 지시 없이는 예외가 없습�
 | 미해결 제품 항목 확정 | 금지 (R5) | 금지 (R5) | 선택지·권고만 | **가능** |
 | 규칙 변경 | 제안 | 제안 | 제안·문서화 | **승인** |
 
-> R1의 목적은 검토 없는 자동 병합을 막는 것입니다. `진행`은 다음 안전 단계 승인이고,
+> R1의 목적은 검토 없는 자동 병합을 막는 것입니다. `진행`·`계속` 또는 특정 bounded 작업 수행 지시는
+> §3.6의 승인 범위 안에서 다음 안전 단계를 끝까지 수행할 scope 승인이지 merge 승인이 아닙니다.
 > Lean Root가 제시한 approval capsule의 PR 번호·전체 HEAD SHA·reviewed base SHA에 바로 이어진
 > 제품 오너의 명시적 `승인`만 병합 승인입니다.
 > 승인 뒤 HEAD 또는 base가 바뀌면 멈추고 delta·merge result를 확인한 뒤 다시 승인받습니다.
@@ -82,9 +83,8 @@ base·HEAD·상태를 확인하고, live `main`의 이 파일 전체 → `STATUS
 
 `Use $media-clarity-orchestrator. Continue seoji2005/media-clarity-studio from live repository and PR facts. Use ChatGPT Pro at consequential product/architecture checkpoints and use bounded read-only subagents for orthogonal evidence when useful. Do not assume or paste prior conversation history; reconstruct state and take only the next safe action.`
 
-그 뒤 `main / PR별 base·HEAD·TASK·Gate·Author·Reviewer·마지막 reviewed HEAD / blocker / Pro checkpoint /
-next allowed action / forbidden now`를 한 execution card로 만들고 다음 안전 행동 하나만 고릅니다. 이 호출은
-상태 복원과 이미 허용된 범위의 다음 행동만 승인하며 merge·dependency/model·network egress·파괴 행위를 승인하지 않습니다.
+그 뒤 §3.7의 durable state와 §7의 compact handoff를 live 사실에 맞춰 복원하고, 이미 승인된 범위의
+다음 안전 행동부터 계속합니다. 이 호출은 merge·dependency/model·network egress·파괴 행위를 승인하지 않습니다.
 
 ---
 
@@ -151,7 +151,7 @@ next allowed action / forbidden now`를 한 execution card로 만들고 다음 �
 
 ## 3. 역할과 소유권 (운영 구조)
 
-**이 절이 향후 모든 배정의 기준입니다** (ADR-0029).
+**이 절이 향후 모든 배정의 기준입니다** (ADR-0030).
 
 | # | 역할 | 주체 | 책임 | 저장소 변경 |
 |---|---|---|---|---|
@@ -191,6 +191,7 @@ Root는 다음 세 지점에서 Pro 자문을 적극 사용합니다.
 불확실성 최대 5개만 담은 자문 packet을 만들고 제품 오너가 별도 Pro 대화에서 실행할 수 있게 합니다.
 권고·위험 최대 5개·최소 판별 실험·번복 조건을 요청하며 같은 SHA의 같은 질문을 합의 목적으로 반복하지 않습니다.
 Pro 답변은 저장소 사실·formal review·제품 오너 결정·dependency/model/network 승인 중 어느 것도 대체하지 않습니다.
+단순 remediation, push, status 확인, 이미 결정된 계약의 반복 구현에는 Pro를 다시 호출하지 않습니다.
 
 ### 3.1 작성자와 리뷰어의 분리 (R8)
 
@@ -237,8 +238,9 @@ Pro 답변은 저장소 사실·formal review·제품 오너 결정·dependency/
 - `STATUS.md`는 coordination point입니다. 리뷰 중 작성자가 같은 상태 행을 수정하지 않습니다.
 - 서브에이전트는 읽기·반례·테스트 설계처럼 서로 겹치지 않는 질문 하나만 맡습니다. 기본값은 read-only이며,
   최종 판정·병합·공유 파일 쓰기를 맡기지 않습니다. formal reviewer는 작성자의 서브에이전트로 대체할 수 없습니다.
-- 위험도별 기본 수(Lean Root 제외)는 Gate L 0명, Gate M 1명, Gate H 2명, Gate S 3명입니다.
-  다중 외부 근거·cross-contract 제품 판단은 2명으로 시작하고 독립 privacy/제3 도메인이 있을 때만 1명을 더합니다.
+- 위험도별 숫자(Lean Root 제외)는 quota가 아니라 필요한 독립 증거의 **상한 기본값**입니다.
+  Gate L은 보통 0명, Gate M은 최대 1명, Gate H는 최대 2명, Gate S는 최대 3명입니다.
+  직교 증거가 실제 필요한 만큼만 쓰며 숫자를 채우기 위해 호출하지 않습니다.
   단순 상태 조회·push·명백한 한 파일 수정, 앞 결과가 필요한 순차 작업에는 사용하지 않습니다.
 - 각 요청에는 exact HEAD·경로·질문 하나·비범위를 주고, 답은 결론 한 줄과 근거 있는 finding 최대 5개로 제한합니다.
   Root가 결과를 하나의 판정 목록으로 중복 제거하며 같은 질문의 다수결을 만들지 않습니다.
@@ -264,9 +266,91 @@ Pro 답변은 저장소 사실·formal review·제품 오너 결정·dependency/
   execution card를 먼저 고정합니다.
 - 큰 파일보다 identity·diffstat·변경 경로를 먼저 보고, 이미 읽은 같은 SHA의 문서는 재독하지 않습니다.
 - 검증은 `identity·scope → focused test → TASK/module test → 전체 회귀 1회` 순서입니다.
-  실패 원인이 바뀌지 않았는데 전체 회귀를 반복하지 않습니다.
+  같은 HEAD에서 신뢰할 수 있게 성공한 단계는 이유 없이 반복하지 않습니다. HEAD가 바뀌면 변경 영향에
+  해당하는 단계부터 다시 시작하고, remediation loop마다 전체 회귀를 반복하지 않습니다.
+  전체 회귀는 최종 coherent HEAD 또는 계약이 요구하는 checkpoint에서 수행합니다.
 - 재검토는 `old_head..new_head`, 이전 지적, 직접 회귀만 봅니다. 전체 diff·fixture·로그 덤프를 인계에 복사하지 않습니다.
 - 판정 목록은 하나만 유지합니다. 서브에이전트 결과는 Root가 중복 제거한 뒤 그 목록에 합칩니다.
+
+### 3.6 승인 연속성 (Approval continuity)
+
+사람 제품 오너의 승인은 agent run 하나가 아니라 승인된 **TASK/PR의 bounded scope**에 적용됩니다.
+제품 오너가 구현 또는 remediation을 `진행`하도록 승인하면 아래 내부 전이는 추가 사용자 승인을 요구하지 않습니다.
+
+`inspect → implement/remediate → focused verification → TASK/module verification → coherent commit → push →
+remote HEAD verification → fresh independent fixed-HEAD review → result handoff`
+
+- run·세션·모델이 바뀌거나 중간 종료되어도 기존 scope approval은 소멸하지 않습니다.
+- agent 재시작, 모델 변경, bounded subagent 호출, commit, push, 테스트, remote HEAD 확인,
+  Author에서 fresh Reviewer로의 전환은 새 사용자 승인을 요구하지 않습니다.
+- 하나의 scope는 Author run A, fresh Reviewer run B, integration run C처럼 여러 내부 run으로 나눌 수 있습니다.
+  run-resilience를 이유로 Author가 자기 변경을 승인할 수는 없습니다.
+- 정상 TASK의 제품 오너 interaction 목표는 **scope 승인 1회 + 모든 검증·독립 review 뒤 merge 승인 1회**입니다.
+  내부 checkpoint 때문에 `계속할까요?`, `push할까요?`, `review를 시작할까요?`를 반복해 묻지 않습니다.
+- `진행`·`계속`은 승인된 범위의 내부 실행 권한이며 merge나 새 architecture 결정을 승인하지 않습니다.
+
+다음 경우에만 제품 오너에게 새 결정을 요청합니다.
+
+1. 승인한 TASK/PR의 제품·기술 범위를 실질적으로 확대해야 할 때
+2. consequential product/architecture decision이 새로 필요할 때
+3. dependency·model·network egress·cost·privacy·destructive operation 등 별도 owner gate가 열릴 때
+4. 기존 승인과 양립할 수 없는 새 blocker가 발견될 때
+5. merge 직전 exact PR·전체 HEAD SHA·reviewed base SHA 승인이 필요할 때
+
+### 3.7 중단 복구와 durable checkpoint
+
+usage/capacity 오류, reasoning 종료, context 소진, tool timeout, 임시 connector 실패, UI/session 중단은
+정상적인 운영 실패 모드입니다. 중단 자체를 TASK 실패나 scope approval 소멸로 해석하지 않습니다.
+새 run은 이전 대화의 reasoning을 복원하거나 처음부터 다시 분석하지 않고 다음 durable state를 live 저장소와 대조합니다.
+
+- live `main` SHA와 PR 번호·base·head·state
+- active TASK와 approved scope
+- Owner / Reviewer
+- latest coherent commit과 관측 가능한 remote/local divergence
+- 완료된 검증 증거와 미해결 review finding
+- next allowed action / forbidden actions
+
+복원 상태는 다음 네 가지 중 하나로 분류합니다.
+
+| 상태 | 복구 행동 |
+|---|---|
+| **A. coherent commit이 remote에 있음** | 그 remote HEAD 다음 단계부터 계속 |
+| **B. coherent commit은 있으나 remote에 없음** | commit scope와 focused verification을 확인하고 push부터 계속 |
+| **C. coherent uncommitted work가 있음** | diff와 focused verification을 확인해 그 논리 단위만 완료 |
+| **D. partial/ambiguous work만 있음** | 불완전 부분만 폐기하거나 원래 fixed HEAD에서 bounded remediation만 재수행 |
+
+쓰기 작업의 durable 순서는 다음과 같습니다.
+
+`exact base/HEAD/TASK/scope → 최소 coherent 수정 → focused verification → coherent commit → push →
+remote HEAD 확인 → 다음 검증/review 단계`
+
+논리적으로 완결된 변경이 focused verification을 통과하면 불필요하게 긴 분석을 계속하기 전에 durable
+checkpoint를 만듭니다. failing code, 부분 migration, 함께 적용되어야 유효한 계약의 절반, 알려진 corruption,
+의도적으로 깨진 테스트는 checkpoint 목적으로 commit하지 않습니다. checkpoint는 commit을 잘게 쪼개라는 뜻이
+아니라 완료된 논리 단위를 잃지 말라는 뜻입니다.
+
+긴 Author run은 coherent 변경을 push하고 remote HEAD를 확인하면 역할을 종료할 수 있습니다. 같은 Author가
+exhaustive independent review까지 이어서 자기 변경을 승인하지 않으며, fresh Reviewer가 다음 run에서 fixed HEAD를
+검토합니다. 이 역할 전환은 사용자 재승인을 받기 위한 중단이 아닙니다.
+
+review remediation은 exact fixed HEAD, 미해결 finding ID(한 번에 기본 최대 5개), allowed/forbidden paths,
+필수 focused regression, stop condition만 입력으로 사용합니다. unrelated cleanup/refactor는 하지 않고,
+새 문제는 후속 finding·별도 TASK 후보·consequential owner/Pro gate 중 하나로 분리합니다.
+
+### 3.8 재시도와 model/reasoning 배분
+
+- 동일 HEAD·동일 objective의 run이 두 번 비정상 종료되면 세 번째에 같은 방식으로 처음부터 반복하지 않습니다.
+  Root는 실패를 분류해 scope 축소, execution/review 분리, tool-heavy 단계 분리, reasoning level 변경,
+  더 안정적인 기본 execution model, 필요한 경우 Claude/cross-model escalation 중 하나를 선택합니다.
+- state reconstruction, bounded implementation, known remediation, 문서 정합화, mechanical verification,
+  commit/push, straightforward fixed-HEAD check에는 충분히 강하고 안정적인 기본 execution reasoning을 씁니다.
+- 최고 reasoning/Ultra급은 consequential architecture/product decision, 독립 증거 뒤에도 남은 Gate H/S blocker,
+  cross-contract/domain ambiguity, 일반 execution이 같은 객관적 결함에서 반복 실패한 경우,
+  adversarial counterexample 분석처럼 reasoning이 실제 병목일 때만 씁니다.
+- Ultra run에는 mechanical work를 불필요하게 묶지 않습니다. 주 산출물은 decision, bounded findings,
+  remediation specification, adversarial counterexample, architecture trade-off 중 하나로 제한하고,
+  반복 구현·테스트·commit/push는 안정적인 기본 execution model이 이어받을 수 있습니다.
+- 이미 완료된 commit·test·review evidence를 다시 만들기 위해 비싼 모델을 반복 호출하지 않습니다.
 
 **용어 주의 — "Owner"는 "구현자"가 아닙니다**
 
@@ -495,6 +579,27 @@ TASK 파일 자체가 그 작업의 산출물이었기 때문입니다. 닭과 �
 
 - "아까 말한 대로", "이전 세션에서 정한 것처럼" 같은 표현은 **금지**입니다.
 - 다음 담당자가 알아야 할 모든 것은 **저장소 안의 파일**에 있어야 합니다.
+- 각 durable checkpoint 뒤에는 전체 대화·reasoning trace·긴 로그 대신 다음 compact handoff를 TASK 또는 PR에 남깁니다.
+
+```text
+Base:
+HEAD:
+TASK:
+Gate:
+Owner:
+Reviewer:
+Changed paths:
+Addressed findings:
+Focused verification:
+TASK verification:
+Full regression:
+Unresolved:
+Next allowed action:
+Forbidden now:
+```
+
+  clean session은 이 packet을 live repository와 대조해 중단 지점 다음부터 이어갈 수 있어야 합니다.
+  전체 diff, chain-of-thought, 이전 대화 복사는 handoff requirement가 아닙니다.
 - PR 설명은 그 자체로 완결적이어야 합니다. 최소 다음을 포함합니다.
 
 ```markdown
