@@ -9,27 +9,16 @@ Claude Code 전용 진입점입니다. **짧게 유지합니다.**
 
 읽는 순서는 `AGENTS.md` §0.2에 있습니다. 이 파일은 그 순서의 일부가 아닙니다.
 
-## 이 세션은 어느 역할인가 (먼저 정하십시오)
+## 시작 조건
 
-운영 구조는 `AGENTS.md` §3에 있습니다. Claude Code 세션은 둘 중 **하나**입니다.
-
-| 역할 | 하는 일 | 하지 않는 일 |
-|---|---|---|
-| **주 세션 (Lead Developer)** | 핵심 설계·구현, 복잡한 디버깅, 성능 최적화. TASK의 Owner | **자기 변경을 스스로 최종 승인하지 않음** |
-| **독립 리뷰 세션 (Independent Reviewer)** | 저장소·TASK·PR diff만 보고 검증. TASK의 Reviewer | **리뷰 대상 브랜치의 파일을 고치지 않음**, 병합하지 않음 |
-
-- **작성자와 리뷰어는 반드시 다른 세션입니다** (`AGENTS.md` R8). 한 세션이 둘 다일 수 없습니다.
-- 리뷰 세션은 작성자의 대화 맥락을 받지 않습니다. 파일만 보고 이해되지 않으면 그것이 결함입니다.
-- **Claude 사용량은 제한적입니다.** 주 세션은 고난도 구현에 집중하고,
-  독립 리뷰는 **중요한 PR과 핵심 알고리즘 변경에만** 씁니다 (`AGENTS.md` §3.2).
-- 다른 세션이 들고 있는 파일은 건드리지 않습니다 (`AGENTS.md` R9 / §3.4).
-
-작업 지시(프롬프트)는 **GPT Work**가 정리해 전달합니다. 아키텍처 자문·기술 비교가 필요하면
-**Claude 일반 대화**를 씁니다. 둘 다 저장소에 커밋하지 않습니다.
+Claude는 기본 작업자가 아니라 `AGENTS.md` §3의 escalation trigger에 배정된 specialist입니다.
+TASK 또는 PR의 execution card에 trigger·역할·범위가 없으면 작업하지 말고 Root에 돌려보냅니다.
+배정 역할은 Author 또는 Independent Reviewer 중 하나이며 같은 변경에서 둘 다 맡지 않습니다.
+Reviewer는 고정 HEAD의 TASK·diff·직접 회귀만 보고 대상 브랜치를 수정하지 않습니다.
 
 ## Claude가 자주 잊는 것 다섯 가지
 
-1. **`main`에 쓰지 않고, 병합하지 않는다.** 항상 `claude/<slug>` 브랜치 → PR. 병합은 사람 오너의 몫.
+1. **`main`에 쓰지 않고, 병합하지 않는다.** 항상 `claude/<slug>` 브랜치 → PR.
 2. **"복원"이라고 쓰지 않는다.** 재구성(reconstruction) / 추정(estimation)만 사용.
    **식별자도 마찬가지** — `reconstruct`, `ReconstructionAdapter`. (`AGENTS.md` §1)
 3. **모르면 미해결로 남긴다.** 그럴듯한 기본값을 지어내지 않는다.

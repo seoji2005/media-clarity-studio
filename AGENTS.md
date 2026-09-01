@@ -1,75 +1,81 @@
 # AGENTS.md — 공용 작업 규칙 (Authoritative)
 
 이 문서는 `media-clarity-studio`에서 활동하는 **모든 행위자**(사람 제품 오너,
-Lean Root Orchestrator(GPT Work), Claude Code 구현 세션, 필요 시 독립 Claude Code 리뷰 세션,
-Claude 일반 대화)가
+Lean Root Orchestrator, Codex 작성·리뷰 세션, 제한적으로 호출되는 Claude specialist,
+제품·아키텍처 자문 세션)가
 따르는 **규칙의 단일 출처(single source of truth)** 입니다.
 
 - 다른 문서(`CLAUDE.md`, 각 `docs/tasks/TASK-*.md`)와 내용이 충돌하면 **이 문서가 이깁니다.**
 - 규칙을 바꾸려면 이 문서를 수정하는 PR을 올려야 합니다. 대화나 커밋 메시지로만 바꿀 수 없습니다.
 - 에이전트는 작업을 시작하기 전에 이 문서를 **처음부터 끝까지** 읽습니다.
 
-마지막 갱신: 2026-08-24 (TASK-027, ADR-0028 — Lean Root / Claude Code 분업)
+마지막 갱신: 2026-08-31 (TASK-030, ADR-0029 — GPT-primary 운영 계약)
 
-> **현재 운영 구조는 TASK-027·ADR-0028과 §3을 따릅니다.**
-> Claude Code는 모든 코드 변경을 작성하고, Lean Root는 오케스트레이션·비코드 작업·검증·독립 리뷰·
-> PR 통합 준비를 담당합니다. Lean Root의 병합은 사람 제품 오너가 특정 PR과 고정 HEAD를 명시적으로
-> 승인한 뒤의 일반 merge로만 허용됩니다.
-> TASK-007·ADR-0027 이전 운영과 과거 Codex 기록은 완료된 역사로 보존하며 미래 배정 근거로 쓰지 않습니다.
+> **이 변경이 `main`에 merge된 뒤 시작하는 작업의 운영 구조는 TASK-030·ADR-0029와 §3을 따릅니다.**
+> GPT/Codex가 기본 작업·검증 자원이며 Claude는 §3의 폐쇄형 trigger에서만 사용합니다.
+> Lean Root의 병합은 사람 제품 오너가 특정 PR과 고정 HEAD를 명시적으로 승인한 뒤의
+> 일반 merge로만 허용됩니다. 진행 중인 PR은 시작 당시 계약과 소유권을 유지합니다.
+> TASK-007·027, ADR-0027·0028과 과거 수행 기록은 완료된 역사로 보존하며 미래 배정 근거로 쓰지 않습니다.
 
 ---
 
 ## 0. 이 프로젝트에서 절대 어기면 안 되는 것
 
-**이 규칙들은 모든 AI 행위자(Claude Code 세션 전부, GPT Work, Claude 일반 대화)에게 적용됩니다.**
+**이 규칙들은 모든 AI 행위자(GPT/Codex 세션·서브에이전트·Claude 세션)에 적용됩니다.**
 사람 제품 오너의 권한은 §0.1에 따로 적습니다.
 
 | # | 규칙 | 이유 |
 |---|---|---|
-| R1 | **어떤 에이전트도 `main`에 직접 커밋·push하지 않는다. Claude Code는 PR을 병합하지 않는다. Lean Root는 사람 제품 오너가 특정 PR과 고정 HEAD를 명시적으로 승인한 뒤 `expected_head_sha`를 고정한 일반 merge만 수행할 수 있다.** | 검토 없는 자동 병합과 승인 후 HEAD 변경을 막음 |
+| R1 | **어떤 AI도 병합을 결정·승인하거나 `main`에 직접 커밋·push하지 않는다. Claude와 별도 Codex 작성/review 세션은 merge를 실행하지 않는다. Lean Root만 독립 reviewer 판정과 사람 제품 오너의 정확한 승인 뒤 `expected_head_sha`를 고정한 일반 merge를 기계적으로 실행할 수 있다. Lean Root가 Author였어도 이 기계적 실행은 review 판정이 아니며 같은 독립 reviewer·오너 승인 조건을 생략할 수 없다.** | 검토 없는 자동 병합과 승인 후 HEAD 변경을 막음 |
 | R2 | **기존 사용자 콘텐츠를 삭제·축소하지 않는다.** 확장만 한다. | 사람이 쓴 내용이 조용히 사라지면 안 됨 |
 | R3 | **재구성 결과를 "원본 복원"이라고 표현하지 않는다.** | 사실이 아니며, 학술적·상업적으로 위험한 주장 |
 | R4 | **비밀정보(API 키, 토큰, 자격증명)를 저장소에 넣지 않는다.** | 되돌릴 수 없는 유출 |
 | R5 | **모르는 것을 추측으로 채우지 않는다.** 문서에 "미해결"로 남긴다. | 잘못된 전제가 아래 단계 전부를 오염시킴 |
 | R6 | **하나의 TASK에는 수행 소유자(Owner)가 정확히 한 명이다.** | 동시 편집 충돌·중복 작업 방지 |
 | R7 | **에이전트 간 인계는 저장소 파일과 PR 설명으로만 한다.** | 서로의 대화 기록에 접근할 수 없음 |
-| R8 | **작성자와 리뷰어는 서로 다른 행위자 또는 독립 세션이어야 한다.** Claude Code가 작성한 코드는 Lean Root가 검토하고, Lean Root가 작성한 비코드 변경은 자기 승인하지 않는다. | 자기 검토는 검토가 아님 |
+| R8 | **리뷰가 필요한 변경의 작성자와 reviewer는 서로 다른 행위자 또는 fresh 세션이어야 한다.** reviewer가 대상 파일을 고치면 작성자가 되어 새 reviewer가 필요하며, 누구도 자기 변경에 승인 판정을 내리지 않는다. | 자기 검토는 검토가 아님 |
 | R9 | **두 세션이 같은 파일을 동시에 수정하지 않는다.** 파일 소유는 TASK 단위로 배타적이다. | 동시 편집은 조용한 덮어쓰기를 만듦 |
 | R10 | **완료 보고를 그대로 믿지 않는다.** 가능한 경우 GitHub 상태(브랜치 HEAD·PR 상태)와 diff로 확인한다. | "했다"는 주장이지 사실이 아님 |
 
 R1–R10은 사람 제품 오너의 명시적 지시 없이는 예외가 없습니다.
 
+**TASK-030 R2 예외:** 사람 제품 오너가 2026-08-31 운영 Markdown 최적화와 중복 축약을 명시적으로
+지시했습니다. 따라서 에이전트가 작성한 과거 current/future 역할표는 `AGENTS.md` 링크로 축약할 수 있습니다.
+완료된 역사 기록과 `README.md` 최초 2줄은 계속 보존합니다.
+
 ### 0.1 사람 제품 오너의 권한과 승인 경계
 
-| 행위 | Claude Code | Lean Root | 사람 제품 오너 |
-|---|---|---|---|
-| 코드 작성·수정 | **담당** | **금지 — 완결된 Claude Code 프롬프트 작성** | 가능 |
-| 비코드 조사·문서·상태 기록 | 요청 범위에서 가능 | **담당** | 가능 |
-| 독립 검증·코드 리뷰 | 자기 변경 승인 금지 | **Claude Code 변경 검토 담당** | 최종 제품 판단 |
-| PR 생성·Ready 전환 | 가능 | 가능 | 가능 |
-| PR 병합 | **금지** | **오너의 특정 PR·고정 HEAD 승인 후 일반 merge만 가능** | 가능 |
-| `main` 직접 커밋 | **금지** | **금지** | 가능하나 권장하지 않음 |
-| 미해결 제품 항목 확정 | 금지 (R5) | 선택지·권고만 | **가능** |
-| 규칙 변경 | 제안 | 제안·문서화 | **승인** |
+| 행위 | GPT/Codex 작성 세션 | 독립 reviewer | Lean Root | 사람 제품 오너 |
+|---|---|---|---|---|
+| 코드·비코드 작성 | 배정 범위에서 가능 | 대상 브랜치 수정 금지 | 배정하거나 직접 작성 가능 | 가능 |
+| 검증·리뷰 | 자기 변경 승인 금지 | **고정 HEAD 제한 검토** | 검증 조정, 직접 작성하지 않은 변경 검토 | 최종 제품 판단 |
+| PR 생성·Ready 전환 | 가능 | 리뷰 PR만 가능 | 가능 | 가능 |
+| PR 병합 | 금지 | 금지 | **오너의 특정 PR·고정 HEAD 승인 후 일반 merge만 가능** | 가능 |
+| `main` 직접 커밋 | 금지 | 금지 | 금지 | 가능하나 권장하지 않음 |
+| 미해결 제품 항목 확정 | 금지 (R5) | 금지 (R5) | 선택지·권고만 | **가능** |
+| 규칙 변경 | 제안 | 제안 | 제안·문서화 | **승인** |
 
 > R1의 목적은 검토 없는 자동 병합을 막는 것입니다. `진행`은 다음 안전 단계 승인이고,
-> 병합에는 해당 PR에 대한 명시적 `승인`이 필요합니다. 승인 뒤 HEAD가 바뀌면 다시 승인받습니다.
+> Lean Root가 제시한 approval capsule의 PR 번호·전체 HEAD SHA·reviewed base SHA에 바로 이어진
+> 제품 오너의 명시적 `승인`만 병합 승인입니다.
+> 승인 뒤 HEAD 또는 base가 바뀌면 멈추고 delta·merge result를 확인한 뒤 다시 승인받습니다.
 
 ### 0.2 에이전트 문서 읽기 순서 (모든 세션 공통)
 
-**어떤 작업이든 다음 순서로 읽습니다. `AGENTS.md`가 언제나 첫 번째입니다.**
+**어떤 작업이든 1~3은 전부 읽고, 4~7은 TASK가 참조하거나 변경하는 절만 읽습니다.**
 
 ```
 1. AGENTS.md                  ← 규칙. 항상 먼저
 2. STATUS.md                  ← 지금 상태와 소유권
 3. docs/tasks/TASK-XXX.md     ← 내가 할 일
-4. docs/PRODUCT_SPEC.md       ← 무엇을 만드는가
-5. docs/ARCHITECTURE.md       ← 어떻게 나누는가
-6. docs/EVALS.md              ← 무엇이 좋은 것인가
-7. PLAN.md · docs/DECISIONS.md ← 언제 / 왜
+4. docs/PRODUCT_SPEC.md       ← 관련 제품 경계만
+5. docs/ARCHITECTURE.md       ← 관련 계약·모듈만
+6. docs/EVALS.md              ← 관련 평가 규칙만
+7. PLAN.md · docs/DECISIONS.md ← 관련 순서·근거만
 ```
 
-`README.md`와 `CLAUDE.md`는 진입 안내이며 규칙의 출처가 아닙니다.
+`README.md`와 `CLAUDE.md`는 진입 안내이며 규칙의 출처가 아닙니다. 같은 세션에서 SHA가 바뀌지 않은
+문서는 다시 읽지 않고, 재검토는 이전 고정 HEAD와 새 HEAD의 delta부터 확인합니다.
 
 ---
 
@@ -136,28 +142,42 @@ R1–R10은 사람 제품 오너의 명시적 지시 없이는 예외가 없습�
 
 ## 3. 역할과 소유권 (운영 구조)
 
-**이 절이 향후 모든 배정의 기준입니다** (ADR-0028).
+**이 절이 향후 모든 배정의 기준입니다** (ADR-0029).
 
 | # | 역할 | 주체 | 책임 | 저장소 변경 |
 |---|---|---|---|---|
 | — | **제품 오너** | 사람 | 제품 행동·우선순위·위험 수용·외부 비용·최종 병합 승인 | 가능 |
-| 1 | **Lean Root Orchestrator** | GPT Work / Codex Work | 저장소 현황, 요구사항, 작업 분해, 비코드 조사·문서, 검증, Claude Code 변경 리뷰, PR 준비·승인 후 통합 | **비코드만** |
-| 2 | **Claude Code 구현 세션** | Claude Code | 소스·테스트·fixture generator·검증 스크립트·빌드·CI·의존성 등 **모든 코드 변경** | **코드 담당** |
-| 3 | **추가 독립 리뷰 세션** | 새 Claude Code 세션 또는 별도 리뷰 행위자 | Gate H/S에서 Lean Root와 다른 검증이 필요할 때 고정 HEAD 제한 검토 | 리뷰 범위만 |
-| 4 | **Claude 일반 대화** | Claude 채팅 | 아키텍처 자문과 두 번째 의견 | 하지 않음 |
+| 1 | **Lean Root Orchestrator** | GPT Work / Codex Work | 상태 복원, 다음 TASK 선택, 계약·배정, 조사·검증 조정, 오너 인계, 승인 후 통합 | 배정 시 코드·비코드 가능 |
+| 2 | **Codex 작성 세션** | Root 또는 별도 Codex 세션 | 작은 범위의 코드·테스트·문서 구현과 직접 검증. 한 브랜치·배타적 파일 소유 | 배정 범위만 |
+| 3 | **독립 reviewer** | 작성자와 다른 fresh GPT/Codex 세션; 필요 시 Claude | 고정 HEAD·TASK·diff·직접 회귀만 검토 | 대상 브랜치 수정 금지 |
+| 4 | **ChatGPT Pro adviser** | 별도 자문 대화 | 결과가 제품 로드맵·아키텍처를 바꾸는 선택지 비교 | 하지 않음 |
+| 5 | **Claude Code specialist** | Claude Code | §3의 폐쇄형 trigger에 해당하는 구현·cross-model 검토·교착 해소 | 배정 범위만 |
+| 6 | **Claude adviser** | Claude 대화 | trigger가 기록된 아키텍처 자문·두 번째 의견 | 하지 않음 |
 
-- TASK Owner는 산출물에 따라 Lean Root 또는 Claude Code가 될 수 있습니다.
-- **코드가 한 줄이라도 바뀌면 작성 Owner는 Claude Code**입니다. Lean Root는 구현 코드를 직접 쓰지 않고,
-  저장소 현재 상태·허용 범위·합격 기준·실행 명령·중단 조건이 포함된 완결 프롬프트를 제공합니다.
-- Lean Root는 코드가 아닌 명세·연구·상태·리뷰·PR 메타데이터를 직접 변경할 수 있습니다.
-- 코드 결함 수정은 Lean Root가 직접 고치지 않고 Claude Code에 제한 재작업 프롬프트로 돌려보냅니다.
+- TASK Owner는 수행 소유자 한 세션입니다. 복수 작성자가 필요하면 파일 경계가 겹치지 않는 별도 TASK로 나눕니다.
+- 변경마다 Lean Root의 역할을 `Orchestrator` 또는 `Author` 중 하나로 기록합니다. Author이면 그 변경의 reviewer가 될 수 없습니다.
+- Lean Root가 직접 작성하고 독립 리뷰가 필요한 작업이면 시작 전에 reviewer를 지정합니다.
+  Root가 reviewer이면 대상 변경을 직접 고치지 않습니다.
+- ChatGPT Pro adviser와 서브에이전트는 결정을 대신하거나 최종 승인하지 않습니다. 결과는 Root가 저장소 사실과 대조합니다.
+- Claude는 다음 중 하나를 execution card 또는 PR에 기록한 경우에만 호출합니다.
+  1. 시작 당시 계약이 Claude 소유로 고정된 진행 중 작업
+  2. 제품 오너가 TASK·역할·범위를 명시해 요청
+  3. 결정 gate가 닫힌 같은 객관적 결함을 GPT가 제한 수정으로 두 번 해결하지 못함
+  4. GPT가 작성한 Gate S 변경의 cross-model 검토
+  5. 독립 증거와 표적 테스트 뒤에도 Gate H의 구체적 blocker가 남음
+  6. 한 차례 근거 교환 뒤에도 기술적 교착이 남음
+- 복잡해 보인다는 인상, 일반 상태 갱신, 반복 테스트, 첫 보통 실패는 Claude trigger가 아닙니다.
+- 3번 trigger는 두 attempt의 HEAD·결함·표적 테스트를 기록하고 세 번째 GPT 반복을 금지합니다.
+  Gate S는 Author와 다른 모델의 fresh reviewer가 필수이며, 확보하지 못하면 Gate를 낮추지 않고 `Blocked`로 둡니다.
 
 ### 3.1 작성자와 리뷰어의 분리 (R8)
 
-- Claude Code가 작성한 코드의 기본 독립 리뷰어는 Lean Root입니다.
-- Lean Root는 작성자의 완료 보고를 증거로 쓰지 않고 고정 HEAD·diff·명령 출력·artifact를 직접 확인합니다.
-- Lean Root가 작성한 비코드 변경은 Gate L/M이면 근거를 공개하고 사람 제품 오너가 판단할 수 있습니다.
-  Gate H/S이거나 자기 판단과 테스트가 같은 오해를 공유할 위험이 크면 별도 독립 리뷰어를 둡니다.
+- 작성자가 아닌 Lean Root는 기본 reviewer가 될 수 있습니다. Lean Root가 작성자이면 fresh reviewer를 지정합니다.
+- formal fresh reviewer는 Author의 서브에이전트가 아닌 새 세션이며 고정 HEAD·TASK·이전 finding으로 시작합니다.
+  Author의 완료 보고는 증거가 아닙니다.
+- reviewer는 완료 보고를 증거로 쓰지 않고 고정 HEAD·diff·명령 출력·artifact를 직접 확인합니다.
+- reviewer가 대상 파일을 수정하면 그 순간 작성자가 됩니다. 새 HEAD에는 새 reviewer가 필요합니다.
+- Gate L/M은 근거를 공개하고 별도 REVIEW 문서를 생략할 수 있지만, 작성자가 자기 변경에 승인 판정을 내릴 수는 없습니다.
 - 어느 행위자도 자기 변경에 최종 `승인` 판정을 내리지 않습니다.
 
 ### 3.2 위험 기반 리뷰 Gate
@@ -170,19 +190,22 @@ R1–R10은 사람 제품 오너의 명시적 지시 없이는 예외가 없습�
 | **S** | 삭제·덮어쓰기·개인정보·비밀정보·배포·결제·원격 데이터 변경 | Gate H 전부, 실패 주입, 복구 rehearsal, 사람 승인, 실행 직전 대상 재확인 |
 
 - 현재 TASK/REVIEW 문서 방식은 Gate H/S에 집중합니다. Gate L/M에 같은 무게를 강제하지 않습니다.
+- `AGENTS.md`의 권한·R1·R8·병합 경계를 바꾸는 운영 계약은 Gate M이어도 고정 HEAD 독립 리뷰가 필수입니다.
+- Gate S는 항상 cross-model review입니다. GPT/Codex Author이면 Claude, Claude Author이면 fresh GPT/Codex가
+  검토합니다. reviewer가 패치하면 새 cross-model reviewer가 필요하며, 확보하지 못하면 `Blocked`입니다.
 - 반복 가능한 판정은 REVIEW 문장보다 테스트 → lint/정적 검사 → 검증 스크립트 → 타입/스키마 순으로 자동화합니다.
 - 독립 리뷰는 해당 변경과 직접 회귀만 봅니다. 제한 재검토를 프로젝트 전체 재검토로 확대하지 않습니다.
 
 ### 3.3 리뷰어의 권한 경계
 
-Lean Root 리뷰어는 다음을 할 수 있습니다.
+독립 reviewer는 다음을 할 수 있습니다.
 
 - PR의 고정 HEAD·base·diff·검증 상태 조회
 - 안전한 검증 명령 직접 실행과 artifact 확인
 - PR 코멘트·리뷰 판정 및 필요한 최소 REVIEW/STATUS 기록
-- 제품 오너 승인 후 Ready 전환과 고정 HEAD 일반 merge
+- PR 코멘트와 `승인` / `변경 요청` / `차단` 판정
 
-리뷰 대상 코드나 테스트를 직접 수정하지 않습니다. 변경 요청은 Claude Code 프롬프트로 반환합니다.
+리뷰 대상 코드·테스트·문서를 직접 수정하지 않습니다. 변경 요청은 작성 Owner에게 반환합니다.
 환경 차단은 제품 결함과 구분하며 TASK/REVIEW 번호를 소비하지 않습니다.
 
 ### 3.4 동시 편집과 직렬화 (R9)
@@ -190,7 +213,9 @@ Lean Root 리뷰어는 다음을 할 수 있습니다.
 - 쓰기 작업은 동시에 최대 2개이며 같은 파일·인터페이스를 동시에 수정하지 않습니다.
 - GPU benchmark·실제 모델 실행은 동시에 1개만 수행합니다.
 - `STATUS.md`는 coordination point입니다. 리뷰 중 작성자가 같은 상태 행을 수정하지 않습니다.
-- 리뷰 지적은 먼저 보존하고, 그 다음 Claude Code가 별도 커밋으로 수정합니다.
+- 서브에이전트는 읽기·반례·테스트 설계처럼 서로 겹치지 않는 질문 하나만 맡습니다. 기본값은 read-only이며,
+  최종 판정·병합·공유 파일 쓰기를 맡기지 않습니다.
+- 리뷰 지적은 먼저 보존하고, 그 다음 작성 Owner가 별도 커밋으로 수정합니다.
 - 충돌은 해당 Source Owner가 해결하고 Lean Root가 최종 diff를 확인합니다.
 
 ### 3.5 검증 원칙 (R10)
@@ -205,6 +230,16 @@ Lean Root 리뷰어는 다음을 할 수 있습니다.
 | "지적을 반영했다" | diff에서 해당 위치를 직접 확인 |
 
 확인하지 못한 것은 **"확인하지 않음"이라고 적습니다.** 확인한 것처럼 적지 않습니다.
+
+**토큰·검증 예산**
+
+- 작업 시작 시 `base SHA / PR / head SHA / TASK / Gate / Owner / Reviewer / blocker / next action`의
+  execution card를 먼저 고정합니다.
+- 큰 파일보다 identity·diffstat·변경 경로를 먼저 보고, 이미 읽은 같은 SHA의 문서는 재독하지 않습니다.
+- 검증은 `identity·scope → focused test → TASK/module test → 전체 회귀 1회` 순서입니다.
+  실패 원인이 바뀌지 않았는데 전체 회귀를 반복하지 않습니다.
+- 재검토는 `old_head..new_head`, 이전 지적, 직접 회귀만 봅니다. 전체 diff·fixture·로그 덤프를 인계에 복사하지 않습니다.
+- 판정 목록은 하나만 유지합니다. 서브에이전트 결과는 Root가 중복 제거한 뒤 그 목록에 합칩니다.
 
 **용어 주의 — "Owner"는 "구현자"가 아닙니다**
 
@@ -227,10 +262,12 @@ TASK의 산출물은 코드일 수도, 문서일 수도, **리뷰 보고서일 �
 
 - `claude/…` — Claude Code 구현 세션이 소유한 코드 작업
 - `claude-review/…` — 추가 독립 Claude Code 리뷰 세션
-- `lean-root/…` — Lean Root의 비코드·리뷰·통합 준비 작업
+- `codex/…` — Codex 작성 세션이 소유한 작업
+- `codex-review/…` — 작성자와 다른 fresh Codex 리뷰 세션
+- `lean-root/…` — Lean Root가 Author인 배정 작업 또는 리뷰·통합 준비 작업
 - `human/…` — 사람이 직접 작업
 
-예: `claude/task-005-eval-harness`, `claude-review/task-005-rereview`, `lean-root/workflow-contract`
+예: `codex/task-031-correction-ledger`, `codex-review/task-031-rereview`, `lean-root/workflow-contract`
 
 규칙:
 
@@ -244,13 +281,17 @@ TASK의 산출물은 코드일 수도, 문서일 수도, **리뷰 보고서일 �
 
 ### 4.1 리뷰와 통합 수명주기
 
-1. Claude Code는 최신 `main`에서 코드 브랜치와 PR을 만듭니다.
-2. Lean Root는 PR의 base/head를 고정하고 TASK 계약·diff·직접 검증을 교차 확인합니다.
-3. 변경 요청이면 Lean Root가 제한 재작업 프롬프트를 만들고 Claude Code가 별도 커밋으로 반영합니다.
+1. 작성 Owner는 최신 `main`에서 배타적 브랜치와 PR을 만듭니다.
+2. reviewer는 PR의 base/head를 고정하고 TASK 계약·diff·직접 검증을 교차 확인합니다.
+3. 변경 요청이면 작성 Owner가 제한된 별도 커밋으로 반영합니다.
 4. 재검토는 새 HEAD에서 이전 지적과 직접 회귀만 확인합니다.
-5. 사람 제품 오너가 특정 PR 병합을 명시적으로 승인합니다.
-6. Lean Root는 승인된 HEAD가 그대로일 때만 `expected_head_sha`를 사용해 일반 merge합니다.
+5. 사람 제품 오너가 PR 번호·전체 HEAD SHA·reviewed base SHA를 지정해 병합을 명시적으로 승인합니다.
+6. Lean Root는 승인된 HEAD와 base가 그대로일 때만 `expected_head_sha`를 사용해 일반 merge합니다.
+   base가 한 번이라도 이동하면 멈추고 base delta와 merge result를 독립 확인한 뒤 재승인받습니다.
 7. 병합 뒤 PR 종료 상태와 최신 `main`을 확인합니다.
+
+새 운영 계약은 운영 PR의 merge commit 이후 시작하는 작업에 적용합니다. 진행 중 PR은 시작 당시
+Author·Reviewer·remediation 소유권을 유지하고, 변경하려면 제품 오너가 명시적으로 종료·재배정합니다.
 
 Gate L/M은 별도 리뷰 브랜치·REVIEW 문서를 생략할 수 있습니다. Gate H/S은 필요한 리뷰 증거와
 복구 경계를 저장소에 남깁니다. 리뷰 원문을 보존해야 할 때는 의미상 수정하지 않습니다.
@@ -293,7 +334,7 @@ docs: add architecture and evaluation foundation
 | 항목 | 설명 |
 |---|---|
 | `ID` | `TASK-001` 형식, 3자리, **재사용 금지**. [`STATUS.md`](STATUS.md) §4에 후보로 예약된 번호도 사용된 것으로 봅니다. 새 TASK는 **어디에도 쓰이지 않은 다음 번호**를 씁니다 |
-| `Owner` | 수행 소유자 하나. 코드 변경은 Claude Code, 비코드 작업은 Lean Root가 기본값 |
+| `Owner` | 수행 소유자 하나. Root가 작업 성격·용량·독립성에 따라 Lean Root, Codex 또는 Claude specialist 중 배정 |
 | `Reviewer` | Owner와 다른 행위자/세션. Gate L/M에서 추가 독립 리뷰를 생략하면 `없음 (§3.2)`과 근거를 적습니다 |
 | `Phase` | [`PLAN.md`](PLAN.md)의 단계 |
 | `Status` | `Not started` / `In progress` / `In review` / `Blocked` / `Done` |
@@ -356,11 +397,11 @@ docs: add architecture and evaluation foundation
 |---|---|---|
 | **Decision gate** | 사람만 답할 수 있는 결정이 남아 있는지 확인 (R5) | Lean Root → 사람 오너 |
 | **Task ready** | TASK 필요 여부, Owner 1명, 배타적 파일 범위 확정 | Lean Root |
-| **Implementing** | 코드면 Claude Code, 비코드면 Lean Root가 작업 | 해당 Owner |
-| **Verifying** | 원격 HEAD·diff·명령·artifact를 실물로 확인 | Lean Root |
+| **Implementing** | 배정된 코드·비코드 범위만 작업 | 해당 Owner |
+| **Verifying** | 원격 HEAD·diff·명령·artifact를 실물로 확인 | 작성자와 Root |
 | **Review gate** | §3.2의 Gate와 독립 리뷰 필요 여부 판정 | Lean Root |
-| **Independent review** | 작성자와 다른 행위자/세션이 고정 SHA 검토 | Lean Root 또는 추가 리뷰어 |
-| **Remediating** | 코드 수정은 Claude Code, 비코드는 해당 작성자가 별도 커밋으로 반영 | 해당 Owner |
+| **Independent review** | 작성자와 다른 fresh 세션이 고정 SHA 검토 | 지정 reviewer |
+| **Remediating** | 지적 범위만 별도 커밋으로 반영 | 작성 Owner |
 | **Owner decision** | 병합 여부와 위험 수용 결정 | **사람 제품 오너** |
 | **Done** | 사람의 병합·명시적 종료 또는 이미 승인된 결정 전사 완료 후 도달 | — |
 
@@ -373,18 +414,18 @@ docs: add architecture and evaluation foundation
 | 상태값 | 예 |
 |---|---|
 | 대상 SHA | `941410c2be2cba33c48d541415d24701b28bcf9a` (전체 SHA) |
-| Owner / Reviewer | Claude Code / Lean Root 등 서로 다른 행위자·세션 (R8) |
+| Owner / Reviewer | 서로 다른 행위자·세션 (R8) |
 | TASK 상태 | `Not started` / `In progress` / `In review` / `Blocked` / `Done` |
 | 차단 질문 | `U-08`, `U-11` (없으면 "없음") |
 | 리뷰 필요 여부와 근거 | 필요 — Gate H 외부 인터페이스 변경 (§3.2) |
 | 리뷰 판정 | `승인` / `변경 요청` / `차단` |
-| 리뷰 산출물 브랜치·커밋 | `claude-review/<slug>` @ `<SHA>` |
+| 리뷰 산출물 브랜치·커밋 | `codex-review/<slug>` @ `<SHA>` |
 | 다음 허용 행동 | 예: "Remediating — 대상 문서만 수정, 병합 금지" |
 
 **주체 주의 (R-10)**
 
-- Lean Root는 요구사항·TASK 계약·Claude Code 프롬프트·비코드 문서·검증·리뷰·통합을 담당합니다.
-- Claude Code는 코드·테스트·fixture generator·검증 스크립트·빌드/CI 변경을 담당합니다.
+- Lean Root는 상태 복원·TASK 계약·배정·검증 조정·오너 인계·승인 후 통합을 담당합니다.
+- 작성 Owner는 코드·테스트·fixture·문서 중 배정된 범위만 담당합니다. Claude 사용은 §3의 trigger를 만족해야 합니다.
 - 작성자는 자기 변경을 승인하지 않습니다. Gate H/S은 반드시 다른 행위자/세션이 고정 HEAD를 검토합니다.
 
 TASK 범위를 벗어나는 문제를 발견하면 **그 자리에서 고치지 말고** 새 TASK 후보로 기록합니다
@@ -463,8 +504,8 @@ Phase 0에서 다음은 **명시적으로 금지**입니다. 이후 단계에서
 
 ## 9. 리뷰 기준
 
-리뷰어는 작성자와 다른 행위자 또는 독립 세션입니다 (§3.1, R8). Claude Code 코드 변경의
-기본 리뷰어는 Lean Root이며, 작성자의 완료 보고 대신 저장소·TASK 계약·PR diff·직접 실행 결과를 봅니다.
+리뷰어는 작성자와 다른 행위자 또는 fresh 독립 세션입니다 (§3.1, R8).
+작성자의 완료 보고 대신 저장소·TASK 계약·PR diff·직접 실행 결과를 봅니다.
 
 최소 확인 항목:
 

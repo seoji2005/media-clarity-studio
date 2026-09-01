@@ -65,7 +65,7 @@ Phase 4  상용화 + 개인 클라우드 내보내기
 ## 2. Phase 0 — Foundation (**완료 — `main`에 병합됨**)
 
 **목표:** 사람과 AI 세션들이 같은 전제 위에서 병렬 작업할 수 있는 문서 기반 확보.
-누가 무엇을 맡는지는 [`AGENTS.md`](AGENTS.md) §3의 현재 운영 구조를 따릅니다 (ADR-0028).
+누가 무엇을 맡는지는 [`AGENTS.md`](AGENTS.md) §3의 현재 운영 구조를 따릅니다 (ADR-0029).
 
 산출물: `README.md`, `AGENTS.md`, `CLAUDE.md`, `PLAN.md`, `STATUS.md`,
 `docs/PRODUCT_SPEC.md`, `docs/ARCHITECTURE.md`, `docs/EVALS.md`, `docs/DECISIONS.md`,
@@ -296,19 +296,9 @@ TASK-028  content-addressed artifact/cache/resume runtime — 완료 (PR #36)
 
 ## 7. 역할과 병렬 작업 경계
 
-현재 역할은 [`AGENTS.md`](AGENTS.md) §3과 ADR-0028이 정답입니다.
-
-| 작업 | Claude Code 구현 세션 | Lean Root Orchestrator |
-|---|---|---|
-| 코드·테스트·fixture·실행 스크립트 | Lean Root의 고정 범위 프롬프트에 따라 작성·수정 | 요구사항·합격 기준·프롬프트 작성, 직접 구현 금지 |
-| 비코드 설계·상태 정합성 | 필요할 때만 | 작성 가능 |
-| 검증·리뷰 | 작성자 증거 제공, 지적은 별도 세션에서 수정 | 실제 명령·artifact·diff 확인, 위험 기반 고정 HEAD 리뷰 |
-| PR 통합 | 병합하지 않음 | 사람 제품 오너가 특정 PR·고정 HEAD를 승인한 뒤 일반 merge만 수행 |
-
-- 같은 파일이나 인터페이스를 동시에 수정하지 않습니다 (`AGENTS.md` R9 / §3.4).
-- 독립 구현 작업이 실제로 있을 때만 병렬화하며 쓰기 작업은 최대 2개, GPU 실행은 최대 1개입니다.
-- Gate H·S는 구현과 고정 HEAD 리뷰를 분리합니다. Gate L·M은 위험과 이득에 따라 별도 REVIEW를 생략할 수 있습니다.
-- 코드 결함은 Lean Root가 직접 고치지 않고 Claude Code에 제한 재작업 프롬프트로 반환합니다.
+현재 역할·Claude escalation·동시성·검토·병합 규칙의 정본은
+[`AGENTS.md`](AGENTS.md) §3~§4와 ADR-0029입니다. 이 로드맵은 역할을 재정의하지 않습니다.
+작업은 모듈·파일 소유권이 겹치지 않을 때만 병렬화하며 제품 Phase 순서는 그대로 유지합니다.
 
 ---
 

@@ -3,8 +3,8 @@
 **"지금 무엇이 되어 있고, 누가 무엇을 들고 있는가."**
 새 세션을 시작하는 에이전트는 [`AGENTS.md`](AGENTS.md) 다음으로 이 파일을 봅니다 (`AGENTS.md` §0.2).
 
-마지막 갱신: 2026-08-31 (TASK-029 자막 spine 계약 구현 — REVIEW-023~026 반영, 오너 결정 option 3(ADR-0029) 반영, REVIEW-027 R-01~R-03과 재검토 R-02C·R-03C·R-01C 제한 반영, 새 고정 HEAD 검토 대기)
-현재 단계: **Phase 1a** — TASK-028 완료, TASK-029 구현 완료·고정 HEAD Gate H 검토 대기
+마지막 갱신: 2026-08-31 (TASK-030 GPT-primary 운영 계약)
+현재 단계: **Phase 1a** — TASK-029 구현 검토와 TASK-030 운영 계약 검토 진행
 
 ---
 
@@ -17,12 +17,12 @@
 | 기능 코드 | **있음** — TASK-022 CLI: local input → probe → SRT → soft-sub → verify → local staging export |
 | 런타임 / 의존성 | Python 3.12+ 표준 라이브러리와 FFmpeg/ffprobe. Python package 의존성·모델·CI·비밀정보 없음 |
 | 병합된 PR | **#1·#5·#16·#18·#19·#21·#22·#23·#24·#25·#28·#33·#34·#36·#42** — 각 merge commit은 §3에 기록; 현재 HEAD는 GitHub에서 조회 |
-| 열린 PR | **#6~#10·#12·#14·#15·#17·#29~#32** — 과거 작업·리뷰 Draft, 현재 실행 차단 아님 |
+| 열린 PR | **#6~#10·#12·#14·#15·#17·#29~#32·#45** — #45는 TASK-029 Draft; 나머지 과거 Draft는 현재 실행 차단 아님 |
 | 미병합 종료 | **#2·#3·#4·#11·#41** — #41은 REVIEW-022 원문이 PR #42로 `main`에 보존된 뒤 종료 |
-| 운영 구조 | **TASK-027 결정** — 코드는 Claude Code, 비코드·검증·리뷰·승인 후 통합은 Lean Root (`AGENTS.md` §3, ADR-0028) |
-| 현재 작업 | **TASK-029 새 고정 HEAD Gate H 검토 대기** — `claude/task-029-subtitle-spine-contracts`에 schema 5개·domain validator·fixture 171건·mutation 감사 구현 완료, [`REVIEW-023`](docs/reviews/REVIEW-023.md)·`REVIEW-024`·`REVIEW-025`·`REVIEW-026` 변경 요청 반영(TASK-029 §15·§16·§17·§18)과 오너 결정 option 3 반영(§19 / [ADR-0029](docs/DECISIONS.md) — 공식 LID 정확도 채점 미지원, 격자 경계만 고정), `REVIEW-027` R-01~R-03 제한 반영(§20), 재검토 R-02C·R-03C 제한 반영(§21 — 공개 loader의 프로세스 전역 정수 정책 mutation 제거, 분류의 첫 candidate 조기 성공 수정과 manifest 원자적 교체), 재검토 R-01C 제한 반영(§22 — 공개 `check_*`의 `__wrapped__` introspection 우회 제거). 구현 세션 자기 승인 없음 |
+| 운영 구조 | **TASK-030 결정 전사 중** — merge 전에는 TASK-027, merge 뒤에는 GPT-primary·제한적 Claude escalation (`AGENTS.md` §3, ADR-0029) |
+| 현재 작업 | **TASK-029 새 고정 HEAD Gate H 검토 대기** + **TASK-030 운영 계약 검토** |
 | U-31 | **답변됨 (2026-08-22)** — 번역 대상 언어 **한국어(`ko`)** |
-| 다음 실행 의존성 | **Lean Root가 구현 PR의 새 고정 HEAD를 Gate H로 재검토** → 제품 오너 병합 판단 |
+| 다음 실행 의존성 | PR #45 Gate H 판정과 TASK-030 고정 HEAD 독립 검토는 분리. 각 PR은 제품 오너의 정확한 HEAD 승인 전 병합 금지 |
 | U-08 | **답변됨 (2026-08-09)** — **채점 정답은 번역 자막** |
 | U-11 | **부분 답변됨 (2026-08-09)** — **약 2개월·품질 우선.** 정확한 제출 날짜는 **미확정** |
 | 차단 요인 | **다음 기능 범위와 의존성·모델 가중치 반입 gate가 미승인.** U-16 보관 정책은 미정이므로 자동 삭제·GC를 범위 밖에 두며, 다른 U-XX도 임의 확정하지 않음 |
@@ -69,6 +69,7 @@
 | [TASK-006](docs/tasks/TASK-006.md) | ReferenceBundle/v1 및 평가 실행 계약 구체화 | Claude Code 구현 세션 | Lean Root 고정 HEAD 검토 — `REVIEW-014`·`015`·`016` **변경 요청**, [`REVIEW-017`](docs/reviews/REVIEW-017.md) **승인** | Phase 1a evaluation contracts | **Done — PR #28 병합** (`bd00f604565cac09b91b07286437032486933a08`) |
 | [TASK-028](docs/tasks/TASK-028.md) | Content-addressed artifact store와 재개 가능한 stage runtime | Claude Code 구현 세션 | Lean Root 고정 HEAD Gate H 검토 — `REVIEW-018`~`021` 변경 요청, [`REVIEW-022`](docs/reviews/REVIEW-022.md) 승인 | Phase 1a shared storage·orchestrator foundation | **Done — PR #36 병합** (`1d05de31aa39fd4dc8790d6c6e6442c0f8765ddc`) |
 | [TASK-029](docs/tasks/TASK-029.md) | SpeechSegment·Transcript·capability·translation·subtitle 실행 계약 정본화 | Claude Code 구현 세션 | Lean Root 고정 HEAD Gate H 검토 | Phase 1a subtitle data spine | **In review** — 계약 병합(PR #44) 후 구현 완료, `REVIEW-023`~`REVIEW-027`(재검토 R-02C·R-03C·R-01C 포함) 변경 요청과 오너 결정 option 3(ADR-0029)을 같은 브랜치에 반영(TASK-029 §15~§22), `Implemented — awaiting fixed HEAD review` (구현 세션 자기 승인 없음) |
+| [TASK-030](docs/tasks/TASK-030.md) | GPT-primary 운영 계약과 Markdown 정합화 | Lean Root Orchestrator | fresh GPT/Codex 고정 HEAD 검토 | Project operations | **In review** |
 | [TASK-012](docs/tasks/TASK-012.md) | Phase 1 계획 기준선 확립 | Claude Code 주 세션 | TASK-013~017 / REVIEW-005~009 (사람 오너의 예외 승인) | Phase 1 planning / 1a 진입 | **Done** — REVIEW-009 승인 후 PR #5 병합 (`10d34b4a4545f9ae8894c8038e7f1cc9a7706d61`) |
 | [TASK-013](docs/tasks/TASK-013.md) | TASK-012 고정 HEAD 독립 검토 | **이 독립 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 review | **In review** (판정: 변경 요청 — [REVIEW-005](docs/reviews/REVIEW-005.md)) |
 | [TASK-014](docs/tasks/TASK-014.md) | TASK-012 M-01·M-02 제한 재검토 | **REVIEW-005를 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 limited rereview | **In review** (M-01·M-02 부분 해소 · 판정: 변경 요청 — [REVIEW-006](docs/reviews/REVIEW-006.md)) |
@@ -83,8 +84,13 @@
 | [TASK-026](docs/tasks/TASK-026.md) | U-06 seed 코퍼스 선택 계약 | 사람 제품 오너 결정 → Lean Root 기록 | 없음 — Gate M 결정 전사; 실제 다운로드는 별도 Gate H | Phase 1a evaluation data contract | **Done** — 제품 오너 승인 |
 | [TASK-027](docs/tasks/TASK-027.md) | Lean Root / Claude Code 운영 분업 계약 | 사람 제품 오너 결정 → Lean Root 기록 | 없음 — Gate M 운영 결정 전사 | Project operations | **Done** — 제품 오너 승인 |
 
-> 코드 변경은 Claude Code가 작성하고 Lean Root가 검증·리뷰합니다 (`AGENTS.md` §3.1, R8).
-> Gate H·S 독립 리뷰는 구현 세션과 분리하며, **작성자 세션은 자기 변경을 스스로 승인하지 않습니다.**
+> 이 브랜치는 PR #45와 파일 소유권을 섞지 않기 위해 `main`의 TASK-029 행을 수정하지 않았습니다.
+> TASK-029의 live 상태는 해당 TASK branch와 PR #45가 정답이며, 종료 뒤 Source Owner가 `main`에 정합화합니다.
+> 기본 직렬 순서는 PR #45 종료 → TASK-030을 최신 `main`에 갱신 → 새 고정 HEAD 독립 검토입니다.
+> 역순은 제품 오너가 명시적으로 선택할 때만 허용합니다.
+> 새 TASK의 작성 자원은 `AGENTS.md` §3에 따라 배정합니다. PR #45/TASK-029는 시작 당시
+> Claude author / Lean Root reviewer 계약을 유지합니다.
+> Gate H·S 독립 리뷰는 작성 세션과 분리하며, **작성자는 자기 변경을 스스로 승인하지 않습니다.**
 > **Owner는 "수행 소유자"이며 구현자를 뜻하지 않습니다.** 리뷰 TASK의 Owner는 리뷰 수행자입니다.
 > 이 표와 `docs/tasks/TASK-XXX.md`가 다르면 **TASK 파일이 정답**입니다.
 
@@ -418,7 +424,7 @@ Codex·Codex Cloud·GitHub `@codex review`는 **향후 역할·배정·절차에
 | **R-10** | **반영이 형식적일 수 있음** | 구조만 만들고 실효 없음 | 독립 세션의 검토로 확인 (TASK-004 완료 → REVIEW-002). TASK-008 반영은 **아직 검증 전** |
 | **R-11** | **작성자가 자기 작업을 검토·승인함** | 검토가 형식만 남음 | 작성자 ≠ 리뷰어 세션 강제 (R8), 작성자 자기 승인 금지 (`AGENTS.md` §3.1) |
 | **R-12** | **완료 보고가 실제와 다름** | 잘못된 상태 위에서 다음 작업 시작 | GitHub 상태·diff로 확인 (R10, `AGENTS.md` §3.5) |
-| **R-13** | **Claude 사용량 소진** | 고난도 구현이 막힘 | 주 세션은 고난도 구현에 집중, 독립 리뷰는 중요한 단계에만 (`AGENTS.md` §3.2) |
+| **R-13** | **Claude 사용량 소진** | 고난도 구현·cross-model 검토가 막힘 | GPT/Codex 기본, Claude는 기록된 폐쇄형 trigger에만 사용 (`AGENTS.md` §3) |
 | **R-14** | **`STATUS.md`를 두 브랜치가 함께 수정** | 리뷰 기록 통합 시 충돌 | `STATUS.md`를 coordination point로 직렬화 (`AGENTS.md` §3.4). 충돌은 Source Owner가 해결, 최종 diff는 사람 오너가 확인 |
 
 ---
