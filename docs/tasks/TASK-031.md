@@ -8,7 +8,7 @@
 | **Reviewer** | 작성자와 다른 fresh GPT/Codex 세션 — 최종 fixed-HEAD Gate H 독립 검토 |
 | **Phase** | Phase 1a — 첫 실제 자막 vertical slice와 calibration |
 | **Gate** | H — 외부 모델·dependency, 12 GB GPU, Windows, cache/resume와 품질 판정 |
-| **Status** | `In review` — PR #50 계약 checkpoint; dependency/model/network gate 전 실제 반입·실행 금지 |
+| **Status** | `In review` — H-01·H-02 제한 수정 완료, 새 fixed-HEAD 재검토 대기; 실제 반입·실행 금지 |
 | **기준 main** | `356b964505c3d852e9a264d79da12f15e5e707e0` (PR #49 merge commit) |
 
 ## 목표
@@ -31,9 +31,9 @@ vertical slice다. 모델 우열이나 제품 완성도를 테스트 수로 주�
 | Author / Reviewer | Lean Root Author / fresh GPT·Codex session |
 | Approved scope | U-22 A-min 계약 기록, 실행 준비, 실제 10분 로컬 calibration과 보고 |
 | PR / branch | #50 Draft / `lean-root/task-031-a-min-calibration` |
-| Current checkpoint | 계약 commit을 remote에서 확인했고 이 pointer commit으로 fresh Gate H 인계 |
+| Current checkpoint | 이전 fixed HEAD `9578de2…`의 H-01·H-02만 계약에 반영, 새 fixed-HEAD 재검토 인계 |
 | Blocker | dependency manifest, 모델 weight 다운로드, 외부 network 사용은 별도 owner gate 전 금지 |
-| Next allowed action | GitHub에서 PR #50의 live base·HEAD를 고정한 fresh independent Gate H 계약 검토 |
+| Next allowed action | PR #50 live base·새 HEAD를 고정한 H-01·H-02와 prohibited drift 제한 재검토 |
 | Forbidden now | 모델/weight 다운로드, dependency 설치·manifest 추가, 원격 추론, 사용자 미디어 commit, merge, 자기 승인 |
 
 이 파일은 자신을 포함하는 commit SHA를 내장하지 않는다. reviewer는 PR #50의 live HEAD와 base를 조회해
@@ -153,7 +153,163 @@ U-22를 완료하지 않는다.
   먼저 만들지 못하면 aligner 실행을 중단하고 계약 finding으로 돌린다.
 - TASK-029에서 공식 LID accuracy는 계속 `unsupported`다. 임의 proxy를 LID라고 기록하지 않는다.
 
-## 5. resume 검증
+## 5. calibration evidence spine
+
+모든 task-local evidence 문서는 canonical JSON의 닫힌 형식(`additionalProperties: false`)이고
+`schema_version`을 가진다. 문서와 문서가 가리키는 raw/corrected output은 기존 artifact store의 CAS에
+먼저 기록하며, ref에는 digest·size·kind·media type을 모두 넣는다. validator는 ref의 실제 bytes를 다시
+읽어 digest·size·media type을 확인하고 아래 identity·상호 참조를 검증한다. 하나라도 없거나 맞지 않으면
+run과 집계 report는 `completed`가 될 수 없다.
+task-local JSON document ref의 exact identity는 `kind="text"`, `media_type="application/json"`이며,
+adapter-native raw bytes는 실제 형식의 media type을 별도로 기록한다.
+
+### 5.1 `CalibrationRunManifest/v1`
+
+8개 논리 run 각각에 하나가 필요하며 최소 필드는 다음과 같다.
+
+| 묶음 | 필수 내용 |
+|---|---|
+| run identity | `run_id`, `run_kind`(`independent_asr | independent_mt | end_to_end`), matrix cell, start/end UTC, 최종 status |
+| candidate identity | 순서 있는 adapter role, official model ID·full revision, weight CAS hash, backend/runtime package·source identity, precision·quantization, decoding/VAD/chunk/context config hash와 그 ordered record의 `candidate_chain_hash` |
+| environment | `EnvironmentRecord/v1` ref와 Windows build, GPU UUID·model·total memory, driver·CUDA·NVML, Python, sampler/runner source commit |
+| inputs | calibration pack manifest/audio ref와 정확히 600초 timebase; 독립 MT는 benchmark input ref, end-to-end는 upstream `Transcript/v1` 등 실제 product document refs |
+| outputs | candidate stage마다 ordered adapter-native `raw_output_refs`, normalized product 또는 benchmark output refs, axis별 accepted corrected output·correction record refs, alignment evidence ref가 필요한 run이면 그 ref |
+| measurements | stage별 `PerformanceMeasurement/v1` refs와 quality event refs; 숫자를 manifest에 자유롭게 재기입하지 않음 |
+| recovery | stage ID·unit ID·cache key·attempt record·artifact refs와, 배정된 end-to-end run의 `InterruptionRecord/v1` ref |
+| config | pack hash, candidate config hash, calibration-only style hash, chunk/stitch hash, pipeline source commit |
+
+`candidate_chain_hash`는 single candidate도 포함해 ordered adapter identity/config record의 canonical hash다.
+candidate/config identity는 해당 `StageSpec` fingerprint와 raw output provenance에 있는 값과 정확히 같아야 한다.
+`completed` manifest는 필요한 모든 ref가 존재·검증되고 raw output과 corrected output이 별도 CAS object이며,
+correction·measurement·interruption record의 `run_id`와 config hash가 manifest와 같은 경우에만 유효하다.
+독립 ASR은 source correction 1개, 독립 MT는 target correction 1개, end-to-end는 source·target correction을
+각각 요구한다. end-to-end의 ASR·MT raw output을 하나의 최종 문자열로 접어 잃는 것을 금지한다.
+
+### 5.2 raw·corrected·독립 MT evidence
+
+- adapter가 반환한 원본 bytes 또는 lossless canonical serialization을 `raw_output_ref`로 먼저 보존한다.
+  normalized `Transcript/v1`·`TranslatedTranscript/v1`·`SubtitleDocument/v1`은 이를 대체하지 않고 별도 ref다.
+- 독립 MT raw/normalized 결과는 task-local `BenchmarkTranslationOutput/v1`이다. 최소한 benchmark input ref,
+  target language `ko`, ordered source segment ID, 각 segment의 raw target text와 candidate/config identity를 담고
+  제품 `TranslatedTranscript/v1`·product lineage를 가장하지 않는다.
+- 사람이 수용한 결과는 task-local `CorrectedText/v1`이다. `source | target` axis, adapter-native raw output ref,
+  evaluator에게 실제 표시한 normalized/presentation artifact ref, ordered displayed unit ID와 그에 대응하는
+  accepted exact text를 담는다. 그 문서의 digest·size는 이를 가리키는 CAS ref에만 두어
+  self-hash를 만들지 않으며, 원래 raw/product artifact를 덮어쓰지 않는다.
+
+`BenchmarkTranslationOutput/v1`과 `CorrectedText/v1` validator는 입력 unit의 정확한 집합·순서·중복 없음과
+raw/corrected ref의 CAS identity를 확인한다. 누락 unit을 빈 문자열로 조용히 보충하거나 집계 report의 문자열만
+바꾸는 것을 금지한다.
+
+### 5.3 `CorrectionRecord/v1`
+
+각 source/target 수정 측정은 다음을 필수로 갖는다.
+
+- `run_id`, blind output ID, axis, `candidate_chain_hash`, adapter-native raw output ref,
+  evaluator에게 표시한 artifact ref, corrected output ref
+- ordered clock event: 정확히 한 `start`, 0개 이상의 짝지어진 `pause`/`resume`, 정확히 한 `end`
+- event마다 sequence, event kind, 같은 host의 `monotonic_ns`; `pause`에는 고정 reason code와 pause ID,
+  `resume`에는 같은 pause ID
+- evaluator pseudonymous ID, 정답 transcript 참조 여부, target에서 표시한 source view identity
+- `effective_correction_ns = end - start - Σ(pause interval)`과 표시용 seconds
+
+pause reason code는 `tool_failure | file_reload | operator_break | external_interruption`만 허용하고 제외 시간을
+reason별로 별도 합계한다. 최초 파일 준비·모델 loading은 start 전이며 clock event에 넣지 않는다.
+validator는 start가 처음, end가 마지막이고 monotonic time이 엄격히 증가하며 pause가 중첩되지 않고 모두
+resume됐는지 확인한다. effective 값을 event에서 다시 계산해 stored 값과 exact integer로 비교하고, raw/corrected
+ref와 manifest의 run/candidate-chain identity가 다르면 실패한다. 표시 artifact는 manifest의 normalized/benchmark
+output ref와 같고, 그 producing stage의 input lineage가 같은 raw output ref를 포함해야 한다.
+
+### 5.4 `InterruptionRecord/v1`
+
+controlled interruption을 배정한 네 end-to-end run에는 다음이 필수다.
+
+- `run_id`, `candidate_chain_hash`, 중단 대상 adapter·stage·unit ID, injection point와 interruption event
+- 중단 전 completed unit마다 stage ID, unit ID, cache key, attempt ID와 output artifact ref/hash
+- 중단 당시 미완료 unit과 attempt ID, resume attempt ID
+- resume에서 reused unit과 restarted unit, 각각의 cache key·attempt·artifact identity
+- 최종 aggregate output ref와 expected unit coverage/order/duplicate 검사 결과
+
+validator는 중단 전 completed 집합과 resume reused 집합이 exact identity로 같고, 그 unit에 새 execution attempt가
+없으며 bytes/hash가 불변인지 확인한다. 미완료 unit만 restarted될 수 있고 최종 coverage는 expected unit 집합과
+정확히 같아야 한다. 중복·누락·dangling attempt가 있거나 report만 성공을 주장하면 실패한다.
+
+### 5.5 집계의 fail-closed 규칙
+
+최종 calibration report는 정확히 독립 ASR 2, 독립 MT 2, end-to-end 4개의 검증된
+`CalibrationRunManifest/v1` CAS ref를 가진다. paired timestamp diagnostic은 별도 ref로 둔다. report의
+correction time·RTF·VRAM·resume·quality 값은 연결된 record에서 재계산하며 자유 숫자를 허용하지 않는다.
+8개 중 하나라도 schema/ref/identity/coverage 검증에 실패하거나 필요한 corrected/raw artifact가 없으면
+report status는 `incomplete`이고 TASK 완료나 모델 채택 근거로 쓸 수 없다.
+
+## 6. RTF·peak VRAM 측정 규약
+
+### 6.1 실행 순서와 clock
+
+`EnvironmentRecord/v1`은 닫힌 형식으로 OS product·version·build, CPU·RAM, GPU UUID·model·total bytes,
+NVIDIA driver·CUDA·NVML, Python executable·version, backend/runtime package·source/wheel hash,
+runner·sampler source commit과 clock source를 필수로 기록한다. 하나라도 없으면 이 환경의 측정은 `invalid`다.
+
+- 각 candidate 측정은 다른 candidate가 resident하지 않은 fresh worker process와 깨끗한 단일 target GPU에서
+  직렬 실행한다. GPU UUID와 시작 전 compute process 목록·device baseline memory를 기록한다. unrelated GPU
+  process가 있으면 그 run의 VRAM evidence는 `invalid`다.
+- 순서는 `baseline → external sampler 시작 → process-cold model load → 고정 별도 warm-up input 1회 → CUDA sync →
+  timed adapter work → CUDA sync → raw output CAS commit → model unload/worker 종료 → baseline 복귀 확인`이다.
+- process-cold load와 warm-up은 RTF numerator에서 제외하지만 `process_cold_load_ns`, `warmup_ns`로 따로
+  기록한다. 여기서 process-cold는 fresh worker에 model/context가 resident하지 않았다는 뜻이며 OS page cache를
+  강제로 비운 disk-cold를 주장하지 않는다. warm-up
+  input/ref와 횟수는 후보 유형별로 결과 전에 고정하고 calibration pack 결과로 바꾸지 않는다.
+- RTF clock은 Python `time.perf_counter_ns()`와 같은 host monotonic source를 쓰며 exact clock identity를
+  environment record에 남긴다. CUDA backend는 timer 시작 직전과 마지막 candidate compute 직후에 device
+  synchronize를 완료한다. sync를 제공하지 못하거나 그 호출 증거가 없으면 RTF는 `invalid`다.
+- timed adapter work에는 adapter-owned preprocessing, VAD/chunk/batch scheduling, model inference와 decoding을
+  포함한다. model load·warm-up, 공통 media extraction, 사람 교정, forced alignment, CAS serialization은 제외하고
+  각각 별도 interval로 기록한다.
+
+### 6.2 RTF denominator와 산식
+
+- content-locked pack timebase는 정확히 `600.000`초다. 독립 ASR의 RTF와 독립 MT의 translation RTF 모두
+  이 같은 source timeline을 denominator로 사용한다. 독립 MT가 text-only라는 사실과 `translation_rtf` 이름을
+  명시해 audio inference RTF인 것처럼 합치지 않는다.
+- `timed_inference_ns`와 `denominator_ns = 600000000000`을 원본 정수로 저장하고
+  `rtf = timed_inference_ns / denominator_ns`를 계산한다. 표시값은 Decimal round-half-even 6자리이며
+  validator는 원본 정수에서 재계산한다.
+- controlled-interruption end-to-end run의 전체 wall time과 합성 RTF는 순위에서 제외한다. 그 run의 각
+  정상 완료 stage interval과 제외 사유는 보존하되, 후보 순위 RTF는 독립 단계 정상 완료 run만 사용한다.
+
+### 6.3 backend-neutral VRAM
+
+- 1차 peak는 backend allocator가 아니라 target GPU UUID의 NVML `device memory.used` 원본 bytes를 persistent external
+  sampler가 50 ms 주기로 관측한 device-wide absolute observed peak다. sampler implementation/source commit,
+  NVML library·driver version, target GPU total bytes, monotonic sample timestamp를 모두 기록한다.
+- sample stream은 매 run 새 record로 시작하며 peak를 0에서 다시 계산한다. idle baseline은 별도 필드이고
+  peak에서 빼지 않는다. model load·warm-up·timed work·post-work sync 동안 sampler를 유지하므로 model residency도
+  hard-gate peak에 포함한다. Windows display/driver의 정상 baseline도 device-wide 값에 포함하고, 별도 compute
+  workload가 발견된 경우만 invalid로 판정한다.
+- attribution 진단으로 worker PID와 선언된 child-process tree의 NVML process memory 합을 같이 기록하지만,
+  12 GB hard gate와 후보 간 primary 비교는 device-wide peak를 쓴다. allocator peak는 backend-specific
+  보조값일 뿐 서로 다른 backend 간 순위에 쓰지 않는다.
+- 예정 50 ms sample 사이 실제 monotonic gap이 100 ms를 넘거나 load 전부터 post-sync까지 coverage가 없으면
+  peak는 `invalid`다. controlled interruption은 중단 전과 resume 후 두 sample stream의 최대 absolute 값을
+  해당 run peak로 사용하고 둘 중 하나가 invalid면 전체가 invalid다.
+- pass에는 실제 RTX 4070 SUPER 12 GB device에서 OOM·driver reset 없이 완료하고
+  `peak_device_used_bytes < device_total_bytes`인 증거가 필요하다. unload/worker 종료 뒤 최대 60초 동안
+  target worker와 선언된 child PID가 NVML compute-process 목록에서 사라지는지 확인하고 post-unload
+  device-used bytes를 기록한다. PID가 남으면 run은 `invalid`다. 안전 여유는
+  `device_total_bytes - peak_device_used_bytes`로 계산하고 MiB 표시값은 `bytes / 1048576`로만 파생하되
+  이 TASK에서 별도 최소 headroom을 발명하지 않는다.
+
+### 6.4 `PerformanceMeasurement/v1`
+
+모든 논리 run은 task-local 닫힌 measurement record를 가진다. 최소 필드는 `run_id`, candidate/config/environment
+identity와 `candidate_chain_hash`, `rtf_status`와 `vram_status`(각각 `measured | excluded_interruption | invalid`), clock·sync events,
+load/warm-up/steady timed integer ns, denominator ns와 derived RTF, sampler identity·period·coverage,
+baseline·device total·device peak·process-tree peak bytes, sample artifact ref, unload 결과와 invalid/exclusion reason이다.
+validator는 interval·RTF·sample maximum을 원본 event/sample CAS artifact에서 재계산한다. controlled-interruption
+run은 RTF만 `excluded_interruption`일 수 있고 valid VRAM evidence는 별도로 유지한다. required field, sync,
+sample coverage 또는 identity가 없으면 해당 RTF 순위 또는 12 GB hard gate를 통과할 수 없다.
+
+## 7. resume 검증
 
 | end-to-end 조합 | controlled interruption 대상 |
 |---|---|
@@ -175,9 +331,9 @@ resume가 완료 stage는 재사용하고 미완료 stage만 다시 시작한다
 - checkpoint, attempt, artifact identity와 재사용 근거가 로그에서 연결된다.
 - 중단 run의 전체 wall time은 성능 순위에 쓰지 않는다.
 
-## 6. 판정 규칙
+## 8. 판정 규칙
 
-### 6.1 hard gate
+### 8.1 hard gate
 
 다음 중 하나라도 실패하면 기본 모델로 채택하지 않는다.
 
@@ -188,7 +344,7 @@ resume가 완료 stage는 재사용하고 미완료 stage만 다시 시작한다
 5. 선언한 checkpoint 경계에서 resume하지 못함
 6. resume가 완료 작업을 불필요하게 다시 수행함
 
-### 6.2 quality veto와 순위
+### 8.2 quality veto와 순위
 
 치명적 누락·환각은 평균 속도로 덮지 않는다. timestamp·내용과 함께 후보 제외, 추가 calibration 필요,
 제한 fallback 중 하나로 판정한다. hard gate를 통과한 후보끼리는 다음 순서로 본다.
@@ -202,14 +358,15 @@ resume가 완료 stage는 재사용하고 미완료 stage만 다시 시작한다
 반복 측정이 없는 10분 단일 pack이므로 작은 차이로 승자를 만들지 않는다. 오류 양상과 수정시간이
 명확히 갈리지 않으면 `inconclusive`로 남기고 두 adapter를 유지한다.
 
-## 7. 수정시간 통제와 미지원 범위
+## 9. 수정시간 통제와 미지원 범위
 
 - 모델명을 숨긴 익명 출력, source·target 각각 무작위 검토 순서, 모든 결과 생성 후 평가 시작을 적용한다.
 - source clock은 동기 재생 가능한 익명 출력이 준비돼 처음 표시될 때 시작하고, evaluator가 수용한
   human-corrected source를 저장할 때 끝난다. target clock도 고정 source와 익명 한국어 출력이 준비돼
   처음 표시될 때 시작하고 evaluator가 수용한 한국어를 저장할 때 끝난다.
-- evaluator의 실제 읽기·재생·탐색·편집 시간은 포함한다. 최초 파일 준비·모델 로딩, 도구 failure·reload로
-  작업할 수 없는 시간만 사유와 함께 pause한다. 휴식·중단은 timestamp로 기록하고 후보별로 같은 규칙을 쓴다.
+- evaluator의 실제 읽기·재생·탐색·편집 시간은 포함한다. 최초 파일 준비·모델 로딩은 start 전에 끝낸다.
+  도구 failure·file reload·operator break·external interruption만 §5.3의 고정 reason code로 pause하고
+  reason별 제외 시간을 기록하며 후보별로 같은 규칙을 쓴다.
 - 정답 transcript를 참조했는지와 target 교정에서 사용한 source view를 기록한다.
 - 단일 평가자·단일 입력·순서 학습 편향을 결과에 명시한다.
 - `SubtitleDocument/v1` 생성 전에 `style_profile_id`, version과 모든 `resolved_style` 숫자·line-break policy를
@@ -220,14 +377,14 @@ resume가 완료 stage는 재사용하고 미완료 stage만 다시 시작한다
 - 통계적으로 유의한 모델 우열, 장르·화자·음질 일반화, 장시간 production 안정성, remote 모델과의
   공정한 비용·개인정보 비교를 주장하지 않는다.
 
-## 8. remote comparator와 network 경계
+## 10. remote comparator와 network 경계
 
 Remote Qwen-MT comparator는 TASK-031 채택 근거에서 제외한다. 후속 비교에는 업로드 가능 데이터,
 network·privacy, 비용·사용량, 보존·학습 정책, latency 포함 범위를 제품 오너가 별도로 승인해야 한다.
 모델 weight와 dependency를 승인된 출처에서 준비하는 network 단계와 실제 calibration run을 분리하고,
 실제 run은 network 차단 상태에서 local-only를 증명한다.
 
-## 9. 구현 경계
+## 11. 구현 경계
 
 계약 checkpoint에서 수정 가능한 경로:
 
@@ -240,7 +397,9 @@ network·privacy, 비용·사용량, 보존·학습 정책, latency 포함 범�
 
 - 새 `src/media_clarity/calibration/` package와 전용 CLI
 - 새 focused tests, calibration manifest·report template, `scripts/verify_task_031.py`
-- task-local benchmark input과 `AlignmentEvidence/v1` 닫힌 형식·validator
+- task-local benchmark input, `AlignmentEvidence/v1`, `CalibrationRunManifest/v1`,
+  `BenchmarkTranslationOutput/v1`, `CorrectedText/v1`, `CorrectionRecord/v1`, `InterruptionRecord/v1`,
+  `EnvironmentRecord/v1`, `PerformanceMeasurement/v1` 닫힌 형식·validator
 - TASK-031 전용 Make target
 - 재현 가능한 dependency manifest와 lock 정보
 - 필요한 최소 TASK-031 상태·결과 기록
@@ -264,6 +423,8 @@ network·privacy, 비용·사용량, 보존·학습 정책, latency 포함 범�
 - [ ] content-locked 10분 pack과 human-corrected source가 결과 확인 전에 hash로 고정됐다.
 - [ ] 네 후보와 aligner의 exact ID·revision·license·환경·설정이 실행 전에 고정됐다.
 - [ ] 독립 MT benchmark input, calibration-only subtitle style과 alignment chunk/stitch contract가 hash로 고정됐다.
+- [ ] 정확히 8개 run manifest가 raw/corrected/measurement/attempt/interruption CAS lineage를 fail-closed로 검증한다.
+- [ ] 공통 600초 RTF와 external NVML peak VRAM 규약이 raw event/sample에서 재계산되고 invalid evidence가 hard gate를 통과하지 못한다.
 - [ ] 독립 ASR 2회, 독립 번역 2회, end-to-end 4회가 실제로 완료됐다.
 - [ ] 네 end-to-end 조합이 기존 CAS·lineage와 자막 spine 문서를 생성·검증했다.
 - [ ] 네 model adapter가 각각 한 controlled interruption/resume 증거를 남겼다.

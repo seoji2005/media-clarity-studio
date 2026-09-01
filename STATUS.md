@@ -3,7 +3,7 @@
 **"지금 무엇이 되어 있고, 누가 무엇을 들고 있는가."**
 새 세션을 시작하는 에이전트는 [`AGENTS.md`](AGENTS.md) 다음으로 이 파일을 봅니다 (`AGENTS.md` §0.2).
 
-마지막 갱신: 2026-09-01 (TASK-031 / PR #50 — A-min 계약 Gate H 인계)
+마지막 갱신: 2026-09-01 (TASK-031 / PR #50 — H-01·H-02 제한 수정 인계)
 현재 단계: **Phase 1a** — 첫 실제 10분 로컬 자막 vertical slice 착수
 
 ---
@@ -20,9 +20,9 @@
 | 열린 PR | **#6~#10·#12·#14·#15·#17·#29~#32·#46·#50** — #50은 TASK-031 계약 checkpoint Draft, #46은 TASK-029 review 기록 Draft; 나머지 과거 Draft는 현재 실행 차단 아님 |
 | 미병합 종료 | **#2·#3·#4·#11·#41** — #41은 REVIEW-022 원문이 PR #42로 `main`에 보존된 뒤 종료 |
 | 운영 구조 | **TASK-030 적용 중** — GPT-primary·승인 연속성·run resilience·제한적 Claude escalation (`AGENTS.md` §3, ADR-0030). PR #45/TASK-029에는 소급 적용하지 않음 |
-| 현재 작업 | **TASK-031 / PR #50** — U-22 A-min 고정 10분 로컬 자막 calibration 계약 checkpoint, fresh Gate H 검토 대기 |
+| 현재 작업 | **TASK-031 / PR #50** — H-01 evidence lineage·H-02 RTF/VRAM 측정 계약 제한 수정 완료, 새 fixed-HEAD 재검토 대기 |
 | U-31 | **답변됨 (2026-08-22)** — 번역 대상 언어 **한국어(`ko`)** |
-| 다음 실행 의존성 | GitHub에서 PR #50의 live base·HEAD를 고정해 fresh independent Gate H 계약 검토를 수행한다. 승인과 별도 dependency/model/network gate가 모두 닫힌 뒤 한 조합 preflight smoke부터 구현하며, smoke만으로 U-22 완료를 주장하지 않음 |
+| 다음 실행 의존성 | H-01·H-02 제한 수정의 live HEAD를 고정해 fresh independent Gate H 제한 재검토를 수행한다. 승인과 별도 dependency/model/network gate가 모두 닫힌 뒤 한 조합 preflight smoke부터 구현하며, smoke만으로 U-22 완료를 주장하지 않음 |
 | U-08 | **답변됨 (2026-08-09)** — **채점 정답은 번역 자막** |
 | U-11 | **부분 답변됨 (2026-08-09)** — **약 2개월·품질 우선.** 정확한 제출 날짜는 **미확정** |
 | 차단 요인 | **TASK-031 범위와 A-min은 승인됨. dependency manifest·모델 weight 다운로드·외부 network 사용은 별도 owner gate 전 미승인.** U-16 보관 정책은 미정이므로 자동 삭제·GC를 범위 밖에 둠 |
@@ -70,7 +70,7 @@
 | [TASK-028](docs/tasks/TASK-028.md) | Content-addressed artifact store와 재개 가능한 stage runtime | Claude Code 구현 세션 | Lean Root 고정 HEAD Gate H 검토 — `REVIEW-018`~`021` 변경 요청, [`REVIEW-022`](docs/reviews/REVIEW-022.md) 승인 | Phase 1a shared storage·orchestrator foundation | **Done — PR #36 병합** (`1d05de31aa39fd4dc8790d6c6e6442c0f8765ddc`) |
 | [TASK-029](docs/tasks/TASK-029.md) | SpeechSegment·Transcript·capability·translation·subtitle 실행 계약 정본화 | Claude Code 구현 세션 | Lean Root 고정 HEAD Gate H 검토 | Phase 1a subtitle data spine | **Done** — REVIEW-027 승인, 제품 오너가 exact HEAD `4b0d2cd041d7a133640355dd0b96874ef4329074` 승인, PR #45 병합 (`6f94705598c1ef57a4d25682938cbcbbaf044732`). 시작 당시 ownership/review 계약 유지 |
 | [TASK-030](docs/tasks/TASK-030.md) | GPT-primary 운영 계약과 Markdown 정합화 | Lean Root Orchestrator | fresh GPT/Codex 고정 HEAD 검토 | Project operations | **Done** — Gate M 승인, PR #47 병합 (`116d1c7fbb90e79acf15947385c1ac4f905ffb12`) |
-| [TASK-031](docs/tasks/TASK-031.md) | U-22 A-min 로컬 자막 calibration vertical slice | Lean Root Author | fresh GPT/Codex fixed-HEAD Gate H reviewer | Phase 1a subtitle calibration | **In review — PR #50 Draft**, dependency/model/network gate 대기 |
+| [TASK-031](docs/tasks/TASK-031.md) | U-22 A-min 로컬 자막 calibration vertical slice | Lean Root Author | fresh GPT/Codex fixed-HEAD Gate H reviewer | Phase 1a subtitle calibration | **In review — H-01·H-02 제한 재검토 대기**, dependency/model/network gate 대기 |
 | [TASK-012](docs/tasks/TASK-012.md) | Phase 1 계획 기준선 확립 | Claude Code 주 세션 | TASK-013~017 / REVIEW-005~009 (사람 오너의 예외 승인) | Phase 1 planning / 1a 진입 | **Done** — REVIEW-009 승인 후 PR #5 병합 (`10d34b4a4545f9ae8894c8038e7f1cc9a7706d61`) |
 | [TASK-013](docs/tasks/TASK-013.md) | TASK-012 고정 HEAD 독립 검토 | **이 독립 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 review | **In review** (판정: 변경 요청 — [REVIEW-005](docs/reviews/REVIEW-005.md)) |
 | [TASK-014](docs/tasks/TASK-014.md) | TASK-012 M-01·M-02 제한 재검토 | **REVIEW-005를 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 limited rereview | **In review** (M-01·M-02 부분 해소 · 판정: 변경 요청 — [REVIEW-006](docs/reviews/REVIEW-006.md)) |
