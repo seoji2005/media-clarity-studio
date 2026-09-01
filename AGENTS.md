@@ -77,6 +77,15 @@ R1–R10은 사람 제품 오너의 명시적 지시 없이는 예외가 없습�
 `README.md`와 `CLAUDE.md`는 진입 안내이며 규칙의 출처가 아닙니다. 같은 세션에서 SHA가 바뀌지 않은
 문서는 다시 읽지 않고, 재검토는 이전 고정 HEAD와 새 HEAD의 delta부터 확인합니다.
 
+**새 Work 세션 복원:** 이전 대화를 붙여 넣지 않습니다. 아래 호출문으로 시작한 뒤 live `main`과 열린 PR의
+base·HEAD·상태를 확인하고, live `main`의 이 파일 전체 → `STATUS.md` 전체 → 선택한 PR의 TASK 전체를 읽습니다.
+
+`Use $media-clarity-orchestrator. Continue seoji2005/media-clarity-studio from live repository and PR facts. Use ChatGPT Pro at consequential product/architecture checkpoints and use bounded read-only subagents for orthogonal evidence when useful. Do not assume or paste prior conversation history; reconstruct state and take only the next safe action.`
+
+그 뒤 `main / PR별 base·HEAD·TASK·Gate·Author·Reviewer·마지막 reviewed HEAD / blocker / Pro checkpoint /
+next allowed action / forbidden now`를 한 execution card로 만들고 다음 안전 행동 하나만 고릅니다. 이 호출은
+상태 복원과 이미 허용된 범위의 다음 행동만 승인하며 merge·dependency/model·network egress·파괴 행위를 승인하지 않습니다.
+
 ---
 
 ## 1. 용어 정책 (Terminology Policy)
@@ -150,7 +159,7 @@ R1–R10은 사람 제품 오너의 명시적 지시 없이는 예외가 없습�
 | 1 | **Lean Root Orchestrator** | GPT Work / Codex Work | 상태 복원, 다음 TASK 선택, 계약·배정, 조사·검증 조정, 오너 인계, 승인 후 통합 | 배정 시 코드·비코드 가능 |
 | 2 | **Codex 작성 세션** | Root 또는 별도 Codex 세션 | 작은 범위의 코드·테스트·문서 구현과 직접 검증. 한 브랜치·배타적 파일 소유 | 배정 범위만 |
 | 3 | **독립 reviewer** | 작성자와 다른 fresh GPT/Codex 세션; 필요 시 Claude | 고정 HEAD·TASK·diff·직접 회귀만 검토 | 대상 브랜치 수정 금지 |
-| 4 | **ChatGPT Pro adviser** | 별도 자문 대화 | 결과가 제품 로드맵·아키텍처를 바꾸는 선택지 비교 | 하지 않음 |
+| 4 | **ChatGPT Pro adviser** | 별도 자문 대화 | 중요한 계약·제품/아키텍처 선택·측정 milestone 방향에 대한 반론과 권고 | 하지 않음 |
 | 5 | **Claude Code specialist** | Claude Code | §3의 폐쇄형 trigger에 해당하는 구현·cross-model 검토·교착 해소 | 배정 범위만 |
 | 6 | **Claude adviser** | Claude 대화 | trigger가 기록된 아키텍처 자문·두 번째 의견 | 하지 않음 |
 
@@ -169,6 +178,19 @@ R1–R10은 사람 제품 오너의 명시적 지시 없이는 예외가 없습�
 - 복잡해 보인다는 인상, 일반 상태 갱신, 반복 테스트, 첫 보통 실패는 Claude trigger가 아닙니다.
 - 3번 trigger는 두 attempt의 HEAD·결함·표적 테스트를 기록하고 세 번째 GPT 반복을 금지합니다.
   Gate S는 Author와 다른 모델의 fresh reviewer가 필수이며, 확보하지 못하면 Gate를 낮추지 않고 `Blocked`로 둡니다.
+
+**ChatGPT Pro feedback checkpoint**
+
+Root는 다음 세 지점에서 Pro 자문을 적극 사용합니다.
+
+1. evidence lineage, cache/resume, privacy, model/dependency 또는 12 GB 경계를 바꾸는 Gate H/S 계약 고정 전
+2. 사람 수정시간·누락/환각·end-to-publish·로드맵에 다른 영향을 주는 현실적 제품/아키텍처 대안 선택 전
+3. calibration·10분 vertical slice·phase milestone의 측정 결과로 다음 방향을 고르기 전
+
+직접 Pro 호출 수단이 없으면 Root가 질문 하나, 대안 최대 3개, hard gate, SHA로 확인한 사실·측정값,
+불확실성 최대 5개만 담은 자문 packet을 만들고 제품 오너가 별도 Pro 대화에서 실행할 수 있게 합니다.
+권고·위험 최대 5개·최소 판별 실험·번복 조건을 요청하며 같은 SHA의 같은 질문을 합의 목적으로 반복하지 않습니다.
+Pro 답변은 저장소 사실·formal review·제품 오너 결정·dependency/model/network 승인 중 어느 것도 대체하지 않습니다.
 
 ### 3.1 작성자와 리뷰어의 분리 (R8)
 
@@ -214,7 +236,12 @@ R1–R10은 사람 제품 오너의 명시적 지시 없이는 예외가 없습�
 - GPU benchmark·실제 모델 실행은 동시에 1개만 수행합니다.
 - `STATUS.md`는 coordination point입니다. 리뷰 중 작성자가 같은 상태 행을 수정하지 않습니다.
 - 서브에이전트는 읽기·반례·테스트 설계처럼 서로 겹치지 않는 질문 하나만 맡습니다. 기본값은 read-only이며,
-  최종 판정·병합·공유 파일 쓰기를 맡기지 않습니다.
+  최종 판정·병합·공유 파일 쓰기를 맡기지 않습니다. formal reviewer는 작성자의 서브에이전트로 대체할 수 없습니다.
+- 위험도별 기본 수(Lean Root 제외)는 Gate L 0명, Gate M 1명, Gate H 2명, Gate S 3명입니다.
+  다중 외부 근거·cross-contract 제품 판단은 2명으로 시작하고 독립 privacy/제3 도메인이 있을 때만 1명을 더합니다.
+  단순 상태 조회·push·명백한 한 파일 수정, 앞 결과가 필요한 순차 작업에는 사용하지 않습니다.
+- 각 요청에는 exact HEAD·경로·질문 하나·비범위를 주고, 답은 결론 한 줄과 근거 있는 finding 최대 5개로 제한합니다.
+  Root가 결과를 하나의 판정 목록으로 중복 제거하며 같은 질문의 다수결을 만들지 않습니다.
 - 리뷰 지적은 먼저 보존하고, 그 다음 작성 Owner가 별도 커밋으로 수정합니다.
 - 충돌은 해당 Source Owner가 해결하고 Lean Root가 최종 diff를 확인합니다.
 

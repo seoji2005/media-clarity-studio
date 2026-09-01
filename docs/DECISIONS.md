@@ -697,7 +697,10 @@ Author와 fresh Reviewer를 분리하고 누구도 자기 변경에 승인 판�
 승인하며, Lean Root는 오너가 지정한 PR·전체 HEAD SHA·reviewed base SHA가 유지될 때만 병합을
 기계적으로 실행할 수 있다. Claude는 진행 중 기존 계약, 오너의 명시 요청,
 GPT의 동일 결함 제한 수정 2회 실패, Gate S cross-model 검토, Gate H의 구체적 잔여 blocker,
-근거 교환 뒤의 기술적 교착 중 하나를 기록한 경우에만 쓴다. 상세 절차의 정본은 `AGENTS.md` §3이다.
+근거 교환 뒤의 기술적 교착 중 하나를 기록한 경우에만 쓴다. 중요한 계약·제품/아키텍처 선택·측정
+milestone에는 ChatGPT Pro의 bounded 자문을 적극 사용하고, 비단순 작업에는 위험도별 직교형 read-only
+서브에이전트를 기본 사용한다. 둘 다 formal reviewer·저장소 사실·제품 오너 결정을 대신하지 않는다.
+상세 절차의 정본은 `AGENTS.md` §3이다.
 
 **근거:** 기본 반복 작업을 여유 있는 자원으로 처리하고 Claude를 실패 비용이 큰 지점에만 배치하면
 처리량을 높이면서도 cross-model 검토의 가치를 보존한다. author/reviewer 분리와 exact-HEAD 승인은

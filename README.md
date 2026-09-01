@@ -74,6 +74,9 @@ OCR/VLM, 시각 재구성과 제품 UI는 아직 본격 구현 전입니다. 현
 
 **에이전트 읽기 순서:** `AGENTS.md`가 **항상 첫 번째**입니다. 전체 순서는 [`AGENTS.md`](AGENTS.md) §0.2를 따르십시오.
 
+**새 Work에서 이어가기:** `Use $media-clarity-orchestrator. Continue seoji2005/media-clarity-studio from live repository and PR facts.`
+나머지 복원·Pro·서브에이전트 규칙은 [`AGENTS.md`](AGENTS.md) §0.2·§3의 정본을 따릅니다.
+
 **사람이 처음 볼 때 추천 순서:** `README.md`(이 파일) → [`AGENTS.md`](AGENTS.md) → [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md) §2 → [`PLAN.md`](PLAN.md) → [`STATUS.md`](STATUS.md)
 
 ---

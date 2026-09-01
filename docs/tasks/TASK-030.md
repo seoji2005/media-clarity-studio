@@ -13,7 +13,8 @@
 
 ## 목표
 
-GPT Work/Codex를 기본 실행 자원으로 사용하고 Claude Pro는 닫힌 escalation 조건에서만 쓰는
+GPT Work/Codex를 기본 실행 자원으로 사용하고 Claude Pro는 닫힌 escalation 조건에서만 쓰며,
+ChatGPT Pro와 읽기 전용 서브에이전트를 중요한 지점에 제한적으로 적극 사용하는
 운영 계약을 기계적 승인 경계와 함께 문서 정본에 반영한다. 반복되는 역할 설명은 `AGENTS.md`로
 모으고 다른 진입 문서는 링크 중심으로 줄여 품질을 유지하면서 세션 토큰과 중복 검토를 줄인다.
 
@@ -55,8 +56,10 @@ GPT Work/Codex를 기본 실행 자원으로 사용하고 Claude Pro는 닫힌 e
 2. Lean Root는 상태 복원, 다음 TASK, 배정, 검증 조정, 오너 인계를 책임지며 배정된 변경을 직접 작성할 수 있다.
 3. Codex 작성 세션은 한 브랜치·배타적 파일의 작은 구현 단위를 소유한다.
 4. 리뷰가 필요한 변경의 작성자와 reviewer는 다른 행위자 또는 fresh 세션이다. reviewer가 패치하면 작성자가 되어 새 reviewer가 필요하다.
-5. 서브에이전트는 정확한 SHA와 직교 질문 하나를 받는 read-only 증거 수집이 기본이며 최종 판정을 하지 않는다.
-6. ChatGPT Pro 자문은 제품·아키텍처 선택에만 쓰며 저장소 권한이나 오너 결정을 대신하지 않는다.
+5. 서브에이전트는 위험도별 기본 수와 정확한 SHA·직교 질문 하나를 받는 read-only 증거 수집이 기본이며
+   최종 판정이나 formal reviewer를 대신하지 않는다.
+6. ChatGPT Pro 자문은 중요한 계약 고정, 제품·아키텍처 선택, 측정 milestone 뒤 방향 결정에 적극 사용하되
+   저장소 사실·review·오너 결정·외부 반입 승인을 대신하지 않는다.
 7. Claude는 `AGENTS.md` §3의 닫힌 trigger를 기록한 경우에만 호출한다.
 8. 병합은 제품 오너가 지정한 PR 번호·전체 HEAD SHA·reviewed base SHA와 일치할 때만 Lean Root가 기계적으로 실행할 수 있다.
 
@@ -68,6 +71,8 @@ GPT Work/Codex를 기본 실행 자원으로 사용하고 Claude Pro는 닫힌 e
 - [x] 최소 읽기, execution card, delta 재검토, 단계별 검증, 서브에이전트 한계가 기록된다.
 - [x] ADR-0029가 ADR-0028의 미래 규칙만 대체하고 과거 기록과 PR #45 소유권을 보존한다.
 - [x] 변경 파일이 Markdown에 한정되고 TASK-029 행·파일은 바뀌지 않는다.
+- [x] 새 Work 호출문과 live repository 기반 복원 절차, Pro checkpoint 3개, 위험도별 subagent 기본값이 기록된다.
+- [ ] 대화 기록이 없는 clean Work 세션이 live main·PR #45·PR #47과 기본 다음 행동을 정확히 복원하는 dry-run을 통과한다.
 - [ ] 작성자와 다른 fresh 세션이 고정 HEAD를 검토한다.
 - [ ] 사람 제품 오너가 정확한 PR·HEAD·reviewed base를 승인한다.
 
@@ -78,6 +83,9 @@ GPT Work/Codex를 기본 실행 자원으로 사용하고 Claude Pro는 닫힌 e
 - Claude escalation trigger: 6개, 비-trigger: 4개
 - 변경된 비-Markdown 파일: 0개
 - PR #45 및 TASK-029 변경: 0개
+- ChatGPT Pro checkpoint: 3개, 동일 SHA·질문 재호출 0회
+- subagent 기본 수: Gate L/M/H/S = 0/1/2/3, formal reviewer 대체 0회
+- clean-session continuity dry-run: main·#45·#47 identity 및 다음 행동 4/4 일치
 - 독립 fixed-HEAD review와 owner exact-HEAD approval: 각각 1회
 
 ## rollback 조건

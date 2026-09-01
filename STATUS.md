@@ -17,7 +17,7 @@
 | 기능 코드 | **있음** — TASK-022 CLI: local input → probe → SRT → soft-sub → verify → local staging export |
 | 런타임 / 의존성 | Python 3.12+ 표준 라이브러리와 FFmpeg/ffprobe. Python package 의존성·모델·CI·비밀정보 없음 |
 | 병합된 PR | **#1·#5·#16·#18·#19·#21·#22·#23·#24·#25·#28·#33·#34·#36·#42** — 각 merge commit은 §3에 기록; 현재 HEAD는 GitHub에서 조회 |
-| 열린 PR | **#6~#10·#12·#14·#15·#17·#29~#32·#45** — #45는 TASK-029 Draft; 나머지 과거 Draft는 현재 실행 차단 아님 |
+| 열린 PR | **#6~#10·#12·#14·#15·#17·#29~#32·#45·#47** — #45는 TASK-029 Draft, #47은 TASK-030 Draft; 나머지 과거 Draft는 현재 실행 차단 아님 |
 | 미병합 종료 | **#2·#3·#4·#11·#41** — #41은 REVIEW-022 원문이 PR #42로 `main`에 보존된 뒤 종료 |
 | 운영 구조 | **TASK-030 결정 전사 중** — merge 전에는 TASK-027, merge 뒤에는 GPT-primary·제한적 Claude escalation (`AGENTS.md` §3, ADR-0029) |
 | 현재 작업 | **TASK-029 새 고정 HEAD Gate H 검토 대기** + **TASK-030 운영 계약 검토** |
