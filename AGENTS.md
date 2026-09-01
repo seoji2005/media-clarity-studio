@@ -317,7 +317,7 @@ usage/capacity 오류, reasoning 종료, context 소진, tool timeout, 임시 co
 | **A. coherent commit이 remote에 있음** | 그 remote HEAD 다음 단계부터 계속 |
 | **B. coherent commit은 있으나 remote에 없음** | commit scope와 focused verification을 확인하고 push부터 계속 |
 | **C. coherent uncommitted work가 있음** | diff와 focused verification을 확인해 그 논리 단위만 완료 |
-| **D. partial/ambiguous work만 있음** | 불완전 부분만 폐기하거나 원래 fixed HEAD에서 bounded remediation만 재수행 |
+| **D. partial/ambiguous work만 있음** | 원래 위치의 작업을 삭제·덮어쓰지 않고 보존하며, 필요하면 원본을 유지한 비파괴 복사로만 격리한다. clean worktree에서 원래 fixed HEAD의 bounded remediation만 재수행한다. 원본의 폐기·삭제·덮어쓰기·이동은 정확한 대상·소유권을 확인하고 사람 제품 오너가 해당 destructive operation을 명시적으로 승인한 뒤에만 수행한다 |
 
 쓰기 작업의 durable 순서는 다음과 같습니다.
 

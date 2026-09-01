@@ -3,8 +3,8 @@
 **"지금 무엇이 되어 있고, 누가 무엇을 들고 있는가."**
 새 세션을 시작하는 에이전트는 [`AGENTS.md`](AGENTS.md) 다음으로 이 파일을 봅니다 (`AGENTS.md` §0.2).
 
-마지막 갱신: 2026-09-01 (PR #45 병합 후 TASK-030 rebase·운영 계약 정합화)
-현재 단계: **Phase 1a** — TASK-029 완료, TASK-030 새 고정 HEAD Gate M 검토 준비
+마지막 갱신: 2026-09-01 (TASK-030 Gate M M-01·M-02 제한 수정)
+현재 단계: **Phase 1a** — TASK-029 완료, TASK-030 Gate M M-01·M-02 제한 수정과 fresh 재검토
 
 ---
 
@@ -20,9 +20,9 @@
 | 열린 PR | **#6~#10·#12·#14·#15·#17·#29~#32·#46·#47** — #46은 TASK-029 review 기록 Draft, #47은 TASK-030 Draft; 나머지 과거 Draft는 현재 실행 차단 아님 |
 | 미병합 종료 | **#2·#3·#4·#11·#41** — #41은 REVIEW-022 원문이 PR #42로 `main`에 보존된 뒤 종료 |
 | 운영 구조 | **TASK-030 결정 전사 중** — PR #47 merge 전에는 TASK-027/ADR-0028, merge 뒤에는 GPT-primary·승인 연속성·run resilience·제한적 Claude escalation (`AGENTS.md` §3, ADR-0030) |
-| 현재 작업 | **TASK-030** — PR #47을 TASK-029 merge 뒤 최신 `main`에 rebase하고 Markdown·운영 계약을 정합화한 Author checkpoint |
+| 현재 작업 | **TASK-030** — PR #47, reviewed base `6f94705598c1ef57a4d25682938cbcbbaf044732`, 변경 요청을 받은 fixed HEAD `2bf4f65c1ebac76f23ca85b225dc11a67835a401`; M-01·M-02만 같은 Author branch에서 제한 수정 |
 | U-31 | **답변됨 (2026-08-22)** — 번역 대상 언어 **한국어(`ko`)** |
-| 다음 실행 의존성 | PR #47 coherent commit·push·remote HEAD 확인 → fresh fixed-HEAD Gate M 독립 검토 → 제품 오너의 exact PR·HEAD·reviewed base merge 승인 |
+| 다음 실행 의존성 | PR #47의 live remote HEAD와 PR handoff를 대조한다. M-01·M-02 remediation commit이 remote에 있으면 그 새 HEAD를 fresh Gate M 제한 재검토하고, coherent local commit만 있으면 focused 검증 뒤 push부터 재개한다. 원래 구현·rebase는 반복하지 않음 → 승인 판정 뒤 제품 오너의 exact PR·HEAD·reviewed base merge 승인 |
 | U-08 | **답변됨 (2026-08-09)** — **채점 정답은 번역 자막** |
 | U-11 | **부분 답변됨 (2026-08-09)** — **약 2개월·품질 우선.** 정확한 제출 날짜는 **미확정** |
 | 차단 요인 | **다음 기능 범위와 의존성·모델 가중치 반입 gate가 미승인.** U-16 보관 정책은 미정이므로 자동 삭제·GC를 범위 밖에 두며, 다른 U-XX도 임의 확정하지 않음 |
@@ -302,7 +302,7 @@ Codex·Codex Cloud·GitHub `@codex review`는 **당시 미래 역할·배정·�
 
 | TASK | 내용 | Owner |
 |---|---|---|
-| [TASK-030](docs/tasks/TASK-030.md) — 새 고정 HEAD 검토 준비 | GPT-primary, 승인 연속성, run resilience, durable checkpoint, 제한적 Pro/Claude/subagent 사용과 exact-HEAD merge 경계를 최신 `main` 위에 정합화 | Author: Lean Root → Reviewer: fresh GPT/Codex (Gate M) |
+| [TASK-030](docs/tasks/TASK-030.md) — Gate M M-01·M-02 제한 수정·재검토 | GPT-primary, 승인 연속성, run resilience, durable checkpoint, 제한적 Pro/Claude/subagent 사용과 exact-HEAD merge 경계를 최신 `main` 위에 정합화 | Author: Lean Root → Reviewer: fresh GPT/Codex (Gate M) |
 
 > **판정과 반영 상태는 서로 다른 사실입니다. 섞지 마십시오.**
 >

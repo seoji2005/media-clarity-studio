@@ -24,12 +24,14 @@ GPT Work/Codex를 기본 실행 자원으로 사용하고 Claude는 닫힌 escal
 | 항목 | 값 |
 |---|---|
 | Source | `origin/main@6f94705598c1ef57a4d25682938cbcbbaf044732` |
-| Target | `lean-root/task-030-gpt-primary-operations` — fixed HEAD는 PR handoff에서 고정 |
+| Target | PR #47 `lean-root/task-030-gpt-primary-operations`; reviewed base `6f94705598c1ef57a4d25682938cbcbbaf044732` |
+| Previous review | fixed HEAD `2bf4f65c1ebac76f23ca85b225dc11a67835a401` — `변경 요청`, 미해결 M-01·M-02 |
+| Current HEAD rule | PR #47의 live remote HEAD를 조회하고 PR compact handoff의 전체 SHA와 대조한다. 이 파일을 포함하는 commit은 자기 SHA를 본문에 내장할 수 없으므로 새 fixed HEAD의 exact SHA는 push 뒤 PR handoff가 고정한다 |
 | Active TASK | TASK-030 / `In review` |
 | Gate | M, fixed-HEAD independent review required |
 | Author / Reviewer | Lean Root / fresh GPT·Codex session |
 | Blocker | 독립 리뷰와 제품 오너의 정확한 PR·HEAD·reviewed base 승인 전 병합 금지 |
-| Next action | coherent commit/push → remote HEAD 고정 → fresh Gate M review → owner decision |
+| Next action | live remote에 M-01·M-02 remediation commit과 exact-HEAD handoff가 있으면 fresh Gate M 제한 재검토. coherent local commit만 있고 remote가 previous review HEAD이면 focused 검증을 확인하고 push부터 재개. 원래 구현·rebase는 반복하지 않음 |
 
 ## 범위
 
@@ -85,7 +87,8 @@ GPT Work/Codex를 기본 실행 자원으로 사용하고 Claude는 닫힌 escal
 - [x] 새 Work 호출문, A–D 복원, durable checkpoint, compact handoff, retry/model budget이 기록된다.
 - [x] Pro checkpoint 3개와 mechanical 비호출, 필요한 만큼만 쓰는 subagent 상한이 기록된다.
 - [x] 대화 기록이 없는 clean Work 세션이 live main·#45 merged·#47 Draft와 다음 행동을 정확히 복원한다.
-- [ ] 작성자와 다른 fresh 세션이 고정 HEAD를 검토한다.
+- [x] 작성자와 다른 fresh 세션이 previous fixed HEAD를 검토했다 — M-01·M-02 `변경 요청`.
+- [ ] 작성자와 다른 fresh 세션이 remediation fixed HEAD에서 M-01·M-02와 prohibited drift를 제한 재검토한다.
 - [ ] 사람 제품 오너가 정확한 PR·HEAD·reviewed base를 승인한다.
 
 ## 측정 지표
@@ -98,9 +101,9 @@ GPT Work/Codex를 기본 실행 자원으로 사용하고 Claude는 닫힌 escal
 - ChatGPT Pro checkpoint: 3개, 동일 SHA·질문 재호출 0회
 - subagent 상한 기본값: Gate L/M/H/S = 0/max1/max2/max3, formal reviewer 대체 0회
 - approval 재요청 gate: 5/5, A–D 복구 상태: 4/4, compact handoff: 14/14 fields
-- clean-session continuity: main·#45 merged·#47 Draft·next action 4/4 일치
+- clean-session continuity: main·#45 merged·#47 Draft·previous review 변경 요청·next action 5/5 일치
 - PR #45 serialization: 기존 ownership/review·exact-head approval·merge·new-main rebase 4/4
-- fresh fixed-HEAD review: 0/1 (다음 단계), owner exact-HEAD approval: 0/1 (review 뒤 요청)
+- fresh fixed-HEAD review: previous HEAD 1회 `변경 요청`; remediation rereview 0/1, owner exact-HEAD approval: 0/1 (승인 review 뒤 요청)
 
 ## rollback 조건
 
