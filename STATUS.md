@@ -3,7 +3,7 @@
 **"지금 무엇이 되어 있고, 누가 무엇을 들고 있는가."**
 새 세션을 시작하는 에이전트는 [`AGENTS.md`](AGENTS.md) 다음으로 이 파일을 봅니다 (`AGENTS.md` §0.2).
 
-마지막 갱신: 2026-09-01 (TASK-031 / PR #50 — H-01·H-02 잔여 우회 경로 제한 수정, `AGENTS.md` §3 trigger 3 escalation 인계)
+마지막 갱신: 2026-09-01 (TASK-031 / PR #50 — H-01·H-02 잔여 우회 경로와 AttemptRecord 계약 불일치 제한 수정, `AGENTS.md` §3 trigger 3 escalation 인계)
 현재 단계: **Phase 1a** — 첫 실제 10분 로컬 자막 vertical slice 착수
 
 ---
@@ -20,7 +20,7 @@
 | 열린 PR | **#6~#10·#12·#14·#15·#17·#29~#32·#46·#50** — #50은 TASK-031 계약 checkpoint Draft, #46은 TASK-029 review 기록 Draft; 나머지 과거 Draft는 현재 실행 차단 아님 |
 | 미병합 종료 | **#2·#3·#4·#11·#41** — #41은 REVIEW-022 원문이 PR #42로 `main`에 보존된 뒤 종료 |
 | 운영 구조 | **TASK-030 적용 중** — GPT-primary·승인 연속성·run resilience·제한적 Claude escalation (`AGENTS.md` §3, ADR-0030). PR #45/TASK-029에는 소급 적용하지 않음 |
-| 현재 작업 | **TASK-031 / PR #50** — H-01 runtime attempt identity 결박·attempt 유일성과 CAS dedup 구분·`final_pipeline_output_refs` 계보, H-02 timed pre-end digest 결박·NVML sample scoping을 계약에서 닫음. GPT 제한 수정 2회(`6c3df57`·`111f118`)가 같은 결함을 닫지 못해 `AGENTS.md` §3 trigger 3으로 Claude Code specialist가 작성. 새 fixed-HEAD 재검토 대기 |
+| 현재 작업 | **TASK-031 / PR #50** — H-01 runtime attempt identity 결박·attempt 유일성과 CAS dedup 구분·`final_pipeline_output_refs` 계보, H-02 timed pre-end digest 결박·NVML sample scoping을 계약에서 닫음. GPT 제한 수정 2회(`6c3df57`·`111f118`)가 같은 결함을 닫지 못해 `AGENTS.md` §3 trigger 3으로 Claude Code specialist가 작성. 이어서 §5.1.1이 실제 TASK-028 `AttemptRecord`에 없는 이름·모양(`runtime_stage_id`·`stage_spec_fingerprint`·scalar `raw_output_ref`)을 요구하던 H-01 계약 불일치를 실물 record 기준으로 정정. 새 fixed-HEAD 재검토 대기 |
 | U-31 | **답변됨 (2026-08-22)** — 번역 대상 언어 **한국어(`ko`)** |
 | 다음 실행 의존성 | 잔여 H-01·H-02 제한 수정의 live HEAD를 고정해 fresh independent Gate H 제한 재검토를 수행한다. 승인과 별도 dependency/model/network gate가 모두 닫힌 뒤 한 조합 preflight smoke부터 구현하며, smoke만으로 U-22 완료를 주장하지 않음 |
 | U-08 | **답변됨 (2026-08-09)** — **채점 정답은 번역 자막** |

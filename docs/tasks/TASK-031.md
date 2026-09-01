@@ -50,8 +50,11 @@ vertical slice다. 모델 우열이나 제품 완성도를 테스트 수로 주�
 | 1 | `6c3df57ae60ae411baef546a42f3f51509559ee7` | H-01 성능 record ↔ candidate stage 결박, H-02 lazy iterator 소비와 NVML frozen identity | H-01: stage/workload lineage와 exact matrix coverage 미완결. H-02: lazy timing과 Windows/WDDM 측정 경계 미완결 | `6c3df57` 계약 본문의 stage lineage·matrix coverage·timing 문구 검사 |
 | 2 | `111f118bf88f1913b10a04123b53bbc193b8d6ca` | 위 잔여 H-01·H-02 | H-01: (a) `job_id`·runtime `stage_id`·canonical attempt_path/attempt-record ref 부재로 measurement가 실행에 결박되지 않음, (b) runtime attempt identity 유일성 규정 부재이며 CAS 중복 제거와 실행 재사용을 구분하지 않음, (c) `final_pipeline_output_refs`의 내용·순서·계보·non-empty 미정의로 **빈 tuple이 동일성 검사를 통과**. H-02: (d) `output-materialized` event가 byte length만 결박해 timed-end 뒤 **same-length 교체가 검출되지 않음**, (e) NVML sample record가 measurement에 결박되지 않아 **하나의 unscoped record를 ASR·MT가 공유**해도 통과 | `111f118` 본문에 대한 텍스트 probe: `job_id` 출현 0회, `attempt_path` 0회, CAS dedup 구분 문구 0회, `final_pipeline_output_refs`의 정의·non-empty·ancestry 규정 0회, materialization event의 digest 결박 0회, sample record의 scope field 0회 |
 
-이번 remediation은 위 (a)~(e) 다섯 우회 경로만 닫는다. 계약 범위를 넓히거나 §11의 구현 경계, 모델·
-dependency·network gate를 바꾸지 않는다.
+| 3 | `33b7ccddc18878f9f3ffc8cb51f9abe42347d94c` (Claude Code specialist) | 위 (a)~(e) 다섯 우회 경로 | H-01 잔여: §5.1.1이 `AttemptRecord`에 **없는** 이름·모양을 요구했다 — `runtime_stage_id`(실물은 `stage_id`), 정의되지 않은 `stage_spec_fingerprint`(실물은 `fingerprints`와 `cache_key`), scalar `raw_output_ref`(실물은 ordered `outputs[]`). 모든 유효 record를 거부하거나 validator가 미규정 매핑을 지어내야 했고, attempt가 output을 여러 개 가질 때 하나만 결박해도 통과했다 | `schemas/job-v1.schema.json#/$defs/AttemptRecord`와 `job_runtime.py` record writer를 실물 대조: `runtime_stage_id` 부재, `stage_spec_fingerprint` 부재, `outputs`는 `ArtifactRef` array |
+
+이번(네 번째) remediation은 attempt 3이 남긴 **H-01 계약 불일치 하나만** 닫는다. 앞선 (a)~(e) 다섯 경로와
+H-02 조항은 문구·의미 모두 보존한다. 계약 범위를 넓히거나 §11의 구현 경계, 모델·dependency·network
+gate를 바꾸지 않는다.
 
 ## 1. 고정 입력
 
@@ -189,7 +192,7 @@ adapter-native raw bytes는 실제 형식의 media type을 별도로 기록한�
 | inputs | calibration pack manifest/audio ref와 정확히 600초 timebase; 독립 MT는 benchmark input ref, end-to-end는 upstream `Transcript/v1` 등 실제 product document refs |
 | outputs | candidate stage마다 ordered adapter-native `raw_output_refs`, normalized product 또는 benchmark output refs, `end_to_end`이면 §5.1.2의 네 원소 ordered `final_pipeline_output_refs`, axis별 accepted corrected output·correction record refs, alignment evidence ref가 필요한 run이면 그 ref |
 | measurements | stage별 `PerformanceMeasurement/v1` refs와 quality event refs; 숫자를 manifest에 자유롭게 재기입하지 않음 |
-| recovery | §5.1.1의 unit별 runtime identity tuple(`job_id`, `runtime_stage_id`, `attempt_id`, `attempt_record_ref`, `cache_key`, `stage_spec_fingerprint`)과 artifact refs, 배정된 end-to-end run의 `InterruptionRecord/v1` ref |
+| recovery | §5.1.1의 unit별 runtime identity tuple(`job_id`, `runtime_stage_id`(=`AttemptRecord.stage_id`), `attempt_id`, `attempt_record_ref`, `cache_key`, `stage_spec_digest`, `stage_spec_document_ref`, ordered `input_ref_tuple`, ordered `output_ref_tuple`), cache key 재계산에 필요한 `pipeline_id`·`dependency_cache_keys`, artifact refs, 배정된 end-to-end run의 `InterruptionRecord/v1` ref |
 | config | pack hash, candidate config hash, calibration-only style hash, chunk/stitch hash, pipeline source commit |
 
 `candidate_chain_hash`는 single candidate도 포함해 ordered adapter identity/config record의 canonical hash다.
@@ -208,7 +211,8 @@ correction·measurement·interruption record의 `run_id`와 config hash가 manif
 | `end_to_end` | `e2e-faster-whisper__madlad`, `e2e-faster-whisper__qwen3.5`, `e2e-qwen3-asr__madlad`, `e2e-qwen3-asr__qwen3.5` | 각각 ordered `asr`, `mt` 2개 |
 
 각 candidate stage는 stable `candidate_stage_id`, `adapter_role`, ordered `unit_ids`, 각 unit과 같은 순서의
-`stage_spec_fingerprints`, `attempt_ids`, `cache_keys`, `input_ref_tuples`, `raw_output_refs`, 그리고
+`stage_spec_digests`와 `stage_spec_document_refs`(§5.1.1.1), `attempt_ids`, `cache_keys`,
+`input_ref_tuples`, `output_ref_tuples`(§5.1.1.2), `raw_output_refs`, 그리고
 `aggregate_normalized_output_ref`를 manifest에 가진다. 같은 identity를 해당 stage의
 `PerformanceMeasurement/v1`이 그대로 참조해야 한다. 따라서 전체
 calibration에는 독립 run 4개에서 4개, end-to-end run 4개에서 8개인 **정확히 12개 candidate-stage
@@ -224,27 +228,105 @@ tuple을 exact equality로 비교한다.
 각 unit마다 다음 **runtime identity tuple**을 manifest와 `PerformanceMeasurement/v1` 양쪽에 같은 순서로
 가진다.
 
-| field | 내용 |
-|---|---|
-| `job_id` | 그 unit을 실행한 TASK-028 runtime job의 ID |
-| `runtime_stage_id` | runtime이 그 job 안에서 쓴 stage ID. calibration의 `candidate_stage_id`와 다른 축이며 둘 다 기록한다 |
-| `attempt_id` | 그 unit의 실행 attempt ID |
-| `attempt_record_ref` | 그 attempt record의 **canonical attempt_path 또는 immutable attempt-record CAS ref**. 둘 중 하나를 실행 전에 골라 전 run에 동일하게 적용하고 environment record에 그 선택을 남긴다 |
-| `cache_key` | 그 unit의 cache key |
-| `stage_spec_fingerprint` | 그 unit의 `StageSpec` fingerprint |
-| `input_ref_tuple` | 그 attempt가 실제로 소비한 ordered input refs |
-| `raw_output_ref` | 그 attempt가 실제로 생산한 adapter-native raw output ref |
+정본은 TASK-028의 실제 `AttemptRecord`
+([`schemas/job-v1.schema.json`](../../schemas/job-v1.schema.json) `#/$defs/AttemptRecord`,
+`src/media_clarity/job_runtime.py`가 기록)다. 아래 이름과 모양은 그 record에 **실제로 있는 필드**에만
+결박하며, record 안에 없는 필드를 있다고 가정하지 않는다.
 
-validator는 `attempt_record_ref`를 **실제로 읽어** 그 record의 `job_id`·`runtime_stage_id`·`attempt_id`·
-`cache_key`·`stage_spec_fingerprint`·ordered input refs·ordered output refs가 manifest·measurement의 같은
-자리 값과 exact equality인지 확인한다. record를 읽을 수 없거나 한 자리라도 다르면 그 stage measurement는
-`invalid`이고 run은 `completed`가 될 수 없다.
+| field | 내용 | AttemptRecord 대응 |
+|---|---|---|
+| `job_id` | 그 unit을 실행한 TASK-028 runtime job의 ID | `job_id` |
+| `runtime_stage_id` | runtime이 그 job 안에서 쓴 stage ID. calibration의 `candidate_stage_id`와 다른 축이며 둘 다 기록한다 | **`runtime_stage_id := AttemptRecord.stage_id`** — 값이 같아야 하는 별칭이며 record에 `runtime_stage_id`라는 필드가 있다고 가정하지 않는다 |
+| `attempt_id` | 그 unit의 실행 attempt ID | `attempt_id` |
+| `attempt_record_ref` | 그 attempt record의 **canonical attempt_path 또는 immutable attempt-record CAS ref**. 둘 중 하나를 실행 전에 골라 전 run에 동일하게 적용하고 environment record에 그 선택을 남긴다 | canonical attempt_path는 `jobs/<job_id>/stages/<stage_id>/attempts/<attempt_id>.json`이며 runtime의 `canonical_attempt_path()`가 돌려주는 project root 기준 relative path와 같아야 한다 |
+| `cache_key` | 그 unit의 cache key | `cache_key` |
+| `stage_spec_digest` | §5.1.1.1이 정의한 canonical StageSpec identity document의 digest | **AttemptRecord에는 이 필드가 없다.** §5.1.1.1의 절차로 재계산·대조한다 |
+| `stage_spec_document_ref` | 그 canonical StageSpec identity document의 CAS ref | 없음 — manifest가 소유한다 |
+| `input_ref_tuple` | 그 attempt가 실제로 소비한 ordered input refs | `inputs[]`와 **순서까지 exact equality** |
+| `output_ref_tuple` | 그 attempt가 실제로 생산한 ordered output refs | `outputs[]`와 **순서까지 exact equality**. §5.1.1.2가 cardinality를 고정한다 |
 
-**runtime attempt-record identity는 12개 stage에서 유일하다.** 어떤 `(job_id, runtime_stage_id, attempt_id)`
+validator는 `attempt_record_ref`를 **실제로 읽어** 그 record의 `job_id`·`stage_id`·`attempt_id`·
+`cache_key`·`inputs[]`·`outputs[]`가 manifest·measurement의 같은 자리 값(`runtime_stage_id`는 `stage_id`에,
+`input_ref_tuple`·`output_ref_tuple`은 배열에 순서까지 그대로)과 exact equality인지 확인하고,
+`stage_spec_digest`는 §5.1.1.1의 절차로 **재계산**해 대조한다. record를 읽을 수 없거나, 매핑이 없거나,
+한 자리라도 다르면 그 stage measurement는 `invalid`이고 run은 `completed`가 될 수 없다.
+
+#### 5.1.1.1 canonical StageSpec identity (H-01)
+
+`AttemptRecord`에는 `stage_spec_fingerprint`가 없다. 있는 것은 `fingerprints`(제공된 값만 담는 객체)와
+`cache_key`뿐이고, `cache_key`는 stage identity에 더해 그 실행의 `input_artifact_hashes`와
+`dependency_cache_keys`까지 포함하므로 StageSpec identity와 같지 않다. 그래서 아래 **하나의 결정적이고
+구현 가능한 identity**를 정의하고, validator가 그것을 재계산해 record와 잇는다.
+
+**canonical document.** `StageSpec` identity document는 다음 필드만 갖는 닫힌 JSON 객체다. 제공되지 않은
+선택 fingerprint는 필드를 생략하지 않고 **`null`로 명시**한다 (runtime이 cache key에서 부재를 `null`로
+다루는 것과 같은 규약).
+
+```
+kind                     "task031_stage_spec_identity"   (고정 문자열)
+runtime_version          그 실행의 runtime version
+schema_version           그 실행의 schema version
+pipeline_id              JobSpec.pipeline_id
+stage_id                 StageSpec.stage_id
+implementation_version   StageSpec.implementation_version
+depends_on               StageSpec.depends_on 을 오름차순 정렬한 배열
+config_hash              StageSpec.config_hash            | null
+dependency_fingerprint   StageSpec.dependency_fingerprint | null
+source_hash              StageSpec.source_hash            | null
+chunking_hash            StageSpec.chunking_hash          | null
+model_hash               StageSpec.model_hash             | null
+context_hash             StageSpec.context_hash           | null
+random_seed              StageSpec.random_seed            | null
+reproducibility_tier     StageSpec.reproducibility_tier   | null
+cacheable                StageSpec.cacheable
+```
+
+**serialization과 digest.** 바이트 표현은 UTF-8, key 오름차순 정렬, separator `(",", ":")`,
+NaN/Infinity 금지의 canonical JSON 하나뿐이다. `stage_spec_digest`는 그 바이트의 SHA-256이며 표기는
+`common-v1`의 `content_hash` 형식이다. 다른 직렬화·다른 알고리즘·다른 필드 집합을 쓰지 않는다.
+
+**저장 위치.** 이 document는 실행 전에 고정해 **기존 artifact store CAS에 기록**하고, 그 ref를 manifest의
+해당 candidate stage unit에 `stage_spec_document_ref`로, digest를 `stage_spec_digest`로 둔다. 문서를
+저장하지 않고 digest만 적는 것을 금지한다 — 재계산할 원본이 없으면 검증할 수 없다.
+
+**validator 절차.** 각 measured unit에 대해 순서대로 수행하고, 한 단계라도 실패하면 그 measurement는
+`invalid`다.
+
+1. `stage_spec_document_ref`를 CAS에서 읽는다. ref가 없거나 읽히지 않으면 실패다.
+2. 읽은 바이트를 위 canonical 규약으로 다시 직렬화해 digest를 계산하고 `stage_spec_digest`와 대조한다.
+3. document의 `stage_id`가 `AttemptRecord.stage_id`와 같은지 확인한다.
+4. document의 선택 fingerprint를 runtime의 기록 규약대로 **투영**한다 — `implementation_version`은 항상,
+   나머지 일곱은 `null`이 아닐 때만 포함. 그 투영 결과가 `AttemptRecord.fingerprints`와 exact equality여야
+   한다. 이것이 document와 record를 잇는 다리이며, record 안에 없는 필드를 만들어 내지 않는다.
+5. document와 그 attempt의 `inputs[]` artifact content hash 오름차순 목록, manifest에 기록한
+   `dependency_cache_keys` mapping으로 **frozen JobSpec/StageSpec evidence에 정의된 stage cache key
+   document**를 그대로 구성해 canonical digest를 계산하고 `AttemptRecord.cache_key`와 대조한다.
+   manifest는 이 재계산에 필요한 `pipeline_id`와 `dependency_cache_keys`를 함께 기록한다.
+6. document의 `runtime_version`·`schema_version`이 `AttemptRecord`의 같은 필드, 그리고
+   `EnvironmentRecord/v1`에 고정한 값과 일치하는지 확인한다.
+
+같은 `stage_spec_digest`가 여러 unit에 나타나는 것은 정상이다 — 같은 StageSpec identity라는 뜻이다.
+실행을 구분하는 것은 §5.1.1의 attempt identity이지 이 digest가 아니다.
+
+#### 5.1.1.2 output cardinality와 순서 (H-01)
+
+이전 판은 unit마다 scalar `raw_output_ref` 하나만 결박했다. `AttemptRecord.outputs`는 **ordered array**이므로,
+attempt가 output을 여러 개 가질 때 그중 하나만 적어도 통과했고 나머지는 검증되지 않았다.
+
+- `output_ref_tuple`은 ordered이며 `AttemptRecord.outputs[]`와 **길이·순서·원소가 전부** 같아야 한다.
+  원소 하나 누락, 추가, 순서 변경은 전부 `invalid`다.
+- **measured candidate unit stage의 output cardinality는 정확히 1로 고정한다.** 각 unit stage는
+  adapter-native raw output 하나만 생산하며, `len(AttemptRecord.outputs) != 1`이면 그 measurement는
+  `invalid`다. 이 제한을 암묵으로 두지 않고 여기서 명시하며, 늘려야 하면 계약 변경으로 처리한다.
+- 그 유일한 원소가 §5.1의 그 unit `raw_output_refs` 항목과 같아야 한다. `output_ref_tuple`이 비어 있거나
+  둘 이상이면 `raw_output_refs`와의 대응이 성립하지 않으므로 실패한다.
+- aggregate stage처럼 candidate 성능 측정 대상이 아닌 stage에는 이 cardinality 제한을 적용하지 않는다.
+
+**runtime attempt-record identity는 12개 stage에서 유일하다.** 어떤 `(job_id, stage_id, attempt_id)`
 삼중항 또는 `attempt_record_ref`도 서로 다른 두 candidate stage, 두 run, 두 `matrix_cell_id`에 나타날 수
 없다. 한 실행을 두 measurement로 세는 것을 금지한다.
 
-**CAS 중복 제거와 실행 재사용을 혼동하지 않는다.** 두 stage의 `raw_output_ref`나
+**CAS 중복 제거와 실행 재사용을 혼동하지 않는다.** 두 stage의 `output_ref_tuple` 원소나
 `aggregate_normalized_output_ref`가 **같은 digest**인 것은 bytes가 같다는 뜻일 뿐이고 그 자체로 결함이
 아니다 — content-addressed store의 정상 동작이다. 결함은 두 stage가 **같은 실행 attempt**를 가리키는
 것이다. 따라서 판정 기준은 output digest가 아니라 위 runtime identity tuple이다.
@@ -338,8 +420,9 @@ controlled interruption을 배정한 네 end-to-end run에는 다음이 필수�
 - resume에서 reused unit과 restarted unit, 각각의 cache key·attempt·artifact identity
 - resumed candidate-stage aggregate output ref, manifest와 같은 §5.1.2의 네 원소 ordered
   `final_pipeline_output_refs`, expected unit coverage/order/duplicate 검사 결과
-- 중단 전·resume 양쪽 unit의 §5.1.1 runtime identity tuple(`job_id`, `runtime_stage_id`, `attempt_id`,
-  `attempt_record_ref`, `cache_key`, `stage_spec_fingerprint`)
+- 중단 전·resume 양쪽 unit의 §5.1.1 runtime identity tuple(`job_id`,
+  `runtime_stage_id`(=`AttemptRecord.stage_id`), `attempt_id`, `attempt_record_ref`, `cache_key`,
+  `stage_spec_digest`, `stage_spec_document_ref`, ordered `input_ref_tuple`, ordered `output_ref_tuple`)
 
 validator는 중단 전 completed 집합과 resume reused 집합이 exact identity로 같고, 그 unit에 새 execution attempt가
 없으며 bytes/hash가 불변인지 확인한다. 미완료 unit만 restarted될 수 있고 최종 coverage는 expected unit 집합과
@@ -350,9 +433,10 @@ equality여야 하고, resumed aggregate output ref는 manifest의 해당 candid
 **네 축이 동시에 일치해야 한다 (H-01).** interruption record, runtime attempt record, manifest, 최종 출력이
 서로 exact equality로 합의하지 않으면 실패다. 구체적으로:
 
-- reused/restarted unit의 `attempt_record_ref`를 실제로 읽어 그 record의 `job_id`·`runtime_stage_id`·
-  `attempt_id`·`cache_key`·`stage_spec_fingerprint`·input/output refs가 interruption record와 manifest의 같은
-  자리 값과 일치하는지 확인한다. reused unit은 **중단 전과 같은 attempt record**를 가리켜야 하고 새
+- reused/restarted unit의 `attempt_record_ref`를 실제로 읽어 그 record의 `job_id`·`stage_id`·
+  `attempt_id`·`cache_key`·`inputs[]`·`outputs[]`가 interruption record와 manifest의 같은 자리 값
+  (`runtime_stage_id`는 `stage_id`에, `input_ref_tuple`·`output_ref_tuple`은 순서까지)과 일치하는지 확인하고,
+  `stage_spec_digest`는 §5.1.1.1의 절차로 재계산해 대조한다. reused unit은 **중단 전과 같은 attempt record**를 가리켜야 하고 새
   execution attempt가 없어야 한다. restarted unit은 **중단 전과 다른 새 attempt record**를 가리켜야 한다.
 - reused unit의 output digest가 같은 것은 정상이다(§5.1.1). 판정 기준은 attempt identity이지 digest가 아니다.
 - `final_pipeline_output_refs`는 §5.1.2의 네 원소 non-empty ordered tuple이어야 한다. **빈 tuple은 manifest와
@@ -381,6 +465,13 @@ schema/ref/identity/coverage 검증에 실패하거나 필요한 corrected/raw a
 
 - 12개 measured candidate stage의 §5.1.1 runtime identity tuple 중 하나라도 없거나, `attempt_record_ref`를
   읽을 수 없거나, record 값이 manifest·measurement와 다르거나, 같은 attempt identity가 두 stage에 나타남
+- `runtime_stage_id`가 `AttemptRecord.stage_id`와 다르거나 그 매핑을 적지 않음
+- `stage_spec_document_ref`가 없거나 읽히지 않거나, 재계산한 digest가 `stage_spec_digest`와 다르거나,
+  fingerprint 투영이 `AttemptRecord.fingerprints`와 다르거나, 재계산한 cache key가
+  `AttemptRecord.cache_key`와 다름 (§5.1.1.1)
+- `output_ref_tuple`이 `AttemptRecord.outputs[]`와 길이·순서·원소가 다르거나(누락·추가·순서 변경),
+  measured candidate unit stage의 output cardinality가 1이 아님 (§5.1.1.2)
+- `input_ref_tuple`이 `AttemptRecord.inputs[]`와 순서까지 같지 않음
 - measured stage에 실행하지 않은 cache-hit unit이 섞임
 - `end_to_end` run의 `final_pipeline_output_refs`가 비었거나 §5.1.2의 네 원소 ordered tuple이 아니거나
   foreign-run ref이거나 producer ancestry가 끊김
@@ -434,7 +525,7 @@ identity·**buffer byte length**만 결박했다. byte length는 내용을 결�
   `materialization_digest_ns`로 따로 기록해 RTF 해석에 쓸 수 있게 하되 timed interval에서 빼지 않는다.
 - materialize된 buffer는 그 시점 이후 **immutable**이다. 같은 measurement 안에서 다시 쓰거나 교체하지 않는다.
 - **CAS 쓰기는 timed interval 밖에 남을 수 있지만, 그 pre-end digest에 결박된 바로 그 buffer를 소비하고
-  검증해야 한다.** CAS commit 뒤 각 `raw_output_ref`의 실제 저장 digest를 다시 읽어 event의 unit별 digest와
+  검증해야 한다.** CAS commit 뒤 각 `raw_output_refs` 원소의 실제 저장 digest를 다시 읽어 event의 unit별 digest와
   ordered digest tuple hash에 exact equality로 대조한다. 하나라도 다르면 그 measurement는 `invalid`이고 run은
   `completed`가 될 수 없다. 같은 길이의 교체는 digest가 달라지므로 여기서 반드시 검출된다.
 - validator는 event의 ordered unit identity·digest tuple과 manifest·measurement의 ordered `raw_output_refs`가
@@ -477,8 +568,8 @@ identity·**buffer byte length**만 결박했다. byte length는 내용을 결�
 참조해도 둘 다 통과했고, 다른 run의 record를 재사용하는 것도 막히지 않았다. 아래로 닫는다.
 
 - 각 sample record는 자기 scope로 `measurement_id`, `run_id`, `matrix_cell_id`, `candidate_stage_id`,
-  `adapter_role`, §5.1.1의 runtime identity tuple(ordered `job_id`·`runtime_stage_id`·`attempt_id`·
-  `attempt_record_ref`), target GPU UUID, sampler source commit, host clock identity, 그리고 covered
+  `adapter_role`, §5.1.1의 runtime identity tuple(ordered `job_id`·`runtime_stage_id`(=`AttemptRecord.stage_id`)·
+  `attempt_id`·`attempt_record_ref`), target GPU UUID, sampler source commit, host clock identity, 그리고 covered
   monotonic window(`window_start_ns`, `window_end_ns`)를 **필수로** 담는다.
 - 한 sample record는 **정확히 하나의 measurement**가 소유한다. 어떤 sample artifact ref도 두 measurement,
   두 candidate stage, 두 run에 나타날 수 없다. end-to-end run의 ASR measurement와 MT measurement는 서로 다른
@@ -503,9 +594,11 @@ identity·**buffer byte length**만 결박했다. byte length는 내용을 결�
 
 각 required candidate stage는 task-local 닫힌 measurement record 하나를 가진다. 최소 필드는
 `measurement_id`, `run_id`, `matrix_cell_id`, `candidate_stage_id`, `adapter_role`,
-candidate/config/environment identity와 `candidate_chain_hash`, ordered `unit_ids`·`stage_spec_fingerprints`·
-`attempt_ids`·`cache_keys`·`input_ref_tuples`·`raw_output_refs`, `aggregate_normalized_output_ref`,
-§5.1.1의 unit별 ordered runtime identity tuple(`job_id`·`runtime_stage_id`·`attempt_id`·`attempt_record_ref`),
+candidate/config/environment identity와 `candidate_chain_hash`, ordered `unit_ids`·`stage_spec_digests`·
+`stage_spec_document_refs`·`attempt_ids`·`cache_keys`·`input_ref_tuples`·`output_ref_tuples`·`raw_output_refs`,
+`aggregate_normalized_output_ref`, §5.1.1의 unit별 ordered runtime identity tuple
+(`job_id`·`runtime_stage_id`(=`AttemptRecord.stage_id`)·`attempt_id`·`attempt_record_ref`)과 cache key
+재계산 입력(`pipeline_id`·`dependency_cache_keys`),
 `rtf_status`와 `vram_status`(각각
 `measured | excluded_interruption | invalid`), clock·materialization·sync events, unit별 materialized content
 digest와 `materialized_digest_tuple_hash`, `materialization_digest_ns`, load/warm-up/steady timed integer ns,
@@ -516,8 +609,10 @@ denominator ns와 derived RTF, sampler와 exact NVML query identity·period·cov
 
 validator는 runtime attempt record·manifest candidate stage와 unit/attempt/cache/input/raw/aggregate output tuple을
 exact equality로 비교하고 interval·RTF·sample maximum을 원본 event/sample CAS artifact에서 재계산한다.
-`attempt_record_ref`를 실제로 읽어 §5.1.1의 runtime identity tuple 전체가 일치하는지 확인하고, 그 identity가
-12개 stage에서 유일한지 검사한다. 실행하지 않은 cache-hit unit이 섞이면 그 stage는 성능 measurement로 쓸 수
+`attempt_record_ref`를 실제로 읽어 §5.1.1의 runtime identity tuple 전체가 일치하는지 확인한다 —
+`runtime_stage_id`는 `AttemptRecord.stage_id`와, `input_ref_tuple`·`output_ref_tuple`은 `inputs[]`·`outputs[]`와
+순서까지 같아야 하고, measured unit의 output cardinality는 1이어야 하며, `stage_spec_digest`는 §5.1.1.1의
+절차로 재계산해 대조한다. 그 identity가 12개 stage에서 유일한지도 검사한다. 실행하지 않은 cache-hit unit이 섞이면 그 stage는 성능 measurement로 쓸 수
 없다(§5.1.1). 모든 ordered raw output은 timed interval 안의 materialization event에 포함되어야 하며, 저장된
 CAS digest가 그 event의 pre-end digest와 일치해야 한다(§6.1). sample artifact ref는 이 measurement가 단독
 소유하고 scope field와 covered window가 §6.3의 조건을 만족해야 한다. measurement ref나 identity를
@@ -642,7 +737,9 @@ network·privacy, 비용·사용량, 보존·학습 정책, latency 포함 범�
 - [ ] 네 후보와 aligner의 exact ID·revision·license·환경·설정이 실행 전에 고정됐다.
 - [ ] 독립 MT benchmark input, calibration-only subtitle style과 alignment chunk/stitch contract가 hash로 고정됐다.
 - [ ] exact 8-cell matrix의 unique run manifest와 exact 12개 candidate-stage measurement가 raw/corrected/attempt/interruption CAS lineage를 fail-closed로 검증한다.
-- [ ] 12개 measured candidate stage가 §5.1.1의 runtime identity tuple(`job_id`·`runtime_stage_id`·`attempt_id`·`attempt_record_ref`·cache key·`StageSpec` fingerprint·inputs·outputs)로 실제 실행 attempt에 결박되고, 그 attempt identity가 전역에서 유일하며, CAS 중복 제거와 실행 재사용을 구분한다.
+- [ ] 12개 measured candidate stage가 §5.1.1의 runtime identity tuple(`job_id`·`runtime_stage_id`=`AttemptRecord.stage_id`·`attempt_id`·`attempt_record_ref`·`cache_key`·ordered `input_ref_tuple`=`inputs[]`·ordered `output_ref_tuple`=`outputs[]`)로 실제 실행 attempt에 결박되고, 그 attempt identity가 전역에서 유일하며, CAS 중복 제거와 실행 재사용을 구분한다.
+- [ ] §5.1.1.1의 canonical StageSpec identity document가 CAS에 저장되고, validator가 digest를 재계산해 `AttemptRecord.fingerprints` 투영과 `cache_key` 재계산으로 record에 잇는다. document·매핑·재계산 중 하나라도 없으면 invalid다.
+- [ ] measured candidate unit stage의 `output_ref_tuple`이 `AttemptRecord.outputs[]`와 길이·순서·원소까지 같고 cardinality가 정확히 1로 검증된다. 누락·추가·순서 변경은 invalid다.
 - [ ] 네 end-to-end run이 §5.1.2의 네 원소 non-empty ordered `final_pipeline_output_refs`와 `Transcript/v1` → `TranslatedTranscript/v1` → `SubtitleDocument/v1` → SRT producer ancestry를 갖고, interruption record·runtime record·manifest·최종 출력이 exact equality로 합의한다.
 - [ ] materialized raw buffer가 timed-end 이전에 digest로 결박되고, CAS commit이 그 digest를 소비·재검증해 same-length 교체가 검출된다.
 - [ ] 각 NVML sample record가 `measurement_id`·`run_id`·`matrix_cell_id`·candidate stage·runtime attempt identity·GPU UUID·monotonic window로 유일하게 결박되고 두 measurement가 공유하지 않는다.
