@@ -3,8 +3,8 @@
 **"지금 무엇이 되어 있고, 누가 무엇을 들고 있는가."**
 새 세션을 시작하는 에이전트는 [`AGENTS.md`](AGENTS.md) 다음으로 이 파일을 봅니다 (`AGENTS.md` §0.2).
 
-마지막 갱신: 2026-09-01 (TASK-030 Gate M M-01·M-02 제한 수정)
-현재 단계: **Phase 1a** — TASK-029 완료, TASK-030 Gate M M-01·M-02 제한 수정과 fresh 재검토
+마지막 갱신: 2026-09-01 (TASK-030 Gate M 승인·PR #47 병합 후 상태 정합화)
+현재 단계: **Phase 1a** — TASK-029·TASK-030 완료, 다음 기능 scope 결정 전
 
 ---
 
@@ -16,13 +16,13 @@
 | Phase 0 | **완료 — `main`에 병합됨** (PR #1, 병합 SHA `d11b2450d324ac7f509741acc1ac591313876d30`) |
 | 기능 코드 | **있음** — TASK-022 CLI: local input → probe → SRT → soft-sub → verify → local staging export |
 | 런타임 / 의존성 | Python 3.12+ 표준 라이브러리와 FFmpeg/ffprobe. Python package 의존성·모델·CI·비밀정보 없음 |
-| 병합된 PR | **#1·#5·#16·#18·#19·#21·#22·#23·#24·#25·#28·#33·#34·#36·#42·#45** — TASK-029 merge commit은 `6f94705598c1ef57a4d25682938cbcbbaf044732`; 나머지는 §3에 기록 |
-| 열린 PR | **#6~#10·#12·#14·#15·#17·#29~#32·#46·#47** — #46은 TASK-029 review 기록 Draft, #47은 TASK-030 Draft; 나머지 과거 Draft는 현재 실행 차단 아님 |
+| 병합된 PR | **#1·#5·#16·#18·#19·#21·#22·#23·#24·#25·#28·#33·#34·#36·#42·#45·#47** — TASK-029 merge commit은 `6f94705598c1ef57a4d25682938cbcbbaf044732`, TASK-030 merge commit은 `116d1c7fbb90e79acf15947385c1ac4f905ffb12`; 나머지는 §3에 기록 |
+| 열린 PR | **#6~#10·#12·#14·#15·#17·#29~#32·#46** — #46은 TASK-029 review 기록 Draft; 나머지 과거 Draft는 현재 실행 차단 아님 |
 | 미병합 종료 | **#2·#3·#4·#11·#41** — #41은 REVIEW-022 원문이 PR #42로 `main`에 보존된 뒤 종료 |
-| 운영 구조 | **TASK-030 결정 전사 중** — PR #47 merge 전에는 TASK-027/ADR-0028, merge 뒤에는 GPT-primary·승인 연속성·run resilience·제한적 Claude escalation (`AGENTS.md` §3, ADR-0030) |
-| 현재 작업 | **TASK-030** — PR #47, reviewed base `6f94705598c1ef57a4d25682938cbcbbaf044732`, 변경 요청을 받은 fixed HEAD `2bf4f65c1ebac76f23ca85b225dc11a67835a401`; M-01·M-02만 같은 Author branch에서 제한 수정 |
+| 운영 구조 | **TASK-030 적용 중** — GPT-primary·승인 연속성·run resilience·제한적 Claude escalation (`AGENTS.md` §3, ADR-0030). PR #45/TASK-029에는 소급 적용하지 않음 |
+| 현재 작업 | **활성 기능 TASK 없음** — TASK-030은 fresh Gate M 승인과 제품 오너 exact-HEAD 승인 뒤 PR #47로 병합 완료 |
 | U-31 | **답변됨 (2026-08-22)** — 번역 대상 언어 **한국어(`ko`)** |
-| 다음 실행 의존성 | PR #47의 live remote HEAD와 PR handoff를 대조한다. M-01·M-02 remediation commit이 remote에 있으면 그 새 HEAD를 fresh Gate M 제한 재검토하고, coherent local commit만 있으면 focused 검증 뒤 push부터 재개한다. 원래 구현·rebase는 반복하지 않음 → 승인 판정 뒤 제품 오너의 exact PR·HEAD·reviewed base merge 승인 |
+| 다음 실행 의존성 | 최신 `main@116d1c7fbb90e79acf15947385c1ac4f905ffb12`에서 다음 기능 scope·TASK·Owner·Reviewer를 정한다. 별도 승인 전 dependency/model/network 반입이나 기능 구현을 시작하지 않음 |
 | U-08 | **답변됨 (2026-08-09)** — **채점 정답은 번역 자막** |
 | U-11 | **부분 답변됨 (2026-08-09)** — **약 2개월·품질 우선.** 정확한 제출 날짜는 **미확정** |
 | 차단 요인 | **다음 기능 범위와 의존성·모델 가중치 반입 gate가 미승인.** U-16 보관 정책은 미정이므로 자동 삭제·GC를 범위 밖에 두며, 다른 U-XX도 임의 확정하지 않음 |
@@ -69,7 +69,7 @@
 | [TASK-006](docs/tasks/TASK-006.md) | ReferenceBundle/v1 및 평가 실행 계약 구체화 | Claude Code 구현 세션 | Lean Root 고정 HEAD 검토 — `REVIEW-014`·`015`·`016` **변경 요청**, [`REVIEW-017`](docs/reviews/REVIEW-017.md) **승인** | Phase 1a evaluation contracts | **Done — PR #28 병합** (`bd00f604565cac09b91b07286437032486933a08`) |
 | [TASK-028](docs/tasks/TASK-028.md) | Content-addressed artifact store와 재개 가능한 stage runtime | Claude Code 구현 세션 | Lean Root 고정 HEAD Gate H 검토 — `REVIEW-018`~`021` 변경 요청, [`REVIEW-022`](docs/reviews/REVIEW-022.md) 승인 | Phase 1a shared storage·orchestrator foundation | **Done — PR #36 병합** (`1d05de31aa39fd4dc8790d6c6e6442c0f8765ddc`) |
 | [TASK-029](docs/tasks/TASK-029.md) | SpeechSegment·Transcript·capability·translation·subtitle 실행 계약 정본화 | Claude Code 구현 세션 | Lean Root 고정 HEAD Gate H 검토 | Phase 1a subtitle data spine | **Done** — REVIEW-027 승인, 제품 오너가 exact HEAD `4b0d2cd041d7a133640355dd0b96874ef4329074` 승인, PR #45 병합 (`6f94705598c1ef57a4d25682938cbcbbaf044732`). 시작 당시 ownership/review 계약 유지 |
-| [TASK-030](docs/tasks/TASK-030.md) | GPT-primary 운영 계약과 Markdown 정합화 | Lean Root Orchestrator | fresh GPT/Codex 고정 HEAD 검토 | Project operations | **In review** |
+| [TASK-030](docs/tasks/TASK-030.md) | GPT-primary 운영 계약과 Markdown 정합화 | Lean Root Orchestrator | fresh GPT/Codex 고정 HEAD 검토 | Project operations | **Done** — Gate M 승인, PR #47 병합 (`116d1c7fbb90e79acf15947385c1ac4f905ffb12`) |
 | [TASK-012](docs/tasks/TASK-012.md) | Phase 1 계획 기준선 확립 | Claude Code 주 세션 | TASK-013~017 / REVIEW-005~009 (사람 오너의 예외 승인) | Phase 1 planning / 1a 진입 | **Done** — REVIEW-009 승인 후 PR #5 병합 (`10d34b4a4545f9ae8894c8038e7f1cc9a7706d61`) |
 | [TASK-013](docs/tasks/TASK-013.md) | TASK-012 고정 HEAD 독립 검토 | **이 독립 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 review | **In review** (판정: 변경 요청 — [REVIEW-005](docs/reviews/REVIEW-005.md)) |
 | [TASK-014](docs/tasks/TASK-014.md) | TASK-012 M-01·M-02 제한 재검토 | **REVIEW-005를 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 limited rereview | **In review** (M-01·M-02 부분 해소 · 판정: 변경 요청 — [REVIEW-006](docs/reviews/REVIEW-006.md)) |
@@ -294,6 +294,14 @@ Codex·Codex Cloud·GitHub `@codex review`는 **당시 미래 역할·배정·�
 - TASK-029는 시작 당시 Claude Author / Lean Root Reviewer 계약으로 끝났고 TASK-030 규칙을 소급 적용하지 않았다.
 - TASK-029 review 원문은 PR #46 Draft에 보존돼 있으며 PR #47의 운영 계약과 섞지 않는다.
 
+### 3.23 TASK-030 운영 계약 승인·병합 (PR #47)
+
+- previous fixed HEAD `2bf4f65c1ebac76f23ca85b225dc11a67835a401`의 Gate M 판정은 M-01·M-02 `변경 요청`으로 보존한다.
+- fresh 제한 재검토는 remediation HEAD `b6ae3d060d4d4c266c8944c30520b9fee708d2ae`에서 M-01·M-02 해소와 prohibited drift 없음을 확인하고 `승인`했다.
+- 사람 제품 오너가 PR #47·전체 HEAD·reviewed base `6f94705598c1ef57a4d25682938cbcbbaf044732`를 정확히 승인했다.
+- PR #47은 merge commit `116d1c7fbb90e79acf15947385c1ac4f905ffb12`로 병합됐다. 부모는 reviewed base와 approved HEAD이며 tree `62b2977b64c42a3689d024860a8573b7d9452e2d`가 승인 대상과 일치한다.
+- GPT-primary·approval continuity·run resilience·제한적 Claude escalation 계약은 이 merge 뒤 시작하는 작업부터 적용한다. PR #45/TASK-029 이력에는 소급 적용하지 않는다.
+
 ---
 
 ## 4. 다음 작업
@@ -302,7 +310,7 @@ Codex·Codex Cloud·GitHub `@codex review`는 **당시 미래 역할·배정·�
 
 | TASK | 내용 | Owner |
 |---|---|---|
-| [TASK-030](docs/tasks/TASK-030.md) — Gate M M-01·M-02 제한 수정·재검토 | GPT-primary, 승인 연속성, run resilience, durable checkpoint, 제한적 Pro/Claude/subagent 사용과 exact-HEAD merge 경계를 최신 `main` 위에 정합화 | Author: Lean Root → Reviewer: fresh GPT/Codex (Gate M) |
+| 없음 — TASK-030 완료 | 다음 기능 scope는 제품 오너 결정 전 미확정. 최신 `main`에서 새 TASK 계약을 먼저 고정 | 미배정 |
 
 > **판정과 반영 상태는 서로 다른 사실입니다. 섞지 마십시오.**
 >

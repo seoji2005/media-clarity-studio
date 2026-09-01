@@ -8,7 +8,7 @@
 | **Reviewer** | 작성자와 다른 fresh GPT/Codex 세션 — 고정 HEAD Gate M 독립 검토 필수 |
 | **Phase** | Project operations |
 | **Gate** | M — 권한·R1·R8·병합 경계 변경이므로 독립 리뷰 생략 금지 |
-| **Status** | `In review` |
+| **Status** | `Done` — Gate M 승인, 제품 오너 exact-HEAD 승인, PR #47 병합 |
 | **기준 main** | `6f94705598c1ef57a4d25682938cbcbbaf044732` (PR #45 merge commit) |
 
 ## 목표
@@ -23,15 +23,15 @@ GPT Work/Codex를 기본 실행 자원으로 사용하고 Claude는 닫힌 escal
 
 | 항목 | 값 |
 |---|---|
-| Source | `origin/main@6f94705598c1ef57a4d25682938cbcbbaf044732` |
-| Target | PR #47 `lean-root/task-030-gpt-primary-operations`; reviewed base `6f94705598c1ef57a4d25682938cbcbbaf044732` |
-| Previous review | fixed HEAD `2bf4f65c1ebac76f23ca85b225dc11a67835a401` — `변경 요청`, 미해결 M-01·M-02 |
-| Current HEAD rule | PR #47의 live remote HEAD를 조회하고 PR compact handoff의 전체 SHA와 대조한다. 이 파일을 포함하는 commit은 자기 SHA를 본문에 내장할 수 없으므로 새 fixed HEAD의 exact SHA는 push 뒤 PR handoff가 고정한다 |
-| Active TASK | TASK-030 / `In review` |
-| Gate | M, fixed-HEAD independent review required |
+| Source | reviewed base `6f94705598c1ef57a4d25682938cbcbbaf044732` |
+| Target | PR #47 approved HEAD `b6ae3d060d4d4c266c8944c30520b9fee708d2ae` |
+| Review history | `2bf4f65c1ebac76f23ca85b225dc11a67835a401` — M-01·M-02 `변경 요청`; `b6ae3d060d4d4c266c8944c30520b9fee708d2ae` — fresh Gate M 제한 재검토 `승인`, 잔여 finding 없음 |
+| Merge result | merge commit `116d1c7fbb90e79acf15947385c1ac4f905ffb12`; 부모는 reviewed base와 approved HEAD, tree `62b2977b64c42a3689d024860a8573b7d9452e2d` 일치 |
+| Active TASK | TASK-030 / `Done` |
+| Gate | M, fixed-HEAD independent review 완료 |
 | Author / Reviewer | Lean Root / fresh GPT·Codex session |
-| Blocker | 독립 리뷰와 제품 오너의 정확한 PR·HEAD·reviewed base 승인 전 병합 금지 |
-| Next action | live remote에 M-01·M-02 remediation commit과 exact-HEAD handoff가 있으면 fresh Gate M 제한 재검토. coherent local commit만 있고 remote가 previous review HEAD이면 focused 검증을 확인하고 push부터 재개. 원래 구현·rebase는 반복하지 않음 |
+| Blocker | TASK-030 없음. 다음 기능 범위와 dependency/model gate는 별도 owner 결정 전 미승인 |
+| Next action | 최신 `main@116d1c7fbb90e79acf15947385c1ac4f905ffb12`에서 다음 기능 scope를 결정한다. 새 scope 승인 전 구현하지 않음 |
 
 ## 범위
 
@@ -86,10 +86,10 @@ GPT Work/Codex를 기본 실행 자원으로 사용하고 Claude는 닫힌 escal
 - [x] 변경 파일이 Markdown에 한정되고 TASK-029 계약·구현·review 원문은 바뀌지 않는다.
 - [x] 새 Work 호출문, A–D 복원, durable checkpoint, compact handoff, retry/model budget이 기록된다.
 - [x] Pro checkpoint 3개와 mechanical 비호출, 필요한 만큼만 쓰는 subagent 상한이 기록된다.
-- [x] 대화 기록이 없는 clean Work 세션이 live main·#45 merged·#47 Draft와 다음 행동을 정확히 복원한다.
+- [x] 대화 기록이 없는 clean Work 세션이 live main·#45 merged·#47 merged와 다음 행동을 정확히 복원한다.
 - [x] 작성자와 다른 fresh 세션이 previous fixed HEAD를 검토했다 — M-01·M-02 `변경 요청`.
-- [ ] 작성자와 다른 fresh 세션이 remediation fixed HEAD에서 M-01·M-02와 prohibited drift를 제한 재검토한다.
-- [ ] 사람 제품 오너가 정확한 PR·HEAD·reviewed base를 승인한다.
+- [x] 작성자와 다른 fresh 세션이 remediation fixed HEAD `b6ae3d060d4d4c266c8944c30520b9fee708d2ae`에서 M-01·M-02와 prohibited drift를 제한 재검토했다 — `승인`, 잔여 finding 없음.
+- [x] 사람 제품 오너가 PR #47·HEAD `b6ae3d060d4d4c266c8944c30520b9fee708d2ae`·reviewed base `6f94705598c1ef57a4d25682938cbcbbaf044732`를 정확히 승인했고 PR #47이 병합됐다.
 
 ## 측정 지표
 
@@ -101,9 +101,9 @@ GPT Work/Codex를 기본 실행 자원으로 사용하고 Claude는 닫힌 escal
 - ChatGPT Pro checkpoint: 3개, 동일 SHA·질문 재호출 0회
 - subagent 상한 기본값: Gate L/M/H/S = 0/max1/max2/max3, formal reviewer 대체 0회
 - approval 재요청 gate: 5/5, A–D 복구 상태: 4/4, compact handoff: 14/14 fields
-- clean-session continuity: main·#45 merged·#47 Draft·previous review 변경 요청·next action 5/5 일치
+- clean-session continuity: main·#45 merged·#47 merged·review history·next action 5/5 일치
 - PR #45 serialization: 기존 ownership/review·exact-head approval·merge·new-main rebase 4/4
-- fresh fixed-HEAD review: previous HEAD 1회 `변경 요청`; remediation rereview 0/1, owner exact-HEAD approval: 0/1 (승인 review 뒤 요청)
+- fresh fixed-HEAD review: previous HEAD 1회 `변경 요청`; remediation rereview 1/1 `승인`, owner exact-HEAD approval 1/1, approved tree 보존 1/1
 
 ## rollback 조건
 
@@ -115,8 +115,9 @@ GPT Work/Codex를 기본 실행 자원으로 사용하고 Claude는 닫힌 escal
 
 ## 전환
 
-새 계약은 PR #47의 merge commit 이후 시작하는 TASK에만 적용한다. PR #45/TASK-029는 시작 당시의
-Claude Author / Lean Root Reviewer 계약으로 완료됐고 `6f94705598c1ef57a4d25682938cbcbbaf044732`에
-병합됐다. PR #47은 그 commit으로 rebase하고 STATUS·PLAN·DECISIONS·completion metrics를 수동
-정합화했다. 다음 단계는 새 base·remote HEAD를 고정한 fresh Gate M independent review다.
-그 review가 승인된 뒤에만 제품 오너에게 exact PR·HEAD·reviewed base merge 승인을 요청한다.
+새 계약은 PR #47 merge commit `116d1c7fbb90e79acf15947385c1ac4f905ffb12` 이후 시작하는 TASK에 적용한다.
+PR #45/TASK-029는 시작 당시의 Claude Author / Lean Root Reviewer 계약으로 완료됐고
+`6f94705598c1ef57a4d25682938cbcbbaf044732`에 병합됐다. PR #47은 그 commit으로 rebase하고
+STATUS·PLAN·DECISIONS·completion metrics를 수동 정합화한 뒤 fresh Gate M 승인을 받았다. 사람 제품
+오너가 PR #47·approved HEAD·reviewed base를 정확히 승인했고, merge commit의 두 부모와 tree가 승인
+대상과 일치한다. TASK-030은 `Done`이며 다음 기능 범위는 별도 scope 승인 전 미확정이다.
