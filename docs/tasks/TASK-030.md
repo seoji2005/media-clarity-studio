@@ -72,7 +72,7 @@ ChatGPT Pro와 읽기 전용 서브에이전트를 중요한 지점에 제한적
 - [x] ADR-0029가 ADR-0028의 미래 규칙만 대체하고 과거 기록과 PR #45 소유권을 보존한다.
 - [x] 변경 파일이 Markdown에 한정되고 TASK-029 행·파일은 바뀌지 않는다.
 - [x] 새 Work 호출문과 live repository 기반 복원 절차, Pro checkpoint 3개, 위험도별 subagent 기본값이 기록된다.
-- [ ] 대화 기록이 없는 clean Work 세션이 live main·PR #45·PR #47과 기본 다음 행동을 정확히 복원하는 dry-run을 통과한다.
+- [x] 대화 기록이 없는 clean Work 세션이 live main·PR #45·PR #47과 기본 다음 행동을 정확히 복원하는 dry-run을 통과한다.
 - [ ] 작성자와 다른 fresh 세션이 고정 HEAD를 검토한다.
 - [ ] 사람 제품 오너가 정확한 PR·HEAD·reviewed base를 승인한다.
 
