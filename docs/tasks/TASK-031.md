@@ -5,11 +5,12 @@
 | **ID** | TASK-031 |
 | **결정자** | 사람 제품 오너 (2026-09-01, U-22 A-min 확정) |
 | **Owner / Author** | Lean Root Author (TASK 전체). H-01·H-02 attempt 3·4는 Claude Code specialist가 작성했다. `d03885f…` 재검토 뒤 남은 `depends_on`·`cacheable` 결박 하나는 **2026-09-01 사람 제품 오너가 현재 Codex Author에게 명시적으로 재배정**했다 (아래 escalation 기록) |
-| **Reviewer** | 이번 Codex 작성자와 다른 fresh GPT/Codex 세션 — 새 fixed-HEAD Gate H 독립 검토. 현재 작성자는 직전 reviewer에서 Author로 전환했으므로 새 HEAD를 검토·승인하지 않는다 (R8) |
+| **Reviewer** | 계약 checkpoint는 이번 Codex 작성자와 다른 fresh GPT/Codex 세션이 fixed HEAD `395a014fcda033c2be574e21d351e3bfec4c7e0e`를 Gate H로 승인했다. 구현 최종 coherent HEAD도 작성자와 다른 fresh reviewer가 검토한다 (R8) |
 | **Phase** | Phase 1a — 첫 실제 자막 vertical slice와 calibration |
 | **Gate** | H — 외부 모델·dependency, 12 GB GPU, Windows, cache/resume와 품질 판정 |
-| **Status** | `In review` — H-01 StageSpec identity의 `depends_on`·`cacheable` runtime 결박까지 계약에서 닫음, 새 fixed-HEAD 재검토 대기; 실제 반입·실행 금지 |
+| **Status** | `In progress` — 계약 checkpoint Gate H 승인·PR #50 병합 완료. dependency/model/network owner gate 대기; 구현·실측 미착수 |
 | **기준 main** | `356b964505c3d852e9a264d79da12f15e5e707e0` (PR #49 merge commit) |
+| **계약 checkpoint** | 승인 HEAD `395a014fcda033c2be574e21d351e3bfec4c7e0e`, tree `c101ffcee0afc0c89fa4f4dada240ec2c8a6e59b`, PR #50 merge `e33ca4a15bfe0ba7091af6509bfdd9896904656c` |
 
 ## 목표
 
@@ -25,19 +26,19 @@ vertical slice다. 모델 우열이나 제품 완성도를 테스트 수로 주�
 
 | 항목 | 값 |
 |---|---|
-| Source | live `main@356b964505c3d852e9a264d79da12f15e5e707e0` |
-| Active TASK | TASK-031 / `In review` |
+| Source | live `main@e33ca4a15bfe0ba7091af6509bfdd9896904656c` (PR #50 merge) |
+| Active TASK | TASK-031 / `In progress` |
 | Gate | H |
-| Author / Reviewer | Codex Author (2026-09-01 제품 오너의 이번 잔여 결함 한정 재배정) / 작성자와 다른 future fresh GPT·Codex session |
+| Author / Reviewer | Lean Root Author / 구현 최종 coherent HEAD의 작성자와 다른 future fresh GPT·Codex session |
 | Approved scope | U-22 A-min 계약 기록, 실행 준비, 실제 10분 로컬 calibration과 보고 |
-| PR / branch | #50 Draft / `lean-root/task-031-a-min-calibration` |
-| Current checkpoint | fixed HEAD `d03885f…` 변경 요청의 잔여 H-01 `depends_on`·`cacheable` 결박을 계약에 반영, 새 fixed-HEAD 재검토 인계 |
+| PR / branch | 계약 checkpoint #50 Closed/Merged / `lean-root/task-031-a-min-calibration` |
+| Current checkpoint | Gate H 승인 HEAD `395a014f…`가 merge `e33ca4a…`로 `main`에 반영됨. 구현 code·tests·실측은 아직 없음 |
 | Blocker | dependency manifest, 모델 weight 다운로드, 외부 network 사용은 별도 owner gate 전 금지 |
-| Next allowed action | PR #50 live base·새 HEAD를 고정한 H-01·H-02와 prohibited drift 제한 재검토 |
-| Forbidden now | 모델/weight 다운로드, dependency 설치·manifest 추가, 원격 추론, 사용자 미디어 commit, merge, 자기 승인 |
+| Next allowed action | 병합 후 상태 정합화 뒤 제품 오너가 TASK-031 dependency/model/network gate 승인 여부를 결정 |
+| Forbidden now | gate 전 구현, 모델/weight 다운로드, dependency 설치·manifest 추가, 외부 network 사용, 원격 추론, 사용자 미디어 commit |
 
-이 파일은 자신을 포함하는 commit SHA를 내장하지 않는다. reviewer는 PR #50의 live HEAD와 base를 조회해
-고정하고, PR 본문의 compact handoff와 repository tree를 대조한다.
+계약 checkpoint의 고정 좌표는 위 역사 기록으로 보존한다. 이후 구현 reviewer는 새 구현 PR의 live HEAD와
+base를 별도로 고정하고 compact handoff와 repository tree를 대조한다.
 
 ### escalation 기록 — `AGENTS.md` §3 trigger 3
 
