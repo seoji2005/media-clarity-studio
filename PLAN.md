@@ -2,7 +2,7 @@
 
 `media-clarity-studio`의 로드맵입니다.
 
-마지막 갱신: 2026-09-01 (TASK-029/PR #45 병합과 TASK-030 운영 계약 정합화)
+마지막 갱신: 2026-09-01 (TASK-031 — U-22 A-min calibration 착수)
 상태: **제안됨 (Proposed) 유지** — PR #5 병합은 계획 기준선 작업을 완료했지만,
 제안됨 ADR·실행 순서·미해결 U-XX를 자동 승인하거나 해결하지 않습니다
 
@@ -142,7 +142,8 @@ ingest → audio → asr ──▶ 원문 transcript      (채점 대상 아님,
 >
 > **번역 대상 언어는 한국어(`ko`)입니다 (U-31, 2026-08-22 답변).** 번역 평가 지표와 실행 계약은
 > **TASK-005에서 확정됐으며**, 한국어 정규화·CPS 규칙(U-18·U-19)은 아직 미정입니다.
-> **번역 모델·API·공급자는 여기서 고르지 않습니다** (U-22, ADR-0012·ADR-0019).
+> **이 절은 번역 모델·API·공급자를 고르지 않습니다.** TASK-031·ADR-0031이 A-min calibration 후보군만
+> 별도로 고정했으며 기본 모델·공급자 채택은 측정 뒤까지 U-22에 남습니다.
 
 ### 1a. 평가 하네스와 공통 계약 (기능보다 앞)
 
@@ -203,7 +204,7 @@ TASK-028  content-addressed artifact/cache/resume runtime — 완료 (PR #36)
 TASK-029  자막 spine 기계 계약·schema·validator·fixture — 완료 (PR #45)
    │
    ▼
-다음 기능 TASK — 범위·번호 미확정, 별도 scope 승인 전 착수 금지
+TASK-031  고정 10분 A-min 로컬 자막 calibration vertical slice — PR #50 계약 Gate H 검토 대기
 ```
 
 | 노드 | 성격 | **선행 (이 표가 정답)** | 현재 상태 |
@@ -215,7 +216,7 @@ TASK-029  자막 spine 기계 계약·schema·validator·fixture — 완료 (PR 
 | **TASK-006** | `ReferenceBundle/v1`·평가 실행 계약과 schema/validator/fixture (기존 의미 유지) | **TASK-005** | **Done — PR #28** |
 | **TASK-028** | 공용 storage·orchestrator 실행 기반 | TASK-006 완료 | **Done — REVIEW-022 승인, PR #36 병합** |
 | **TASK-029** | 자막 spine 기계 계약과 기계 정본 구현 | TASK-028 완료와 별도 TASK 계약 | **Done — Gate H 승인, PR #45 병합 (`6f94705598c1ef57a4d25682938cbcbbaf044732`)** |
-| 다음 기능 TASK | TASK-029 이후 기능 범위 | TASK-029 완료와 별도 TASK 계약 | **미확정 — scope 승인 전 착수 금지** |
+| **TASK-031** | U-22 A-min 실제 자막 vertical slice와 calibration | TASK-029 완료, 제품 오너 A-min 결정, 별도 dependency/model/network gate | **In review — PR #50 계약 Gate H; 실제 반입·실행 gate 대기** |
 
 **왜 이렇게 보수적으로 두는가**
 
@@ -229,9 +230,19 @@ TASK-029  자막 spine 기계 계약·schema·validator·fixture — 완료 (PR 
 > **TASK-003·005·006은 예약된 번호이며 의미를 바꾸지 않았습니다.**
 > **TASK-028 계약은 PR #34, 구현은 REVIEW-022 승인 뒤 PR #36으로 병합됐습니다.**
 > **TASK-029 계약·구현은 Gate H 검토와 제품 오너의 exact-HEAD 승인 뒤 PR #45로 병합됐습니다.**
-> 그 다음 기능과 후속 ASR·평가 구현은 별도 TASK 계약과 사람 제품 오너 승인 전에는 시작하지 않습니다. 위의 PR #16 합성 plumbing은
+> 다음 기능은 TASK-031로 고정됐습니다. 세부 실행 정본은 [`TASK-031`](docs/tasks/TASK-031.md)과
+> ADR-0031이며, 모델 weight·dependency·network 반입은 별도 제품 오너 gate가 닫히기 전에는 시작하지 않습니다.
+> 위의 PR #16 합성 plumbing은
 > 사람 오너가 승인한 좁은 예외이며 일반 ASR·번역·외부 코퍼스 구현 착수를 뜻하지 않습니다.
 > **PR #34와 #36의 승인은 TASK-028에 한정됩니다.** 나머지 실행 순서와 후속 노드는 계속 제안 상태입니다.
+
+### 1e. TASK-031 — 첫 실제 10분 자막 vertical slice
+
+TASK-031은 새 추상 계약을 확장하지 않고 기존 spine·CAS·resume을 실제 모델에 연결한다. 고정 10분
+pack에서 독립 ASR 2회, 동일 human-corrected source의 독립 번역 2회, 네 ASR×번역 end-to-end 조합을
+실행한다. 한 조합 smoke는 선행 경로 점검일 뿐 완료가 아니다. UI·OCR/VLM·고급 diarization·remote
+comparator·시각 재구성은 이 TASK에 섞지 않는다. 자막 slice 뒤에는 최소 시각 재구성 vertical slice를
+다음 후보로 평가해 과제의 두 번째 필수 산출물을 늦게 발견하는 위험을 줄인다.
 
 완료 조건:
 

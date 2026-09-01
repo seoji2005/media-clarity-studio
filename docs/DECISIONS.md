@@ -2,7 +2,7 @@
 
 무엇이 정해졌고, 무엇이 제안일 뿐이며, 무엇이 아직 모르는 것인가.
 
-마지막 갱신: 2026-09-01 (TASK-030 — GPT-primary·run-resilient 운영 계약)
+마지막 갱신: 2026-09-01 (TASK-031 — U-22 A-min calibration 범위)
 
 ---
 
@@ -27,11 +27,11 @@
   확인했으므로, 다섯 항목을 전부 제안됨으로 정정했습니다.** 내용은 삭제·기각하지 않고 제안으로 유지합니다.
   **ADR-0027은 실제 오너의 운영 전환 지시에 근거하므로 승인됨을 유지합니다.**
 
-**현재 상태별 개수 (ADR 30건)**
+**현재 상태별 개수 (ADR 31건)**
 
 | 상태 | 수 | 항목 |
 |---|---|---|
-| **승인됨** | **13** | ADR-0001·0002·0003·0005·0006·0007·0008·0009·0010·**0027·0028·0029·0030** |
+| **승인됨** | **14** | ADR-0001·0002·0003·0005·0006·0007·0008·0009·0010·**0027·0028·0029·0030·0031** |
 | **제안됨** | **17** | ADR-0004·0011·0012·0013·0014·0015·0016·0017·0018·**0019**·0020·0021·**0022**·0023·**0024**·**0025**·**0026** |
 
 > 굵게 표시한 다섯 항목(0019·0022·0024·0025·0026)이 2026-08-09에 승인됨에서 정정된 것입니다.
@@ -484,7 +484,7 @@ GPU 비결정 경로에서 동일 출력을 보장하지 않는다.
 | U-03 | GPU 가속 백엔드 / 벤더 | Phase 1 후반 | 사용자 하드웨어 미확인 (U-23) |
 | U-04 | 대상 OS 및 배포 형식 | Phase 3 | 사용자층 미확정 |
 | U-05 | **가격·수익 모델** (라이선스 검토는 제외 — ADR-0019) | Phase 4 | 제품 형태가 정해지지 않음 |
-| U-22 | **ASR·번역·재구성 모델/엔진 선택 + 실행 방식(로컬/원격)·공급자·라이선스·재배포 조건 확인.** `translate`는 [`ARCHITECTURE.md`](ARCHITECTURE.md) §7.11에서 어댑터 경계만 정의하며 이 항목이 실제 선택을 담당한다 (REVIEW-006 M-01 추적 정합) | Phase 1a 후반 | 측정 없이 고르면 근거가 없음 |
+| U-22 | **ASR·번역·재구성 모델/엔진 선택 + 실행 방식(로컬/원격)·공급자·라이선스·재배포 조건 확인.** 자막 후보의 A-min calibration 범위는 ADR-0031로 승인됐지만 기본 모델 채택은 측정 뒤까지 미결정이다. `translate`는 [`ARCHITECTURE.md`](ARCHITECTURE.md) §7.11에서 어댑터 경계만 정의한다 | Phase 1a 후반 | A-min을 실행해 hard gate·수정시간·품질·자원 증거를 얻기 전에는 채택 근거가 없음 |
 
 ---
 
@@ -741,3 +741,35 @@ PR #45/TASK-029는 시작 당시 Claude author / Lean Root reviewer 계약으로
 
 **되돌리기:** ADR-0030을 삭제하지 않고 후속 ADR로 대체한다. 진행 중 작업은 시작 당시 소유권을
 유지해 끝내거나 제품 오너가 명시적으로 종료한다.
+
+### ADR-0031 — U-22 자막 모델 선택 전에 A-min calibration을 수행한다
+
+- **상태:** 승인됨 (2026-09-01, 사람 제품 오너)
+- **구현 계약:** [`TASK-031`](tasks/TASK-031.md)
+
+**맥락:** 자막 spine과 cache/resume 기반은 구현됐지만 실제 ASR·번역 adapter와 Windows 11·12 GB GPU
+증거는 없다. 계약 테스트 수는 제품 품질, 치명적 누락·환각, 수정시간이나 모델 실행 가능성을 증명하지
+않는다. 반대로 한 조합의 smoke만으로 기본 모델을 고르면 ASR 오류와 번역 오류를 분리할 수 없다.
+
+**결정:** content-locked 대표 10분 pack 하나에서 ASR 2종(faster-whisper large-v3,
+Qwen3-ASR-1.7B)과 번역 2종(MADLAD-400-3B-MT, Qwen3.5-4B)을 독립 측정하고 네 end-to-end 조합을
+실제 실행한다. 총 8개 논리 run이 최소 완료 범위다. Qwen ForcedAligner를 공통 scored alignment로 쓰고
+faster-whisper native timestamp는 같은 transcript의 paired diagnostic 한 번으로만 비교한다. 네 조합에
+controlled interruption을 배정해 네 adapter의 resume를 각각 검증한다.
+
+faster-whisper × MADLAD 한 조합은 선행 smoke로 허용하지만 U-22 완료나 모델 선택 근거가 아니다.
+Remote comparator는 별도 network·privacy·cost owner gate가 있는 후속 범위다. 공식 LID accuracy와
+chrF2는 이 calibration에서 unsupported로 유지하고 proxy를 같은 이름으로 기록하지 않는다.
+
+**근거:** 독립 ASR·번역 측정은 오류 출처를 분리하고, 네 end-to-end 실행은 단계 합산으로 놓치는 실제
+pipeline·VRAM·Windows·resume 결함을 드러낸다. correction time과 치명적 오류를 속도보다 먼저 보면
+최종 제품 목표인 사람 수정비용과 누락·환각 위험에 직접 연결된다.
+
+**결과:** hard gate를 통과한 후보도 단일 입력의 작은 차이로 자동 채택하지 않는다. 오류 양상과 수정시간이
+명확히 갈리지 않으면 `inconclusive`로 두 adapter를 유지한다. 모델 weight·dependency·network 반입은
+이 결정만으로 승인되지 않으며 별도 owner gate가 필요하다. 측정 뒤 기본/fallback 선택 전 ChatGPT Pro
+challenge와 제품 오너 결정을 거친다.
+
+**되돌리기:** 결과를 본 뒤 후보별 설정을 다르게 조정하지 않는다. harness 결함이면 영향받은 비교군을
+같은 조건으로 다시 실행하고 이전 evidence를 보존한다. A-min이 12 GB·Windows 또는 license hard gate를
+통과하지 못하면 범위를 조용히 축소하지 않고 후속 ADR에서 대안을 선택한다.
