@@ -204,7 +204,7 @@ TASK-028  content-addressed artifact/cache/resume runtime — 완료 (PR #36)
 TASK-029  자막 spine 기계 계약·schema·validator·fixture — 완료 (PR #45)
    │
    ▼
-TASK-031  고정 10분 A-min 로컬 자막 calibration vertical slice — 계약 checkpoint 진행 중
+TASK-031  고정 10분 A-min 로컬 자막 calibration vertical slice — PR #50 계약 Gate H 검토 대기
 ```
 
 | 노드 | 성격 | **선행 (이 표가 정답)** | 현재 상태 |
@@ -216,7 +216,7 @@ TASK-031  고정 10분 A-min 로컬 자막 calibration vertical slice — 계약
 | **TASK-006** | `ReferenceBundle/v1`·평가 실행 계약과 schema/validator/fixture (기존 의미 유지) | **TASK-005** | **Done — PR #28** |
 | **TASK-028** | 공용 storage·orchestrator 실행 기반 | TASK-006 완료 | **Done — REVIEW-022 승인, PR #36 병합** |
 | **TASK-029** | 자막 spine 기계 계약과 기계 정본 구현 | TASK-028 완료와 별도 TASK 계약 | **Done — Gate H 승인, PR #45 병합 (`6f94705598c1ef57a4d25682938cbcbbaf044732`)** |
-| **TASK-031** | U-22 A-min 실제 자막 vertical slice와 calibration | TASK-029 완료, 제품 오너 A-min 결정, 별도 dependency/model/network gate | **In progress — 계약 checkpoint; 실제 반입·실행 gate 대기** |
+| **TASK-031** | U-22 A-min 실제 자막 vertical slice와 calibration | TASK-029 완료, 제품 오너 A-min 결정, 별도 dependency/model/network gate | **In review — PR #50 계약 Gate H; 실제 반입·실행 gate 대기** |
 
 **왜 이렇게 보수적으로 두는가**
 

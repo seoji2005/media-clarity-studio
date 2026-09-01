@@ -8,7 +8,7 @@
 | **Reviewer** | 작성자와 다른 fresh GPT/Codex 세션 — 최종 fixed-HEAD Gate H 독립 검토 |
 | **Phase** | Phase 1a — 첫 실제 자막 vertical slice와 calibration |
 | **Gate** | H — 외부 모델·dependency, 12 GB GPU, Windows, cache/resume와 품질 판정 |
-| **Status** | `In progress` — 계약 checkpoint 작성; dependency/model/network gate 전 실제 반입·실행 금지 |
+| **Status** | `In review` — PR #50 계약 checkpoint; dependency/model/network gate 전 실제 반입·실행 금지 |
 | **기준 main** | `356b964505c3d852e9a264d79da12f15e5e707e0` (PR #49 merge commit) |
 
 ## 목표
@@ -26,14 +26,18 @@ vertical slice다. 모델 우열이나 제품 완성도를 테스트 수로 주�
 | 항목 | 값 |
 |---|---|
 | Source | live `main@356b964505c3d852e9a264d79da12f15e5e707e0` |
-| Active TASK | TASK-031 / `In progress` |
+| Active TASK | TASK-031 / `In review` |
 | Gate | H |
 | Author / Reviewer | Lean Root Author / fresh GPT·Codex session |
 | Approved scope | U-22 A-min 계약 기록, 실행 준비, 실제 10분 로컬 calibration과 보고 |
-| Current checkpoint | 계약과 allowed/forbidden 경로를 고정해 remote coherent commit으로 보존 |
+| PR / branch | #50 Draft / `lean-root/task-031-a-min-calibration` |
+| Current checkpoint | 계약 commit을 remote에서 확인했고 이 pointer commit으로 fresh Gate H 인계 |
 | Blocker | dependency manifest, 모델 weight 다운로드, 외부 network 사용은 별도 owner gate 전 금지 |
-| Next allowed action | 계약 checkpoint 검증·commit·push·remote 확인; 그 뒤 별도 gate가 닫히면 preflight smoke부터 구현 |
+| Next allowed action | GitHub에서 PR #50의 live base·HEAD를 고정한 fresh independent Gate H 계약 검토 |
 | Forbidden now | 모델/weight 다운로드, dependency 설치·manifest 추가, 원격 추론, 사용자 미디어 commit, merge, 자기 승인 |
+
+이 파일은 자신을 포함하는 commit SHA를 내장하지 않는다. reviewer는 PR #50의 live HEAD와 base를 조회해
+고정하고, PR 본문의 compact handoff와 repository tree를 대조한다.
 
 ## 1. 고정 입력
 
