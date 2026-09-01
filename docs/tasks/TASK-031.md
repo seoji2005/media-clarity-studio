@@ -4,11 +4,11 @@
 |---|---|
 | **ID** | TASK-031 |
 | **결정자** | 사람 제품 오너 (2026-09-01, U-22 A-min 확정) |
-| **Owner / Author** | Lean Root Author (TASK 전체). **이번 H-01·H-02 제한 remediation의 작성자는 Claude Code specialist** — `AGENTS.md` §3 trigger 3 (아래 escalation 기록) |
-| **Reviewer** | 작성자와 다른 fresh GPT/Codex 세션 — 최종 fixed-HEAD Gate H 독립 검토. 이번 remediation의 작성자가 Claude이므로 그 reviewer도 Claude가 아닌 fresh 세션이다 (R8) |
+| **Owner / Author** | Lean Root Author (TASK 전체). H-01·H-02 attempt 3·4는 Claude Code specialist가 작성했다. `d03885f…` 재검토 뒤 남은 `depends_on`·`cacheable` 결박 하나는 **2026-09-01 사람 제품 오너가 현재 Codex Author에게 명시적으로 재배정**했다 (아래 escalation 기록) |
+| **Reviewer** | 이번 Codex 작성자와 다른 fresh GPT/Codex 세션 — 새 fixed-HEAD Gate H 독립 검토. 현재 작성자는 직전 reviewer에서 Author로 전환했으므로 새 HEAD를 검토·승인하지 않는다 (R8) |
 | **Phase** | Phase 1a — 첫 실제 자막 vertical slice와 calibration |
 | **Gate** | H — 외부 모델·dependency, 12 GB GPU, Windows, cache/resume와 품질 판정 |
-| **Status** | `In review` — H-01·H-02의 남은 네 우회 경로를 계약에서 닫음, 새 fixed-HEAD 재검토 대기; 실제 반입·실행 금지 |
+| **Status** | `In review` — H-01 StageSpec identity의 `depends_on`·`cacheable` runtime 결박까지 계약에서 닫음, 새 fixed-HEAD 재검토 대기; 실제 반입·실행 금지 |
 | **기준 main** | `356b964505c3d852e9a264d79da12f15e5e707e0` (PR #49 merge commit) |
 
 ## 목표
@@ -28,10 +28,10 @@ vertical slice다. 모델 우열이나 제품 완성도를 테스트 수로 주�
 | Source | live `main@356b964505c3d852e9a264d79da12f15e5e707e0` |
 | Active TASK | TASK-031 / `In review` |
 | Gate | H |
-| Author / Reviewer | Lean Root Author / fresh GPT·Codex session |
+| Author / Reviewer | Codex Author (2026-09-01 제품 오너의 이번 잔여 결함 한정 재배정) / 작성자와 다른 future fresh GPT·Codex session |
 | Approved scope | U-22 A-min 계약 기록, 실행 준비, 실제 10분 로컬 calibration과 보고 |
 | PR / branch | #50 Draft / `lean-root/task-031-a-min-calibration` |
-| Current checkpoint | fixed HEAD `111f118…` 재검토의 잔여 H-01·H-02 우회 경로를 계약에 반영, 새 fixed-HEAD 재검토 인계 |
+| Current checkpoint | fixed HEAD `d03885f…` 변경 요청의 잔여 H-01 `depends_on`·`cacheable` 결박을 계약에 반영, 새 fixed-HEAD 재검토 인계 |
 | Blocker | dependency manifest, 모델 weight 다운로드, 외부 network 사용은 별도 owner gate 전 금지 |
 | Next allowed action | PR #50 live base·새 HEAD를 고정한 H-01·H-02와 prohibited drift 제한 재검토 |
 | Forbidden now | 모델/weight 다운로드, dependency 설치·manifest 추가, 원격 추론, 사용자 미디어 commit, merge, 자기 승인 |
@@ -51,10 +51,13 @@ vertical slice다. 모델 우열이나 제품 완성도를 테스트 수로 주�
 | 2 | `111f118bf88f1913b10a04123b53bbc193b8d6ca` | 위 잔여 H-01·H-02 | H-01: (a) `job_id`·runtime `stage_id`·canonical attempt_path/attempt-record ref 부재로 measurement가 실행에 결박되지 않음, (b) runtime attempt identity 유일성 규정 부재이며 CAS 중복 제거와 실행 재사용을 구분하지 않음, (c) `final_pipeline_output_refs`의 내용·순서·계보·non-empty 미정의로 **빈 tuple이 동일성 검사를 통과**. H-02: (d) `output-materialized` event가 byte length만 결박해 timed-end 뒤 **same-length 교체가 검출되지 않음**, (e) NVML sample record가 measurement에 결박되지 않아 **하나의 unscoped record를 ASR·MT가 공유**해도 통과 | `111f118` 본문에 대한 텍스트 probe: `job_id` 출현 0회, `attempt_path` 0회, CAS dedup 구분 문구 0회, `final_pipeline_output_refs`의 정의·non-empty·ancestry 규정 0회, materialization event의 digest 결박 0회, sample record의 scope field 0회 |
 
 | 3 | `33b7ccddc18878f9f3ffc8cb51f9abe42347d94c` (Claude Code specialist) | 위 (a)~(e) 다섯 우회 경로 | H-01 잔여: §5.1.1이 `AttemptRecord`에 **없는** 이름·모양을 요구했다 — `runtime_stage_id`(실물은 `stage_id`), 정의되지 않은 `stage_spec_fingerprint`(실물은 `fingerprints`와 `cache_key`), scalar `raw_output_ref`(실물은 ordered `outputs[]`). 모든 유효 record를 거부하거나 validator가 미규정 매핑을 지어내야 했고, attempt가 output을 여러 개 가질 때 하나만 결박해도 통과했다 | `schemas/job-v1.schema.json#/$defs/AttemptRecord`와 `job_runtime.py` record writer를 실물 대조: `runtime_stage_id` 부재, `stage_spec_fingerprint` 부재, `outputs`는 `ArtifactRef` array |
+| 4 | `d03885f12232bc348cec5822978e8367121d19b9` (Claude Code specialist) | attempt 3의 AttemptRecord 이름·모양 불일치 | H-01 잔여: canonical StageSpec document의 `depends_on`·`cacheable`은 self-digest에는 들어가지만 실제 실행 증거와 비교되지 않았다. 두 값을 바꾸고 digest를 다시 계산해도 `fingerprints`·cache-key 검사를 통과할 수 있었다 | 실제 `StageSpec` 두 변형의 `fingerprints`·`stage_cache_key_document`·cache key 동일성 probe, `AttemptRecord.cacheable` writer와 dependency mapping 대조 |
 
-이번(네 번째) remediation은 attempt 3이 남긴 **H-01 계약 불일치 하나만** 닫는다. 앞선 (a)~(e) 다섯 경로와
-H-02 조항은 문구·의미 모두 보존한다. 계약 범위를 넓히거나 §11의 구현 경계, 모델·dependency·network
-gate를 바꾸지 않는다.
+이번(다섯 번째) remediation은 attempt 4가 남긴 **두 필드의 runtime provenance 결박 하나만** 닫는다.
+사람 제품 오너는 2026-09-01 이 잔여 결함에 한해 Codex Author로 명시적으로 재배정했다. 이는 앞선
+`AGENTS.md` §3 trigger 3, 두 GPT 실패와 Claude attempt의 역사를 지우거나 일반적인 GPT 반복을 다시 허용하는
+운영 변경이 아니다. 앞선 (a)~(e) 다섯 경로와 H-02 조항은 문구·의미 모두 보존한다. 계약 범위를 넓히거나
+§11의 구현 경계, 모델·dependency·network gate를 바꾸지 않는다.
 
 ## 1. 고정 입력
 
@@ -297,16 +300,22 @@ NaN/Infinity 금지의 canonical JSON 하나뿐이다. `stage_spec_digest`는 �
 3. document의 `stage_id`가 `AttemptRecord.stage_id`와 같은지 확인한다.
 4. document의 선택 fingerprint를 runtime의 기록 규약대로 **투영**한다 — `implementation_version`은 항상,
    나머지 일곱은 `null`이 아닐 때만 포함. 그 투영 결과가 `AttemptRecord.fingerprints`와 exact equality여야
-   한다. 이것이 document와 record를 잇는 다리이며, record 안에 없는 필드를 만들어 내지 않는다.
-5. document와 그 attempt의 `inputs[]` artifact content hash 오름차순 목록, manifest에 기록한
-   `dependency_cache_keys` mapping으로 **frozen JobSpec/StageSpec evidence에 정의된 stage cache key
-   document**를 그대로 구성해 canonical digest를 계산하고 `AttemptRecord.cache_key`와 대조한다.
-   manifest는 이 재계산에 필요한 `pipeline_id`와 `dependency_cache_keys`를 함께 기록한다.
+   한다. 이어서 `AttemptRecord.cacheable`이 실제 record에 존재하는지 확인하고 document의 `cacheable`과
+   boolean exact equality로 대조한다. TASK-028 writer는 이 필드를 항상 기록하지만 schema상 optional이므로,
+   TASK-031 measured attempt에서 필드가 없으면 추측하지 않고 실패한다.
+5. document의 `depends_on`은 오름차순·중복 없는 배열이어야 하며,
+   `sorted(dependency_cache_keys.keys())`와 exact equality여야 한다. 누락·추가 dependency가 하나라도 있으면
+   실패한다. 그 뒤 document와 그 attempt의 `inputs[]` artifact content hash 오름차순 목록, 이 검증된
+   `dependency_cache_keys` mapping으로 **frozen JobSpec/StageSpec evidence에 정의된 stage cache key document**를
+   그대로 구성해 canonical digest를 계산하고 `AttemptRecord.cache_key`와 대조한다. manifest는 이 재계산에
+   필요한 `pipeline_id`와 `dependency_cache_keys`를 함께 기록한다.
 6. document의 `runtime_version`·`schema_version`이 `AttemptRecord`의 같은 필드, 그리고
    `EnvironmentRecord/v1`에 고정한 값과 일치하는지 확인한다.
 
 같은 `stage_spec_digest`가 여러 unit에 나타나는 것은 정상이다 — 같은 StageSpec identity라는 뜻이다.
 실행을 구분하는 것은 §5.1.1의 attempt identity이지 이 digest가 아니다.
+CAS document와 digest의 self-consistency만으로는 실행 provenance가 아니다. 위 `cacheable` equality와
+`depends_on`↔`dependency_cache_keys` equality가 모두 성립해야 document가 실제 실행 StageSpec에 결박된다.
 
 #### 5.1.1.2 output cardinality와 순서 (H-01)
 
@@ -467,8 +476,10 @@ schema/ref/identity/coverage 검증에 실패하거나 필요한 corrected/raw a
   읽을 수 없거나, record 값이 manifest·measurement와 다르거나, 같은 attempt identity가 두 stage에 나타남
 - `runtime_stage_id`가 `AttemptRecord.stage_id`와 다르거나 그 매핑을 적지 않음
 - `stage_spec_document_ref`가 없거나 읽히지 않거나, 재계산한 digest가 `stage_spec_digest`와 다르거나,
-  fingerprint 투영이 `AttemptRecord.fingerprints`와 다르거나, 재계산한 cache key가
-  `AttemptRecord.cache_key`와 다름 (§5.1.1.1)
+  fingerprint 투영이 `AttemptRecord.fingerprints`와 다르거나, `AttemptRecord.cacheable`이 없거나 document의
+  `cacheable`과 다르거나, document의 `depends_on`이 오름차순·중복 없는 배열이 아니거나
+  `sorted(dependency_cache_keys.keys())`와 다르거나, 재계산한 cache key가 `AttemptRecord.cache_key`와 다름
+  (§5.1.1.1)
 - `output_ref_tuple`이 `AttemptRecord.outputs[]`와 길이·순서·원소가 다르거나(누락·추가·순서 변경),
   measured candidate unit stage의 output cardinality가 1이 아님 (§5.1.1.2)
 - `input_ref_tuple`이 `AttemptRecord.inputs[]`와 순서까지 같지 않음
@@ -738,7 +749,7 @@ network·privacy, 비용·사용량, 보존·학습 정책, latency 포함 범�
 - [ ] 독립 MT benchmark input, calibration-only subtitle style과 alignment chunk/stitch contract가 hash로 고정됐다.
 - [ ] exact 8-cell matrix의 unique run manifest와 exact 12개 candidate-stage measurement가 raw/corrected/attempt/interruption CAS lineage를 fail-closed로 검증한다.
 - [ ] 12개 measured candidate stage가 §5.1.1의 runtime identity tuple(`job_id`·`runtime_stage_id`=`AttemptRecord.stage_id`·`attempt_id`·`attempt_record_ref`·`cache_key`·ordered `input_ref_tuple`=`inputs[]`·ordered `output_ref_tuple`=`outputs[]`)로 실제 실행 attempt에 결박되고, 그 attempt identity가 전역에서 유일하며, CAS 중복 제거와 실행 재사용을 구분한다.
-- [ ] §5.1.1.1의 canonical StageSpec identity document가 CAS에 저장되고, validator가 digest를 재계산해 `AttemptRecord.fingerprints` 투영과 `cache_key` 재계산으로 record에 잇는다. document·매핑·재계산 중 하나라도 없으면 invalid다.
+- [ ] §5.1.1.1의 canonical StageSpec identity document가 CAS에 저장되고, validator가 digest·`AttemptRecord.fingerprints`·`cacheable` exact equality와 `depends_on`↔`dependency_cache_keys` exact equality·cache key를 재계산해 실제 record에 잇는다. document·필드·매핑·재계산 중 하나라도 없거나 다르면 invalid다.
 - [ ] measured candidate unit stage의 `output_ref_tuple`이 `AttemptRecord.outputs[]`와 길이·순서·원소까지 같고 cardinality가 정확히 1로 검증된다. 누락·추가·순서 변경은 invalid다.
 - [ ] 네 end-to-end run이 §5.1.2의 네 원소 non-empty ordered `final_pipeline_output_refs`와 `Transcript/v1` → `TranslatedTranscript/v1` → `SubtitleDocument/v1` → SRT producer ancestry를 갖고, interruption record·runtime record·manifest·최종 출력이 exact equality로 합의한다.
 - [ ] materialized raw buffer가 timed-end 이전에 digest로 결박되고, CAS commit이 그 digest를 소비·재검증해 same-length 교체가 검출된다.
