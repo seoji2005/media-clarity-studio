@@ -31,7 +31,7 @@ GPT Work/Codex를 기본 실행 자원으로 사용하고 Claude는 닫힌 escal
 | Gate | M, fixed-HEAD independent review 완료 |
 | Author / Reviewer | Lean Root / fresh GPT·Codex session |
 | Blocker | TASK-030 없음. 다음 기능 범위와 dependency/model gate는 별도 owner 결정 전 미승인 |
-| Next action | 최신 `main@116d1c7fbb90e79acf15947385c1ac4f905ffb12`에서 다음 기능 scope를 결정한다. 새 scope 승인 전 구현하지 않음 |
+| Next action | GitHub에서 live `main`을 조회해 다음 기능 scope를 결정한다. 상태 문서에는 자신을 포함한 merge SHA를 current pointer로 내장하지 않으며, 새 scope 승인 전 구현하지 않음 |
 
 ## 범위
 
