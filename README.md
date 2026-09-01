@@ -12,9 +12,9 @@ Local-first multilingual subtitle generation and AI-assisted media restoration s
 
 로컬 우선(local-first) 미디어 처리 도구를 목표로 합니다.
 
-현재 단계는 **Phase 1a**입니다. 합성 미디어 plumbing, 평가 계약, content-addressed artifact store와
-재개 가능한 local synchronous stage runtime까지 구현·병합됐습니다. 실제 ASR·번역·화자분리·정렬,
-OCR/VLM, 시각 재구성과 제품 UI는 아직 본격 구현 전입니다. 현재 상태의 정본은
+현재 단계는 **Phase 1a**입니다. 합성 미디어 plumbing, 평가 계약, content-addressed artifact store,
+재개 가능한 local synchronous stage runtime, 자막 data spine schema·validator·fixture까지 구현·병합됐습니다.
+실제 ASR·번역·화자분리·정렬, OCR/VLM, 시각 재구성과 제품 UI는 아직 본격 구현 전입니다. 현재 상태의 정본은
 [`STATUS.md`](STATUS.md)입니다.
 
 > **용어 원칙 (반드시 준수)**
@@ -74,6 +74,9 @@ OCR/VLM, 시각 재구성과 제품 UI는 아직 본격 구현 전입니다. 현
 
 **에이전트 읽기 순서:** `AGENTS.md`가 **항상 첫 번째**입니다. 전체 순서는 [`AGENTS.md`](AGENTS.md) §0.2를 따르십시오.
 
+**새 Work에서 이어가기:** `Use $media-clarity-orchestrator. Continue seoji2005/media-clarity-studio from live repository and PR facts.`
+나머지 복원·Pro·서브에이전트 규칙은 [`AGENTS.md`](AGENTS.md) §0.2·§3의 정본을 따릅니다.
+
 **사람이 처음 볼 때 추천 순서:** `README.md`(이 파일) → [`AGENTS.md`](AGENTS.md) → [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md) §2 → [`PLAN.md`](PLAN.md) → [`STATUS.md`](STATUS.md)
 
 ---
@@ -101,7 +104,7 @@ media-clarity-studio/
     └── reviews/           # 고정 HEAD 독립 검토 기록
 ```
 
-- 소스 코드: **있음** — 합성 media slice, 평가 계약 validator, CAS, cache/checkpoint/resume runtime
+- 소스 코드: **있음** — 합성 media slice, 평가·자막 계약 validator, CAS, cache/checkpoint/resume runtime
 - 의존성 매니페스트(`requirements.txt`, `package.json`, `pyproject.toml` 등): **없음**
 - 모델 가중치 / 다운로드 스크립트: **없음**
 - CI 설정: **없음**
@@ -137,38 +140,25 @@ media-clarity-studio/
 개발 경험이 많지 않아도 진행할 수 있도록, 사람이 판단해야 하는 지점만 문서에 모아두었습니다.
 
 1. [`STATUS.md`](STATUS.md) §5의 **차단 항목**에 답하기
-   (예: "정답 자막이 원어인가 번역인가", "제출 기한은 언제인가")
+   (예: "정확한 제출 날짜는 언제인가", "채점 배점표가 공개됐는가")
 2. 에이전트가 조사해 온 **비교표를 보고 고르기** (예: seed 코퍼스 후보 — 조사는 에이전트가 합니다)
 3. 각 에이전트가 올린 **Pull Request를 검토하고 병합 여부 결정**
 
 > **조사는 사람의 몫이 아닙니다.** 후보를 찾고 라이선스를 정리하고 장단점을 비교하는 일은
 > 에이전트가 합니다. 오너에게는 **결정**만 요청합니다 (ADR-0024).
 
-**병합에 대하여:** 에이전트는 `main`에 직접 쓰지 않고 **어떤 PR도 병합하지 않습니다.**
-검토 후 병합하는 것은 **사람 오너의 정상 권한**입니다 (ADR-0009).
+**병합에 대하여:** 에이전트는 `main`에 직접 쓰지 않습니다. 병합을 승인하는 주체는 사람 오너뿐이며,
+Lean Root는 오너가 지정한 PR·HEAD·reviewed base가 그대로일 때만 기계적으로 일반 merge할 수 있습니다
+([`AGENTS.md`](AGENTS.md) R1 / §4.1).
 
 ---
 
 ## AI 에이전트가 할 일 (운영 구조)
 
-전체 규칙은 [`AGENTS.md`](AGENTS.md) §3에 있습니다. 요약하면 네 가지 역할입니다.
+전체 역할·Claude escalation·작성/검토 분리·병합 규칙은 [`AGENTS.md`](AGENTS.md) §3~§4가
+유일한 정본입니다. GPT/Codex가 기본 실행 자원이고 Claude는 기록된 폐쇄형 trigger에만 사용합니다.
+현재 작업·Owner·Reviewer·다음 허용 행동은 [`STATUS.md`](STATUS.md), 작업별 범위와 합격 조건은
+`docs/tasks/TASK-XXX.md`를 봅니다. 이 README는 운영 규칙을 별도로 재정의하지 않습니다.
 
-| 역할 | 하는 일 | 저장소 커밋 |
-|---|---|---|
-| **GPT Work** | 전체 오케스트레이션, 작업 분해, Claude에 줄 프롬프트 작성, 결과 비교로 오너 판단 지원 | 하지 않음 |
-| **Claude Code Cloud 주 세션** | Lead Developer — 핵심 설계·구현, 복잡한 디버깅, 성능 최적화 | 함 (TASK Owner) |
-| **독립 Claude Code 리뷰 세션** | Independent Reviewer — 저장소·TASK·PR diff만 보고 검증 | 리뷰 문서만 (TASK Reviewer) |
-| **Claude 일반 대화** | 아키텍처 자문, 기술 선택 비교, 막힌 문제의 두 번째 의견 | 하지 않음 |
-
-- 작업 시작 전 **반드시** [`AGENTS.md`](AGENTS.md)를 읽습니다.
-- 각 작업은 `docs/tasks/TASK-XXX.md` 하나에 대응하며, **수행 소유자는 하나의 세션**입니다.
-- **작성자와 리뷰어는 반드시 서로 다른 Claude Code 세션입니다.** 주 세션은 자기 변경을 스스로 승인하지 않습니다.
-- **Claude 사용량이 제한적이므로** 주 세션은 고난도 구현에 집중하고,
-  독립 리뷰는 **중요한 PR과 핵심 알고리즘 변경에만** 사용합니다 ([`AGENTS.md`](AGENTS.md) §3.2).
-- 세션끼리는 서로의 대화 기록을 볼 수 없습니다.
-  **모든 인계(handoff)는 저장소 안의 파일과 PR 설명으로만 이루어집니다.**
-- 완료 보고만 믿지 않고, 가능한 경우 **GitHub 상태와 diff로 확인**합니다 ([`AGENTS.md`](AGENTS.md) §3.5).
-
-**현재 진행 상황:** TASK-028의 content-addressed artifact store와 재개 가능한 stage runtime은
-[`REVIEW-022`](docs/reviews/REVIEW-022.md) 승인 뒤 PR #36으로 병합됐습니다. 다음 기능은 별도 TASK 계약과
-제품 오너 승인 전에는 착수하지 않습니다. 최신 상태와 다음 후보는 [`STATUS.md`](STATUS.md) §4를 보십시오.
+**현재 진행 상황과 다음 허용 행동:** 움직이는 상태를 이 파일에 복제하지 않습니다.
+정본인 [`STATUS.md`](STATUS.md)를 보십시오.
