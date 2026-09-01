@@ -5,7 +5,7 @@
 모두 요구한다.
 
 - Windows 11 / Python 3.12에서 해석한 hash lock
-- 해당 환경에서 고정한 CUDA/PyTorch 정보
+- 해당 environment의 고정 Python에서 capture하고 readiness 시점에 재실측한 resolver/CUDA/PyTorch evidence
 - exact revision으로 받은 로컬 model tree와 receipt
 
 기본 `validate`는 저장소에 보존할 준비 manifest만 검사한다. `--require-ready`는 위
@@ -17,13 +17,21 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import hashlib
 import json
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+from media_clarity.calibration.environment_probe import (
+    EnvironmentProbeError,
+    collect_local_environment_probe,
+    probe_implementation_sha256,
+)
 from media_clarity.job_runtime import write_json_atomic
 from media_clarity.schema_core import (
     DEFAULT_SCHEMA_DIR,
@@ -33,17 +41,26 @@ from media_clarity.schema_core import (
     SchemaSet,
     SchemaValidator,
     load_strict,
+    loads_strict,
     portable_relative_path_error,
     sort_findings,
 )
 
 
 PREFLIGHT_SCHEMA_FILE = "calibration-preflight-v1.schema.json"
-PREFLIGHT_SCHEMA_FILES = ("common-v1.schema.json", PREFLIGHT_SCHEMA_FILE)
+ENVIRONMENT_EVIDENCE_SCHEMA_FILE = "calibration-environment-evidence-v1.schema.json"
+PREFLIGHT_SCHEMA_FILES = (
+    "common-v1.schema.json",
+    PREFLIGHT_SCHEMA_FILE,
+    ENVIRONMENT_EVIDENCE_SCHEMA_FILE,
+)
 DEFAULT_MANIFEST_PATH = REPO_ROOT / "config" / "task-031-preflight.json"
 MODEL_RECEIPT_NAME = ".mcs-model-receipt.json"
 
 PIN_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([^;\s]+)$")
+LOCK_PIN_RE = re.compile(
+    r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([^;\s]+)(?:\s|;|$)"
+)
 HASH_LINE_RE = re.compile(r"--hash=sha256:[0-9a-f]{64}(?:\s|$)")
 
 EXPECTED_TARGET = {
@@ -59,6 +76,8 @@ EXPECTED_ENVIRONMENTS = {
     "download": {
         "input": "requirements/task-031/download.in",
         "lock": "requirements/task-031/locks/download-windows-py312.lock",
+        "python": ".task031-envs/download/Scripts/python.exe",
+        "evidence": "calibration-runs/task-031/environment/download.json",
         "packages": {
             "huggingface-hub": (
                 "1.29.0",
@@ -69,6 +88,8 @@ EXPECTED_ENVIRONMENTS = {
     "faster-whisper": {
         "input": "requirements/task-031/faster-whisper.in",
         "lock": "requirements/task-031/locks/faster-whisper-windows-py312.lock",
+        "python": ".task031-envs/faster-whisper/Scripts/python.exe",
+        "evidence": "calibration-runs/task-031/environment/faster-whisper.json",
         "packages": {
             "faster-whisper": (
                 "1.2.1",
@@ -79,6 +100,8 @@ EXPECTED_ENVIRONMENTS = {
     "qwen-asr": {
         "input": "requirements/task-031/qwen-asr.in",
         "lock": "requirements/task-031/locks/qwen-asr-windows-py312.lock",
+        "python": ".task031-envs/qwen-asr/Scripts/python.exe",
+        "evidence": "calibration-runs/task-031/environment/qwen-asr.json",
         "packages": {
             "qwen-asr": ("0.0.6", "https://pypi.org/project/qwen-asr/0.0.6/")
         },
@@ -86,6 +109,8 @@ EXPECTED_ENVIRONMENTS = {
     "translation": {
         "input": "requirements/task-031/translation.in",
         "lock": "requirements/task-031/locks/translation-windows-py312.lock",
+        "python": ".task031-envs/translation/Scripts/python.exe",
+        "evidence": "calibration-runs/task-031/environment/translation.json",
         "packages": {
             "accelerate": ("1.12.0", "https://pypi.org/project/accelerate/1.12.0/"),
             "sentencepiece": (
@@ -149,8 +174,16 @@ ERROR_CODES = (
     "E_LOCK_MISSING",
     "E_LOCK_DIGEST",
     "E_LOCK_HASH",
+    "E_LOCK_INPUT",
     "E_LOCK_UNTRACKED",
     "E_CUDA_PENDING",
+    "E_ENVIRONMENT_EVIDENCE_PENDING",
+    "E_ENVIRONMENT_EVIDENCE_MISSING",
+    "E_ENVIRONMENT_EVIDENCE_DIGEST",
+    "E_ENVIRONMENT_EVIDENCE",
+    "E_ENVIRONMENT_EVIDENCE_UNTRACKED",
+    "E_ENVIRONMENT_PROBE",
+    "E_ENVIRONMENT_LIVE_MISMATCH",
     "E_MODEL_SET",
     "E_MODEL_IDENTITY",
     "E_MODEL_ROOT_REQUIRED",
@@ -189,6 +222,10 @@ def _repo_file(repo_root: Path, value: Any, location: str) -> tuple[Path | None,
     return candidate, []
 
 
+def _canonical_package_name(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
 def _parse_dependency_input(path: Path, location: str) -> tuple[list[tuple[str, str]], list[Finding]]:
     packages: list[tuple[str, str]] = []
     findings: list[Finding] = []
@@ -205,7 +242,7 @@ def _parse_dependency_input(path: Path, location: str) -> tuple[list[tuple[str, 
             )
             continue
         name, version = match.groups()
-        canonical_name = name.lower().replace("_", "-")
+        canonical_name = _canonical_package_name(name)
         if canonical_name in seen:
             findings.append(_finding(line_location, "E_DEPENDENCY_PIN", "중복 package pin"))
             continue
@@ -214,6 +251,24 @@ def _parse_dependency_input(path: Path, location: str) -> tuple[list[tuple[str, 
     if packages != sorted(packages):
         findings.append(_finding(location, "E_DEPENDENCY_PIN", "package pin은 이름순이어야 한다"))
     return packages, findings
+
+
+def _logical_lock_requirements(lock_text: str) -> list[str]:
+    requirements: list[str] = []
+    pending = ""
+    for raw in lock_text.splitlines():
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        continuation = stripped.endswith("\\")
+        fragment = stripped[:-1].rstrip() if continuation else stripped
+        pending = f"{pending} {fragment}".strip()
+        if not continuation:
+            requirements.append(pending)
+            pending = ""
+    if pending:
+        requirements.append(pending)
+    return requirements
 
 
 def _check_lock(
@@ -244,28 +299,257 @@ def _check_lock(
     if actual_hash != recorded_hash:
         findings.append(_finding(f"{location}/lock_sha256", "E_LOCK_DIGEST", "lock 파일 SHA-256 불일치"))
     lock_text = lock_path.read_text(encoding="utf-8")
-    logical_requirements: list[str] = []
-    pending = ""
-    for raw in lock_text.splitlines():
-        stripped = raw.strip()
-        if not stripped or stripped.startswith("#"):
+    logical_requirements = _logical_lock_requirements(lock_text)
+    lock_packages: dict[str, str] = {}
+    malformed = False
+    for requirement in logical_requirements:
+        match = LOCK_PIN_RE.match(requirement)
+        if match is None or HASH_LINE_RE.search(requirement) is None:
+            malformed = True
             continue
-        continuation = stripped.endswith("\\")
-        fragment = stripped[:-1].rstrip() if continuation else stripped
-        pending = f"{pending} {fragment}".strip()
-        if not continuation:
-            logical_requirements.append(pending)
-            pending = ""
-    if pending:
-        logical_requirements.append(pending)
-    if not logical_requirements or not all(
-        "==" in requirement and HASH_LINE_RE.search(requirement)
-        for requirement in logical_requirements
-    ):
+        name, version = match.groups()
+        canonical_name = _canonical_package_name(name)
+        prior = lock_packages.get(canonical_name)
+        if prior is not None and prior != version:
+            findings.append(
+                _finding(
+                    f"{location}/lock_path",
+                    "E_LOCK_INPUT",
+                    f"lock에 상충하는 package version이 있다: {canonical_name}",
+                )
+            )
+        lock_packages[canonical_name] = version
+    if not logical_requirements or malformed:
         findings.append(_finding(f"{location}/lock_path", "E_LOCK_HASH", "모든 lock requirement에 sha256 hash가 필요하다"))
+    direct_packages = {
+        _canonical_package_name(item["name"]): item["version"]
+        for item in environment["direct_packages"]
+    }
+    missing = sorted(name for name in direct_packages if name not in lock_packages)
+    replaced = sorted(
+        name
+        for name, version in direct_packages.items()
+        if name in lock_packages and lock_packages[name] != version
+    )
+    if missing or replaced:
+        detail = []
+        if missing:
+            detail.append(f"누락={','.join(missing)}")
+        if replaced:
+            detail.append(f"version 불일치={','.join(replaced)}")
+        findings.append(
+            _finding(
+                f"{location}/lock_path",
+                "E_LOCK_INPUT",
+                "dependency input의 direct name==version 결박 실패: " + "; ".join(detail),
+            )
+        )
     if not environment.get("resolver_version"):
         findings.append(_finding(f"{location}/resolver_version", "E_LOCK_PENDING", "lock resolver version이 없다"))
     return findings
+
+
+def _evidence_semantic_findings(
+    receipt: Mapping[str, Any], environment: Mapping[str, Any], location: str
+) -> list[Finding]:
+    schema_findings = SchemaValidator(preflight_schema_set()).validate(
+        receipt, ENVIRONMENT_EVIDENCE_SCHEMA_FILE, location
+    )
+    if schema_findings:
+        return sort_findings(schema_findings)
+    findings: list[Finding] = []
+    probe = receipt["probe"]
+    expected_direct = sorted(
+        (
+            {"name": item["name"], "version": item["version"]}
+            for item in environment["direct_packages"]
+        ),
+        key=lambda item: item["name"],
+    )
+    exact_pairs = (
+        (receipt["environment_id"], environment["environment_id"], "environment_id"),
+        (
+            receipt["dependency_input_sha256"],
+            environment["dependency_input_sha256"],
+            "dependency_input_sha256",
+        ),
+        (receipt["lock_sha256"], environment["lock_sha256"], "lock_sha256"),
+        (
+            probe["probe_implementation_sha256"],
+            probe_implementation_sha256(),
+            "probe/probe_implementation_sha256",
+        ),
+        (
+            probe["python"]["executable_path"],
+            environment["python_executable_path"],
+            "probe/python/executable_path",
+        ),
+        (probe["resolver"]["name"], environment["resolver_name"], "probe/resolver/name"),
+        (
+            probe["resolver"]["version"],
+            environment["resolver_version"],
+            "probe/resolver/version",
+        ),
+        (
+            probe["runtime"]["cuda_stack_status"],
+            environment["cuda_stack_status"],
+            "probe/runtime/cuda_stack_status",
+        ),
+        (
+            probe["runtime"]["torch_version"],
+            environment["torch_version"],
+            "probe/runtime/torch_version",
+        ),
+        (
+            probe["runtime"]["cuda_version"],
+            environment["cuda_version"],
+            "probe/runtime/cuda_version",
+        ),
+        (
+            probe["runtime"]["cudnn_version"],
+            environment["cudnn_version"],
+            "probe/runtime/cudnn_version",
+        ),
+    )
+    for actual, expected, child in exact_pairs:
+        if actual != expected:
+            findings.append(
+                _finding(f"{location}/{child}", "E_ENVIRONMENT_EVIDENCE", "manifest/evidence exact equality 불일치")
+            )
+    if probe["direct_packages"] != expected_direct:
+        findings.append(
+            _finding(
+                f"{location}/probe/direct_packages",
+                "E_ENVIRONMENT_EVIDENCE",
+                "설치된 direct package name/version이 manifest와 다르다",
+            )
+        )
+    raw_parts = probe["resolver"]["raw_output"].split()
+    if len(raw_parts) < 2 or raw_parts[0] != "uv" or raw_parts[1] != probe["resolver"]["version"]:
+        findings.append(
+            _finding(
+                f"{location}/probe/resolver/raw_output",
+                "E_ENVIRONMENT_EVIDENCE",
+                "resolver raw output과 parsed version이 다르다",
+            )
+        )
+    cuda_available = probe["runtime"]["cuda_available"]
+    if environment["environment_id"] == "download":
+        if cuda_available:
+            findings.append(_finding(f"{location}/probe/runtime", "E_ENVIRONMENT_EVIDENCE", "download 환경은 CUDA unavailable이어야 한다"))
+    elif not cuda_available:
+        findings.append(_finding(f"{location}/probe/runtime", "E_ENVIRONMENT_EVIDENCE", "GPU 환경의 live CUDA probe가 실패했다"))
+    return sort_findings(findings)
+
+
+def _read_environment_evidence(
+    environment: Mapping[str, Any], index: int, repo_root: Path, require_ready: bool
+) -> tuple[Mapping[str, Any] | None, list[Finding]]:
+    findings: list[Finding] = []
+    location = f"manifest/dependency_environments/{index}"
+    evidence_path, path_findings = _repo_file(
+        repo_root, environment.get("environment_evidence_path"), f"{location}/environment_evidence_path"
+    )
+    findings.extend(path_findings)
+    if evidence_path is None:
+        return None, findings
+    status = environment.get("environment_evidence_status")
+    recorded_hash = environment.get("environment_evidence_sha256")
+    if status == "pending_windows_capture":
+        if recorded_hash != "":
+            findings.append(_finding(f"{location}/environment_evidence_sha256", "E_ENVIRONMENT_EVIDENCE_UNTRACKED", "pending evidence에 digest가 있다"))
+        if evidence_path.exists():
+            findings.append(_finding(f"{location}/environment_evidence_path", "E_ENVIRONMENT_EVIDENCE_UNTRACKED", "evidence 파일은 있지만 manifest가 pending이다"))
+        if require_ready:
+            findings.append(_finding(location, "E_ENVIRONMENT_EVIDENCE_PENDING", "target-Windows environment evidence가 없다"))
+        return None, sort_findings(findings)
+    if status != "windows_captured":
+        return None, sort_findings(findings)
+    if not evidence_path.is_file():
+        findings.append(_finding(f"{location}/environment_evidence_path", "E_ENVIRONMENT_EVIDENCE_MISSING", "기록된 evidence 파일이 없다"))
+        return None, sort_findings(findings)
+    if _sha256_file(evidence_path) != recorded_hash:
+        findings.append(_finding(f"{location}/environment_evidence_sha256", "E_ENVIRONMENT_EVIDENCE_DIGEST", "environment evidence SHA-256 불일치"))
+    try:
+        receipt = load_strict(evidence_path)
+    except (OSError, JsonInputError) as error:
+        findings.append(_finding(f"{location}/environment_evidence_path", "E_ENVIRONMENT_EVIDENCE", f"environment evidence를 읽을 수 없다: {error}"))
+        return None, sort_findings(findings)
+    if not isinstance(receipt, dict):
+        findings.append(_finding(f"{location}/environment_evidence_path", "E_ENVIRONMENT_EVIDENCE", "environment evidence root는 객체여야 한다"))
+        return None, sort_findings(findings)
+    findings.extend(_evidence_semantic_findings(receipt, environment, f"{location}/environment_evidence"))
+    return receipt, sort_findings(findings)
+
+
+def _run_live_environment_probe(
+    environment: Mapping[str, Any], repo_root: Path
+) -> Mapping[str, Any]:
+    python_path, path_findings = _repo_file(
+        repo_root,
+        environment["python_executable_path"],
+        "python_executable_path",
+    )
+    if path_findings or python_path is None or not python_path.is_file():
+        raise EnvironmentProbeError("고정 environment Python executable이 없다")
+    child_environment = os.environ.copy()
+    child_environment["PYTHONPATH"] = str(repo_root.resolve() / "src")
+    command = (
+        str(python_path),
+        "-m",
+        "media_clarity.calibration",
+        "--manifest",
+        str(repo_root.resolve() / "config" / "task-031-preflight.json"),
+        "probe-environment",
+        "--environment-id",
+        environment["environment_id"],
+    )
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=repo_root.resolve(),
+            env=child_environment,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise EnvironmentProbeError(f"live environment probe 실행 실패: {error}") from error
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout).strip()
+        raise EnvironmentProbeError(f"live environment probe가 {completed.returncode}로 종료됨: {detail}")
+    try:
+        probe = loads_strict(completed.stdout)
+    except JsonInputError as error:
+        raise EnvironmentProbeError(f"live probe JSON을 읽을 수 없다: {error}") from error
+    if not isinstance(probe, dict):
+        raise EnvironmentProbeError("live probe root는 객체여야 한다")
+    return probe
+
+
+def _live_environment_findings(
+    environment: Mapping[str, Any], index: int, repo_root: Path
+) -> list[Finding]:
+    receipt, static_findings = _read_environment_evidence(
+        environment, index, repo_root, require_ready=True
+    )
+    if receipt is None or static_findings:
+        return []
+    location = f"manifest/dependency_environments/{index}/environment_evidence"
+    try:
+        live_probe = _run_live_environment_probe(environment, repo_root)
+    except EnvironmentProbeError as error:
+        return [_finding(location, "E_ENVIRONMENT_PROBE", str(error))]
+    if live_probe != receipt["probe"]:
+        return [
+            _finding(
+                f"{location}/probe",
+                "E_ENVIRONMENT_LIVE_MISMATCH",
+                "receipt probe와 readiness 시점의 target-Windows live probe가 다르다",
+            )
+        ]
+    return []
 
 
 def validate_manifest(
@@ -300,6 +584,10 @@ def validate_manifest(
             findings.append(_finding(f"{location}/dependency_input_path", "E_DEPENDENCY_SET", "고정 input 경로 불일치"))
         if environment["lock_path"] != expected_lock:
             findings.append(_finding(f"{location}/lock_path", "E_DEPENDENCY_SET", "고정 lock 경로 불일치"))
+        if environment["python_executable_path"] != expected_paths["python"]:
+            findings.append(_finding(f"{location}/python_executable_path", "E_DEPENDENCY_SET", "고정 environment Python 경로 불일치"))
+        if environment["environment_evidence_path"] != expected_paths["evidence"]:
+            findings.append(_finding(f"{location}/environment_evidence_path", "E_DEPENDENCY_SET", "고정 evidence 경로 불일치"))
 
         dependency_path, path_findings = _repo_file(
             repo_root, environment["dependency_input_path"], f"{location}/dependency_input_path"
@@ -317,13 +605,13 @@ def validate_manifest(
                 )
                 findings.extend(pin_findings)
                 declared = sorted(
-                    (item["name"].lower().replace("_", "-"), item["version"])
+                    (_canonical_package_name(item["name"]), item["version"])
                     for item in environment["direct_packages"]
                 )
                 if parsed != declared:
                     findings.append(_finding(f"{location}/direct_packages", "E_DEPENDENCY_SET", "input pin과 manifest package 집합이 다르다"))
                 declared_with_sources = {
-                    item["name"].lower().replace("_", "-"): (
+                    _canonical_package_name(item["name"]): (
                         item["version"],
                         item["official_source"],
                     )
@@ -333,6 +621,10 @@ def validate_manifest(
                     findings.append(_finding(f"{location}/direct_packages", "E_DEPENDENCY_SET", "고정 package version 또는 공식 출처 불일치"))
 
         findings.extend(_check_lock(environment, index, repo_root, require_ready))
+        _, evidence_findings = _read_environment_evidence(
+            environment, index, repo_root, require_ready=require_ready
+        )
+        findings.extend(evidence_findings)
         cuda_status = environment["cuda_stack_status"]
         cuda_values = (
             environment["torch_version"],
@@ -419,6 +711,9 @@ def validate_readiness(
     findings = validate_manifest(manifest, repo_root=repo_root, require_ready=True)
     if any(finding.code == "E_SCHEMA" for finding in findings):
         return sort_findings(findings)
+    for index, environment in enumerate(manifest.get("dependency_environments", [])):
+        if isinstance(environment, dict):
+            findings.extend(_live_environment_findings(environment, index, repo_root))
     if model_root is None:
         findings.append(_finding("model_root", "E_MODEL_ROOT_REQUIRED", "--model-root가 필요하다"))
         return sort_findings(findings)
@@ -497,6 +792,78 @@ def _download_models(
     return sort_findings(findings)
 
 
+def _environment_by_id(
+    manifest: Mapping[str, Any], environment_id: str
+) -> tuple[dict[str, Any] | None, list[Finding]]:
+    for environment in manifest.get("dependency_environments", []):
+        if isinstance(environment, dict) and environment.get("environment_id") == environment_id:
+            return environment, []
+    return None, [_finding("environment_id", "E_DEPENDENCY_SET", f"알 수 없는 environment: {environment_id}")]
+
+
+def _capture_environment(
+    manifest: Mapping[str, Any], manifest_path: Path, environment_id: str, repo_root: Path
+) -> list[Finding]:
+    environment, findings = _environment_by_id(manifest, environment_id)
+    if environment is None:
+        return findings
+    index = manifest["dependency_environments"].index(environment)
+    preliminary_lock_findings = [
+        finding
+        for finding in _check_lock(environment, index, repo_root, require_ready=False)
+        if not (
+            finding.code == "E_LOCK_PENDING"
+            and finding.location.endswith("/resolver_version")
+        )
+    ]
+    if preliminary_lock_findings:
+        return preliminary_lock_findings
+    try:
+        probe = collect_local_environment_probe(environment, repo_root)
+    except EnvironmentProbeError as error:
+        return [_finding(f"environment/{environment_id}", "E_ENVIRONMENT_PROBE", str(error))]
+    updated_environment = dict(environment)
+    updated_environment["resolver_version"] = probe["resolver"]["version"]
+    updated_environment["cuda_stack_status"] = probe["runtime"]["cuda_stack_status"]
+    updated_environment["torch_version"] = probe["runtime"]["torch_version"]
+    updated_environment["cuda_version"] = probe["runtime"]["cuda_version"]
+    updated_environment["cudnn_version"] = probe["runtime"]["cudnn_version"]
+    updated_environment["environment_evidence_status"] = "windows_captured"
+    lock_findings = _check_lock(updated_environment, index, repo_root, require_ready=True)
+    if lock_findings:
+        return lock_findings
+    receipt = {
+        "schema_version": "1.0.0",
+        "kind": "task031_environment_evidence",
+        "environment_id": environment_id,
+        "captured_at": datetime.datetime.now(datetime.UTC)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z"),
+        "dependency_input_sha256": updated_environment["dependency_input_sha256"],
+        "lock_sha256": updated_environment["lock_sha256"],
+        "probe": probe,
+    }
+    semantic_findings = _evidence_semantic_findings(
+        receipt, updated_environment, f"environment/{environment_id}"
+    )
+    if semantic_findings:
+        return semantic_findings
+    evidence_path, path_findings = _repo_file(
+        repo_root,
+        updated_environment["environment_evidence_path"],
+        f"environment/{environment_id}/environment_evidence_path",
+    )
+    if evidence_path is None:
+        return path_findings
+    write_json_atomic(evidence_path, receipt)
+    updated_environment["environment_evidence_sha256"] = _sha256_file(evidence_path)
+    environment.clear()
+    environment.update(updated_environment)
+    write_json_atomic(manifest_path, manifest)
+    return []
+
+
 def _print_findings(findings: Iterable[Finding], as_json: bool) -> None:
     findings = list(findings)
     if as_json:
@@ -537,6 +904,16 @@ def build_parser() -> argparse.ArgumentParser:
     download_parser.add_argument("--model-root", type=Path, required=True)
     download_parser.add_argument("--model-id", action="append", required=True)
     download_parser.add_argument("--allow-network", action="store_true")
+
+    capture_parser = subparsers.add_parser(
+        "capture-environment", help="현재 Windows environment의 기계 evidence를 기록"
+    )
+    capture_parser.add_argument("--environment-id", required=True, choices=sorted(EXPECTED_ENVIRONMENTS))
+
+    probe_parser = subparsers.add_parser(
+        "probe-environment", help=argparse.SUPPRESS
+    )
+    probe_parser.add_argument("--environment-id", required=True, choices=sorted(EXPECTED_ENVIRONMENTS))
     return parser
 
 
@@ -548,7 +925,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         _print_findings([_finding("manifest", "E_SCHEMA", str(error))], args.json)
         return 2
 
-    if args.command == "validate":
+    if args.command == "probe-environment":
+        environment, findings = _environment_by_id(manifest, args.environment_id)
+        if environment is not None:
+            try:
+                probe = collect_local_environment_probe(environment, REPO_ROOT)
+            except EnvironmentProbeError as error:
+                findings = [_finding(f"environment/{args.environment_id}", "E_ENVIRONMENT_PROBE", str(error))]
+            else:
+                print(json.dumps(probe, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False))
+                return 0
+    elif args.command == "capture-environment":
+        findings = _capture_environment(
+            manifest, args.manifest.resolve(), args.environment_id, REPO_ROOT
+        )
+    elif args.command == "validate":
         if args.require_ready:
             findings = validate_readiness(manifest, args.model_root)
         else:
@@ -565,6 +956,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("TASK-031 준비 manifest 검증 통과 (실행 readiness는 별도 검사)")
         elif args.command == "validate":
             print("TASK-031 실행 preflight 통과")
+        elif args.command == "capture-environment":
+            print(f"TASK-031 {args.environment_id} environment evidence 기록 완료")
         else:
             print("TASK-031 model snapshot 준비 완료")
     return 0
