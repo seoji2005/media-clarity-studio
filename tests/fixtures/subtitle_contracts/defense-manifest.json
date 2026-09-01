@@ -1,0 +1,1182 @@
+{
+ "note": "TASK-029 schema 방어의 고정 기준. production schema에서 다시 생성하지 않는다 (REVIEW-025 R-06). 좌표와 의미값(fingerprint)을 함께 고정한다 (REVIEW-026 R-03). killable/equivalent 분류는 갱신할 때마다 현재 schema에서 다시 관측한다 (REVIEW-027 R-03). 갱신은 이 파일의 명시적 diff로만 한다.",
+ "digest": "sha256:0bc99acd6c6efaa74975282c5d34a9e950f0fb7351660a78ec0e75011187a6be",
+ "killable": [
+  {
+   "defense_id": "adapter-capability-report#/$defs/confidence_semantics|enum",
+   "fingerprint": "enum=[\"calibrated_probability\",\"model_score\",\"none\",\"provider_opaque\"]"
+  },
+  {
+   "defense_id": "adapter-capability-report#/$defs/determinism_tier|enum",
+   "fingerprint": "enum=[\"T1\",\"T2\",\"T3\"]"
+  },
+  {
+   "defense_id": "adapter-capability-report#/$defs/feature_status_value|enum",
+   "fingerprint": "enum=[\"no_result\",\"not_requested\",\"produced\",\"unsupported\"]"
+  },
+  {
+   "defense_id": "adapter-capability-report#/$defs/language_tag|pattern",
+   "fingerprint": "pattern=\"^[a-z]{2,8}(-[A-Za-z0-9]{1,8})*$\""
+  },
+  {
+   "defense_id": "adapter-capability-report#/$defs/language_tag|range:maxLength",
+   "fingerprint": "maxLength=64"
+  },
+  {
+   "defense_id": "adapter-capability-report#/$defs/network_requirement|enum",
+   "fingerprint": "enum=[\"none\",\"optional\",\"required\"]"
+  },
+  {
+   "defense_id": "adapter-capability-report#/$defs/token_unit|enum",
+   "fingerprint": "enum=[\"character\",\"provider_token\",\"subword\",\"word\"]"
+  },
+  {
+   "defense_id": "adapter-capability-report#/properties/adapter_version|range:minLength",
+   "fingerprint": "minLength=1"
+  },
+  {
+   "defense_id": "adapter-capability-report#/properties/limitations/items|range:minLength",
+   "fingerprint": "minLength=1"
+  },
+  {
+   "defense_id": "adapter-capability-report#/properties/max_candidate_languages|range:minimum",
+   "fingerprint": "minimum=1"
+  },
+  {
+   "defense_id": "adapter-capability-report#/properties/supported_languages|uniqueItems",
+   "fingerprint": "uniqueItems=true"
+  },
+  {
+   "defense_id": "adapter-capability-report#/properties/term_injection_modes/items|enum",
+   "fingerprint": "enum=[\"custom_vocabulary\",\"phrase_list\",\"prompt\"]"
+  },
+  {
+   "defense_id": "adapter-capability-report#/properties/term_injection_modes|uniqueItems",
+   "fingerprint": "uniqueItems=true"
+  },
+  {
+   "defense_id": "adapter-capability-report#/properties/token_timing_units|uniqueItems",
+   "fingerprint": "uniqueItems=true"
+  },
+  {
+   "defense_id": "adapter-capability-report#/|closed",
+   "fingerprint": "closed=[properties:adapter_id,properties:adapter_version,properties:determinism_tier,properties:language_confidence_semantics,properties:limitations,properties:max_candidate_languages,properties:nbest_score_semantics,properties:network_requirement,properties:requires_gpu,properties:restricts_candidate_languages,properties:schema_version,properties:segment_confidence_semantics,properties:supported_languages,properties:supports_diarization,properties:supports_independent_channel_input,properties:supports_intra_sentential_lid,properties:supports_language_id,properties:supports_nbest,properties:supports_overlap_streams,properties:supports_word_timing,properties:term_injection_modes,properties:token_confidence_semantics,properties:token_timing_units]"
+  },
+  {
+   "defense_id": "adapter-capability-report#/|required:adapter_id",
+   "fingerprint": "required=adapter_id"
+  },
+  {
+   "defense_id": "adapter-capability-report#/|required:adapter_version",
+   "fingerprint": "required=adapter_version"
+  },
+  {
+   "defense_id": "adapter-capability-report#/|required:determinism_tier",
+   "fingerprint": "required=determinism_tier"
+  },
+  {
+   "defense_id": "adapter-capability-report#/|required:language_confidence_semantics",
+   "fingerprint": "required=language_confidence_semantics"
+  },
+  {
+   "defense_id": "adapter-capability-report#/|required:limitations",
+   "fingerprint": "required=limitations"
+  },
+  {
+   "defense_id": "adapter-capability-report#/|required:nbest_score_semantics",
+   "fingerprint": "required=nbest_score_semantics"
+  },
+  {
+   "defense_id": "adapter-capability-report#/|required:network_requirement",
+   "fingerprint": "required=network_requirement"
+  },
+  {
+   "defense_id": "adapter-capability-report#/|required:requires_gpu",
+   "fingerprint": "required=requires_gpu"
+  },
+  {
+   "defense_id": "adapter-capability-report#/|required:restricts_candidate_languages",
+   "fingerprint": "required=restricts_candidate_languages"
+  },
+  {
+   "defense_id": "adapter-capability-report#/|required:schema_version",
+   "fingerprint": "required=schema_version"
+  },
+  {
+   "defense_id": "adapter-capability-report#/|required:segment_confidence_semantics",
+   "fingerprint": "required=segment_confidence_semantics"
+  },
+  {
+   "defense_id": "adapter-capability-report#/|required:supported_languages",
+   "fingerprint": "required=supported_languages"
+  },
+  {
+   "defense_id": "adapter-capability-report#/|required:supports_diarization",
+   "fingerprint": "required=supports_diarization"
+  },
+  {
+   "defense_id": "adapter-capability-report#/|required:supports_independent_channel_input",
+   "fingerprint": "required=supports_independent_channel_input"
+  },
+  {
+   "defense_id": "adapter-capability-report#/|required:supports_intra_sentential_lid",
+   "fingerprint": "required=supports_intra_sentential_lid"
+  },
+  {
+   "defense_id": "adapter-capability-report#/|required:supports_language_id",
+   "fingerprint": "required=supports_language_id"
+  },
+  {
+   "defense_id": "adapter-capability-report#/|required:supports_nbest",
+   "fingerprint": "required=supports_nbest"
+  },
+  {
+   "defense_id": "adapter-capability-report#/|required:supports_overlap_streams",
+   "fingerprint": "required=supports_overlap_streams"
+  },
+  {
+   "defense_id": "adapter-capability-report#/|required:supports_word_timing",
+   "fingerprint": "required=supports_word_timing"
+  },
+  {
+   "defense_id": "adapter-capability-report#/|required:term_injection_modes",
+   "fingerprint": "required=term_injection_modes"
+  },
+  {
+   "defense_id": "adapter-capability-report#/|required:token_confidence_semantics",
+   "fingerprint": "required=token_confidence_semantics"
+  },
+  {
+   "defense_id": "adapter-capability-report#/|required:token_timing_units",
+   "fingerprint": "required=token_timing_units"
+  },
+  {
+   "defense_id": "speech-segment#/$defs/overlap_kind|enum",
+   "fingerprint": "enum=[\"full\",\"none\",\"partial\",\"unknown\"]"
+  },
+  {
+   "defense_id": "speech-segment#/$defs/value_semantics|enum",
+   "fingerprint": "enum=[\"calibrated_probability\",\"model_score\",\"provider_opaque\"]"
+  },
+  {
+   "defense_id": "speech-segment#/properties/channel_semantics|enum",
+   "fingerprint": "enum=[\"independent\",\"mixed\",\"unknown\"]"
+  },
+  {
+   "defense_id": "speech-segment#/properties/concurrent_stream_ids|uniqueItems",
+   "fingerprint": "uniqueItems=true"
+  },
+  {
+   "defense_id": "speech-segment#/properties/processing_chain/items/properties/step|range:minLength",
+   "fingerprint": "minLength=1"
+  },
+  {
+   "defense_id": "speech-segment#/properties/processing_chain/items|closed",
+   "fingerprint": "closed=[properties:params_hash,properties:step]"
+  },
+  {
+   "defense_id": "speech-segment#/properties/processing_chain/items|required:params_hash",
+   "fingerprint": "required=params_hash"
+  },
+  {
+   "defense_id": "speech-segment#/properties/processing_chain/items|required:step",
+   "fingerprint": "required=step"
+  },
+  {
+   "defense_id": "speech-segment#/properties/provenance/properties/adapter_version|range:minLength",
+   "fingerprint": "minLength=1"
+  },
+  {
+   "defense_id": "speech-segment#/properties/provenance|closed",
+   "fingerprint": "closed=[properties:adapter_id,properties:adapter_version,properties:config_hash]"
+  },
+  {
+   "defense_id": "speech-segment#/properties/provenance|required:config_hash",
+   "fingerprint": "required=config_hash"
+  },
+  {
+   "defense_id": "speech-segment#/properties/separation_method|enum",
+   "fingerprint": "enum=[\"channel\",\"diarization\",\"none\",\"source_separation\"]"
+  },
+  {
+   "defense_id": "speech-segment#/properties/source_channel_index|range:minimum",
+   "fingerprint": "minimum=0"
+  },
+  {
+   "defense_id": "speech-segment#/properties/source_track_index|range:minimum",
+   "fingerprint": "minimum=0"
+  },
+  {
+   "defense_id": "speech-segment#/properties/speaker_label|range:maxLength",
+   "fingerprint": "maxLength=256"
+  },
+  {
+   "defense_id": "speech-segment#/properties/speaker_label|range:minLength",
+   "fingerprint": "minLength=1"
+  },
+  {
+   "defense_id": "speech-segment#/|closed",
+   "fingerprint": "closed=[properties:audio_ref,properties:channel_semantics,properties:concurrent_stream_ids,properties:end_seconds,properties:overlap_kind,properties:processing_chain,properties:provenance,properties:schema_version,properties:segment_id,properties:separation_method,properties:snr_estimate,properties:source_channel_index,properties:source_track_index,properties:speaker_confidence,properties:speaker_confidence_semantics,properties:speaker_label,properties:speech_confidence,properties:speech_confidence_semantics,properties:start_seconds,properties:stream_id,properties:timebase_ref]"
+  },
+  {
+   "defense_id": "speech-segment#/|required:audio_ref",
+   "fingerprint": "required=audio_ref"
+  },
+  {
+   "defense_id": "speech-segment#/|required:channel_semantics",
+   "fingerprint": "required=channel_semantics"
+  },
+  {
+   "defense_id": "speech-segment#/|required:concurrent_stream_ids",
+   "fingerprint": "required=concurrent_stream_ids"
+  },
+  {
+   "defense_id": "speech-segment#/|required:end_seconds",
+   "fingerprint": "required=end_seconds"
+  },
+  {
+   "defense_id": "speech-segment#/|required:overlap_kind",
+   "fingerprint": "required=overlap_kind"
+  },
+  {
+   "defense_id": "speech-segment#/|required:processing_chain",
+   "fingerprint": "required=processing_chain"
+  },
+  {
+   "defense_id": "speech-segment#/|required:provenance",
+   "fingerprint": "required=provenance"
+  },
+  {
+   "defense_id": "speech-segment#/|required:schema_version",
+   "fingerprint": "required=schema_version"
+  },
+  {
+   "defense_id": "speech-segment#/|required:segment_id",
+   "fingerprint": "required=segment_id"
+  },
+  {
+   "defense_id": "speech-segment#/|required:separation_method",
+   "fingerprint": "required=separation_method"
+  },
+  {
+   "defense_id": "speech-segment#/|required:source_track_index",
+   "fingerprint": "required=source_track_index"
+  },
+  {
+   "defense_id": "speech-segment#/|required:start_seconds",
+   "fingerprint": "required=start_seconds"
+  },
+  {
+   "defense_id": "speech-segment#/|required:stream_id",
+   "fingerprint": "required=stream_id"
+  },
+  {
+   "defense_id": "speech-segment#/|required:timebase_ref",
+   "fingerprint": "required=timebase_ref"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/Cue/properties/concurrent_cue_ids|uniqueItems",
+   "fingerprint": "uniqueItems=true"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/Cue/properties/lines|range:minItems",
+   "fingerprint": "minItems=1"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/Cue/properties/review_reasons|uniqueItems",
+   "fingerprint": "uniqueItems=true"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/Cue|closed",
+   "fingerprint": "closed=[properties:concurrent_cue_ids,properties:cue_id,properties:end_seconds,properties:line_break_whitespace,properties:lineage_fragments,properties:lines,properties:needs_review,properties:overlap_kind,properties:review_extension_id,properties:review_reasons,properties:start_seconds,properties:stream_id]"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/Cue|required:concurrent_cue_ids",
+   "fingerprint": "required=concurrent_cue_ids"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/Cue|required:cue_id",
+   "fingerprint": "required=cue_id"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/Cue|required:end_seconds",
+   "fingerprint": "required=end_seconds"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/Cue|required:line_break_whitespace",
+   "fingerprint": "required=line_break_whitespace"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/Cue|required:lineage_fragments",
+   "fingerprint": "required=lineage_fragments"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/Cue|required:lines",
+   "fingerprint": "required=lines"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/Cue|required:needs_review",
+   "fingerprint": "required=needs_review"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/Cue|required:overlap_kind",
+   "fingerprint": "required=overlap_kind"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/Cue|required:review_reasons",
+   "fingerprint": "required=review_reasons"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/Cue|required:start_seconds",
+   "fingerprint": "required=start_seconds"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/Cue|required:stream_id",
+   "fingerprint": "required=stream_id"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/LineBreakWhitespace/properties/after_line_index|range:minimum",
+   "fingerprint": "minimum=0"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/LineBreakWhitespace/properties/char_end|range:minimum",
+   "fingerprint": "minimum=0"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/LineBreakWhitespace/properties/char_start|range:minimum",
+   "fingerprint": "minimum=0"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/LineBreakWhitespace/properties/text|range:minLength",
+   "fingerprint": "minLength=1"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/LineBreakWhitespace|closed",
+   "fingerprint": "closed=[properties:after_line_index,properties:char_end,properties:char_start,properties:input_segment_id,properties:text]"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/LineBreakWhitespace|required:after_line_index",
+   "fingerprint": "required=after_line_index"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/LineBreakWhitespace|required:char_end",
+   "fingerprint": "required=char_end"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/LineBreakWhitespace|required:char_start",
+   "fingerprint": "required=char_start"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/LineBreakWhitespace|required:input_segment_id",
+   "fingerprint": "required=input_segment_id"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/LineBreakWhitespace|required:text",
+   "fingerprint": "required=text"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/LineageFragment/properties/char_end|range:minimum",
+   "fingerprint": "minimum=0"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/LineageFragment/properties/char_start|range:minimum",
+   "fingerprint": "minimum=0"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/LineageFragment/properties/line_index|range:minimum",
+   "fingerprint": "minimum=0"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/LineageFragment|closed",
+   "fingerprint": "closed=[properties:char_end,properties:char_start,properties:input_segment_id,properties:line_index,properties:text]"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/LineageFragment|required:char_end",
+   "fingerprint": "required=char_end"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/LineageFragment|required:char_start",
+   "fingerprint": "required=char_start"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/LineageFragment|required:input_segment_id",
+   "fingerprint": "required=input_segment_id"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/LineageFragment|required:line_index",
+   "fingerprint": "required=line_index"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/LineageFragment|required:text",
+   "fingerprint": "required=text"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/ResolvedStyle/properties/language_overrides|closed",
+   "fingerprint": "closed=[patternProperties:^[a-z]{2,8}(-[A-Za-z0-9]{1,8})*$]"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/ResolvedStyle/properties/line_break_policy|enum",
+   "fingerprint": "enum=[\"balanced\",\"semantic\",\"source_preserving\"]"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/ResolvedStyle/properties/max_chars_per_line|range:minimum",
+   "fingerprint": "minimum=1"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/ResolvedStyle/properties/max_cps|range:exclusiveMinimum",
+   "fingerprint": "exclusiveMinimum=0"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/ResolvedStyle/properties/max_duration_seconds|range:exclusiveMinimum",
+   "fingerprint": "exclusiveMinimum=0"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/ResolvedStyle/properties/max_lines|range:minimum",
+   "fingerprint": "minimum=1"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/ResolvedStyle/properties/min_duration_seconds|range:minimum",
+   "fingerprint": "minimum=0"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/ResolvedStyle/properties/min_gap_seconds|range:minimum",
+   "fingerprint": "minimum=0"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/ResolvedStyle|closed",
+   "fingerprint": "closed=[properties:language_overrides,properties:line_break_policy,properties:max_chars_per_line,properties:max_cps,properties:max_duration_seconds,properties:max_lines,properties:min_duration_seconds,properties:min_gap_seconds]"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/ResolvedStyle|required:language_overrides",
+   "fingerprint": "required=language_overrides"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/ResolvedStyle|required:line_break_policy",
+   "fingerprint": "required=line_break_policy"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/ResolvedStyle|required:max_chars_per_line",
+   "fingerprint": "required=max_chars_per_line"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/ResolvedStyle|required:max_cps",
+   "fingerprint": "required=max_cps"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/ResolvedStyle|required:max_duration_seconds",
+   "fingerprint": "required=max_duration_seconds"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/ResolvedStyle|required:max_lines",
+   "fingerprint": "required=max_lines"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/ResolvedStyle|required:min_duration_seconds",
+   "fingerprint": "required=min_duration_seconds"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/ResolvedStyle|required:min_gap_seconds",
+   "fingerprint": "required=min_gap_seconds"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/StyleOverride/properties/line_break_policy|enum",
+   "fingerprint": "enum=[\"balanced\",\"semantic\",\"source_preserving\"]"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/StyleOverride/properties/max_chars_per_line|range:minimum",
+   "fingerprint": "minimum=1"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/StyleOverride/properties/max_cps|range:exclusiveMinimum",
+   "fingerprint": "exclusiveMinimum=0"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/StyleOverride/properties/max_duration_seconds|range:exclusiveMinimum",
+   "fingerprint": "exclusiveMinimum=0"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/StyleOverride/properties/max_lines|range:minimum",
+   "fingerprint": "minimum=1"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/StyleOverride/properties/min_duration_seconds|range:minimum",
+   "fingerprint": "minimum=0"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/StyleOverride/properties/min_gap_seconds|range:minimum",
+   "fingerprint": "minimum=0"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/StyleOverride|closed",
+   "fingerprint": "closed=[properties:line_break_policy,properties:max_chars_per_line,properties:max_cps,properties:max_duration_seconds,properties:max_lines,properties:min_duration_seconds,properties:min_gap_seconds]"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/UnsupportedFeature/properties/action|enum",
+   "fingerprint": "enum=[\"approximated\",\"dropped\",\"flattened\",\"review_required\"]"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/UnsupportedFeature/properties/feature_identifier|range:maxLength",
+   "fingerprint": "maxLength=128"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/UnsupportedFeature/properties/feature_identifier|range:minLength",
+   "fingerprint": "minLength=1"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/UnsupportedFeature/properties/feature_kind|enum",
+   "fingerprint": "enum=[\"bidirectional_layout\",\"font_style\",\"karaoke\",\"other\",\"positioning\",\"ruby\",\"speaker_placement\",\"vertical_text\"]"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/UnsupportedFeature/properties/reason_code|enum",
+   "fingerprint": "enum=[\"exporter_unsupported\",\"not_representable\",\"other\",\"profile_disallowed\",\"source_ambiguous\"]"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/UnsupportedFeature|closed",
+   "fingerprint": "closed=[properties:action,properties:cue_id,properties:feature_identifier,properties:feature_kind,properties:reason_code]"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/UnsupportedFeature|required:action",
+   "fingerprint": "required=action"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/UnsupportedFeature|required:cue_id",
+   "fingerprint": "required=cue_id"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/UnsupportedFeature|required:feature_identifier",
+   "fingerprint": "required=feature_identifier"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/UnsupportedFeature|required:feature_kind",
+   "fingerprint": "required=feature_kind"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/UnsupportedFeature|required:reason_code",
+   "fingerprint": "required=reason_code"
+  },
+  {
+   "defense_id": "subtitle-document#/$defs/review_reason|enum",
+   "fingerprint": "enum=[\"format_violation\",\"language_switch\",\"low_confidence\",\"other\",\"overlap\",\"silence_adjacent\",\"timing_uncertain\",\"unsupported_feature\"]"
+  },
+  {
+   "defense_id": "subtitle-document#/properties/provenance/properties/pipeline_version|range:minLength",
+   "fingerprint": "minLength=1"
+  },
+  {
+   "defense_id": "subtitle-document#/properties/provenance|closed",
+   "fingerprint": "closed=[properties:config_hash,properties:input_hash,properties:pipeline_version,properties:seed]"
+  },
+  {
+   "defense_id": "subtitle-document#/properties/provenance|required:config_hash",
+   "fingerprint": "required=config_hash"
+  },
+  {
+   "defense_id": "subtitle-document#/properties/provenance|required:input_hash",
+   "fingerprint": "required=input_hash"
+  },
+  {
+   "defense_id": "subtitle-document#/properties/provenance|required:pipeline_version",
+   "fingerprint": "required=pipeline_version"
+  },
+  {
+   "defense_id": "subtitle-document#/properties/style_profile_version|range:minLength",
+   "fingerprint": "minLength=1"
+  },
+  {
+   "defense_id": "subtitle-document#/|closed",
+   "fingerprint": "closed=[properties:cues,properties:document_id,properties:input_document_ref,properties:provenance,properties:resolved_style,properties:schema_version,properties:source_transcript_ref,properties:style_profile_id,properties:style_profile_version,properties:target_language,properties:text_axis,properties:timebase_ref,properties:unsupported_features]"
+  },
+  {
+   "defense_id": "subtitle-document#/|required:cues",
+   "fingerprint": "required=cues"
+  },
+  {
+   "defense_id": "subtitle-document#/|required:document_id",
+   "fingerprint": "required=document_id"
+  },
+  {
+   "defense_id": "subtitle-document#/|required:input_document_ref",
+   "fingerprint": "required=input_document_ref"
+  },
+  {
+   "defense_id": "subtitle-document#/|required:provenance",
+   "fingerprint": "required=provenance"
+  },
+  {
+   "defense_id": "subtitle-document#/|required:resolved_style",
+   "fingerprint": "required=resolved_style"
+  },
+  {
+   "defense_id": "subtitle-document#/|required:schema_version",
+   "fingerprint": "required=schema_version"
+  },
+  {
+   "defense_id": "subtitle-document#/|required:style_profile_id",
+   "fingerprint": "required=style_profile_id"
+  },
+  {
+   "defense_id": "subtitle-document#/|required:style_profile_version",
+   "fingerprint": "required=style_profile_version"
+  },
+  {
+   "defense_id": "subtitle-document#/|required:text_axis",
+   "fingerprint": "required=text_axis"
+  },
+  {
+   "defense_id": "subtitle-document#/|required:timebase_ref",
+   "fingerprint": "required=timebase_ref"
+  },
+  {
+   "defense_id": "subtitle-document#/|required:unsupported_features",
+   "fingerprint": "required=unsupported_features"
+  },
+  {
+   "defense_id": "transcript#/$defs/Alternative|closed",
+   "fingerprint": "closed=[properties:score,properties:text]"
+  },
+  {
+   "defense_id": "transcript#/$defs/Alternative|required:text",
+   "fingerprint": "required=text"
+  },
+  {
+   "defense_id": "transcript#/$defs/LanguageSpan/properties/char_end|range:minimum",
+   "fingerprint": "minimum=0"
+  },
+  {
+   "defense_id": "transcript#/$defs/LanguageSpan/properties/char_start|range:minimum",
+   "fingerprint": "minimum=0"
+  },
+  {
+   "defense_id": "transcript#/$defs/LanguageSpan/properties/switch_kind|enum",
+   "fingerprint": "enum=[\"inter_sentential\",\"intra_sentential\",\"unknown\"]"
+  },
+  {
+   "defense_id": "transcript#/$defs/LanguageSpan|closed",
+   "fingerprint": "closed=[properties:char_end,properties:char_start,properties:confidence,properties:language,properties:switch_kind]"
+  },
+  {
+   "defense_id": "transcript#/$defs/LanguageSpan|required:char_end",
+   "fingerprint": "required=char_end"
+  },
+  {
+   "defense_id": "transcript#/$defs/LanguageSpan|required:char_start",
+   "fingerprint": "required=char_start"
+  },
+  {
+   "defense_id": "transcript#/$defs/LanguageSpan|required:language",
+   "fingerprint": "required=language"
+  },
+  {
+   "defense_id": "transcript#/$defs/Segment/properties/alternatives|range:minItems",
+   "fingerprint": "minItems=1"
+  },
+  {
+   "defense_id": "transcript#/$defs/Segment/properties/language_spans|range:minItems",
+   "fingerprint": "minItems=1"
+  },
+  {
+   "defense_id": "transcript#/$defs/Segment/properties/review_reasons|uniqueItems",
+   "fingerprint": "uniqueItems=true"
+  },
+  {
+   "defense_id": "transcript#/$defs/Segment/properties/source_speech_segment_ids|range:minItems",
+   "fingerprint": "minItems=1"
+  },
+  {
+   "defense_id": "transcript#/$defs/Segment/properties/source_speech_segment_ids|uniqueItems",
+   "fingerprint": "uniqueItems=true"
+  },
+  {
+   "defense_id": "transcript#/$defs/Segment/properties/speaker_label|range:maxLength",
+   "fingerprint": "maxLength=256"
+  },
+  {
+   "defense_id": "transcript#/$defs/Segment/properties/speaker_label|range:minLength",
+   "fingerprint": "minLength=1"
+  },
+  {
+   "defense_id": "transcript#/$defs/Segment/properties/tokens|range:minItems",
+   "fingerprint": "minItems=1"
+  },
+  {
+   "defense_id": "transcript#/$defs/Segment|closed",
+   "fingerprint": "closed=[properties:alternatives,properties:dominant_language,properties:end_seconds,properties:is_low_confidence,properties:language_spans,properties:needs_review,properties:review_extension_id,properties:review_reasons,properties:segment_confidence,properties:segment_id,properties:source_speech_segment_ids,properties:speaker_label,properties:speaker_label_source,properties:start_seconds,properties:text,properties:tokens]"
+  },
+  {
+   "defense_id": "transcript#/$defs/Segment|required:end_seconds",
+   "fingerprint": "required=end_seconds"
+  },
+  {
+   "defense_id": "transcript#/$defs/Segment|required:is_low_confidence",
+   "fingerprint": "required=is_low_confidence"
+  },
+  {
+   "defense_id": "transcript#/$defs/Segment|required:needs_review",
+   "fingerprint": "required=needs_review"
+  },
+  {
+   "defense_id": "transcript#/$defs/Segment|required:review_reasons",
+   "fingerprint": "required=review_reasons"
+  },
+  {
+   "defense_id": "transcript#/$defs/Segment|required:segment_id",
+   "fingerprint": "required=segment_id"
+  },
+  {
+   "defense_id": "transcript#/$defs/Segment|required:source_speech_segment_ids",
+   "fingerprint": "required=source_speech_segment_ids"
+  },
+  {
+   "defense_id": "transcript#/$defs/Segment|required:start_seconds",
+   "fingerprint": "required=start_seconds"
+  },
+  {
+   "defense_id": "transcript#/$defs/Segment|required:text",
+   "fingerprint": "required=text"
+  },
+  {
+   "defense_id": "transcript#/$defs/Stream/properties/speaker_label|range:maxLength",
+   "fingerprint": "maxLength=256"
+  },
+  {
+   "defense_id": "transcript#/$defs/Stream/properties/speaker_label|range:minLength",
+   "fingerprint": "minLength=1"
+  },
+  {
+   "defense_id": "transcript#/$defs/Stream|closed",
+   "fingerprint": "closed=[properties:segments,properties:speaker_label,properties:speaker_label_source,properties:stream_id]"
+  },
+  {
+   "defense_id": "transcript#/$defs/Stream|required:segments",
+   "fingerprint": "required=segments"
+  },
+  {
+   "defense_id": "transcript#/$defs/Stream|required:stream_id",
+   "fingerprint": "required=stream_id"
+  },
+  {
+   "defense_id": "transcript#/$defs/Token|closed",
+   "fingerprint": "closed=[properties:confidence,properties:end_seconds,properties:start_seconds,properties:text]"
+  },
+  {
+   "defense_id": "transcript#/$defs/Token|required:text",
+   "fingerprint": "required=text"
+  },
+  {
+   "defense_id": "transcript#/$defs/extension_id|pattern",
+   "fingerprint": "pattern=\"^x-[A-Za-z0-9][A-Za-z0-9._:-]*$\""
+  },
+  {
+   "defense_id": "transcript#/$defs/extension_id|range:maxLength",
+   "fingerprint": "maxLength=128"
+  },
+  {
+   "defense_id": "transcript#/$defs/review_reason|enum",
+   "fingerprint": "enum=[\"language_switch\",\"language_unknown\",\"low_confidence\",\"other\",\"overlap\",\"speaker_uncertain\",\"timing_uncertain\"]"
+  },
+  {
+   "defense_id": "transcript#/$defs/speaker_label_source|enum",
+   "fingerprint": "enum=[\"adapter\",\"input\"]"
+  },
+  {
+   "defense_id": "transcript#/properties/feature_status|closed",
+   "fingerprint": "closed=[properties:language_confidence,properties:language_id,properties:nbest,properties:segment_confidence,properties:speaker_diarization,properties:token_confidence,properties:token_timing]"
+  },
+  {
+   "defense_id": "transcript#/properties/feature_status|required:language_confidence",
+   "fingerprint": "required=language_confidence"
+  },
+  {
+   "defense_id": "transcript#/properties/feature_status|required:language_id",
+   "fingerprint": "required=language_id"
+  },
+  {
+   "defense_id": "transcript#/properties/feature_status|required:nbest",
+   "fingerprint": "required=nbest"
+  },
+  {
+   "defense_id": "transcript#/properties/feature_status|required:segment_confidence",
+   "fingerprint": "required=segment_confidence"
+  },
+  {
+   "defense_id": "transcript#/properties/feature_status|required:speaker_diarization",
+   "fingerprint": "required=speaker_diarization"
+  },
+  {
+   "defense_id": "transcript#/properties/feature_status|required:token_confidence",
+   "fingerprint": "required=token_confidence"
+  },
+  {
+   "defense_id": "transcript#/properties/feature_status|required:token_timing",
+   "fingerprint": "required=token_timing"
+  },
+  {
+   "defense_id": "transcript#/properties/provenance/properties/adapter_version|range:minLength",
+   "fingerprint": "minLength=1"
+  },
+  {
+   "defense_id": "transcript#/properties/provenance|closed",
+   "fingerprint": "closed=[properties:adapter_id,properties:adapter_version,properties:params_hash,properties:seed]"
+  },
+  {
+   "defense_id": "transcript#/properties/provenance|required:adapter_id",
+   "fingerprint": "required=adapter_id"
+  },
+  {
+   "defense_id": "transcript#/properties/provenance|required:adapter_version",
+   "fingerprint": "required=adapter_version"
+  },
+  {
+   "defense_id": "transcript#/properties/provenance|required:params_hash",
+   "fingerprint": "required=params_hash"
+  },
+  {
+   "defense_id": "transcript#/properties/streams|range:minItems",
+   "fingerprint": "minItems=1"
+  },
+  {
+   "defense_id": "transcript#/|closed",
+   "fingerprint": "closed=[properties:capability_report,properties:feature_status,properties:provenance,properties:schema_version,properties:streams,properties:timebase_ref,properties:token_unit,properties:transcript_id]"
+  },
+  {
+   "defense_id": "transcript#/|required:capability_report",
+   "fingerprint": "required=capability_report"
+  },
+  {
+   "defense_id": "transcript#/|required:feature_status",
+   "fingerprint": "required=feature_status"
+  },
+  {
+   "defense_id": "transcript#/|required:provenance",
+   "fingerprint": "required=provenance"
+  },
+  {
+   "defense_id": "transcript#/|required:schema_version",
+   "fingerprint": "required=schema_version"
+  },
+  {
+   "defense_id": "transcript#/|required:streams",
+   "fingerprint": "required=streams"
+  },
+  {
+   "defense_id": "transcript#/|required:timebase_ref",
+   "fingerprint": "required=timebase_ref"
+  },
+  {
+   "defense_id": "transcript#/|required:token_unit",
+   "fingerprint": "required=token_unit"
+  },
+  {
+   "defense_id": "transcript#/|required:transcript_id",
+   "fingerprint": "required=transcript_id"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/Segment/properties/alignment_evidence_source|enum",
+   "fingerprint": "enum=[\"adapter\",\"orchestrator\"]"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/Segment/properties/alignment_kind|enum",
+   "fingerprint": "enum=[\"dropped\",\"merged\",\"one_to_one\",\"split\",\"unknown\"]"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/Segment/properties/review_reasons|uniqueItems",
+   "fingerprint": "uniqueItems=true"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/Segment/properties/source_fragments|range:minItems",
+   "fingerprint": "minItems=1"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/Segment|closed",
+   "fingerprint": "closed=[properties:alignment_evidence_source,properties:alignment_kind,properties:confidence,properties:is_low_confidence,properties:needs_review,properties:review_extension_id,properties:review_reasons,properties:segment_id,properties:source_fragments,properties:target_text]"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/Segment|required:alignment_evidence_source",
+   "fingerprint": "required=alignment_evidence_source"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/Segment|required:alignment_kind",
+   "fingerprint": "required=alignment_kind"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/Segment|required:is_low_confidence",
+   "fingerprint": "required=is_low_confidence"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/Segment|required:needs_review",
+   "fingerprint": "required=needs_review"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/Segment|required:review_reasons",
+   "fingerprint": "required=review_reasons"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/Segment|required:segment_id",
+   "fingerprint": "required=segment_id"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/Segment|required:source_fragments",
+   "fingerprint": "required=source_fragments"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/Segment|required:target_text",
+   "fingerprint": "required=target_text"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/SourceFragment/properties/char_end|range:minimum",
+   "fingerprint": "minimum=0"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/SourceFragment/properties/char_start|range:minimum",
+   "fingerprint": "minimum=0"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/SourceFragment|closed",
+   "fingerprint": "closed=[properties:char_end,properties:char_start,properties:source_segment_id,properties:source_text]"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/SourceFragment|required:char_end",
+   "fingerprint": "required=char_end"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/SourceFragment|required:char_start",
+   "fingerprint": "required=char_start"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/SourceFragment|required:source_segment_id",
+   "fingerprint": "required=source_segment_id"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/SourceFragment|required:source_text",
+   "fingerprint": "required=source_text"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/Stream|closed",
+   "fingerprint": "closed=[properties:segments,properties:stream_id]"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/Stream|required:segments",
+   "fingerprint": "required=segments"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/Stream|required:stream_id",
+   "fingerprint": "required=stream_id"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/TranslationCapabilityReport/properties/adapter_version|range:minLength",
+   "fingerprint": "minLength=1"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/TranslationCapabilityReport/properties/limitations/items|range:minLength",
+   "fingerprint": "minLength=1"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/TranslationCapabilityReport/properties/supported_source_languages|uniqueItems",
+   "fingerprint": "uniqueItems=true"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/TranslationCapabilityReport/properties/supported_target_languages|uniqueItems",
+   "fingerprint": "uniqueItems=true"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/TranslationCapabilityReport|closed",
+   "fingerprint": "closed=[properties:adapter_id,properties:adapter_version,properties:determinism_tier,properties:limitations,properties:network_requirement,properties:requires_gpu,properties:supported_source_languages,properties:supported_target_languages,properties:supports_code_switching_input,properties:supports_document_context,properties:supports_segment_alignment,properties:translation_confidence_semantics]"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/TranslationCapabilityReport|required:adapter_id",
+   "fingerprint": "required=adapter_id"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/TranslationCapabilityReport|required:adapter_version",
+   "fingerprint": "required=adapter_version"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/TranslationCapabilityReport|required:determinism_tier",
+   "fingerprint": "required=determinism_tier"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/TranslationCapabilityReport|required:limitations",
+   "fingerprint": "required=limitations"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/TranslationCapabilityReport|required:network_requirement",
+   "fingerprint": "required=network_requirement"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/TranslationCapabilityReport|required:requires_gpu",
+   "fingerprint": "required=requires_gpu"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/TranslationCapabilityReport|required:supported_source_languages",
+   "fingerprint": "required=supported_source_languages"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/TranslationCapabilityReport|required:supported_target_languages",
+   "fingerprint": "required=supported_target_languages"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/TranslationCapabilityReport|required:supports_code_switching_input",
+   "fingerprint": "required=supports_code_switching_input"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/TranslationCapabilityReport|required:supports_document_context",
+   "fingerprint": "required=supports_document_context"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/TranslationCapabilityReport|required:supports_segment_alignment",
+   "fingerprint": "required=supports_segment_alignment"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/TranslationCapabilityReport|required:translation_confidence_semantics",
+   "fingerprint": "required=translation_confidence_semantics"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/UncoveredFragment/properties/char_end|range:minimum",
+   "fingerprint": "minimum=0"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/UncoveredFragment/properties/char_start|range:minimum",
+   "fingerprint": "minimum=0"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/UncoveredFragment/properties/review_reasons|range:minItems",
+   "fingerprint": "minItems=1"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/UncoveredFragment/properties/review_reasons|uniqueItems",
+   "fingerprint": "uniqueItems=true"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/UncoveredFragment|closed",
+   "fingerprint": "closed=[properties:char_end,properties:char_start,properties:needs_review,properties:review_extension_id,properties:review_reasons,properties:source_segment_id,properties:source_text]"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/UncoveredFragment|required:char_end",
+   "fingerprint": "required=char_end"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/UncoveredFragment|required:char_start",
+   "fingerprint": "required=char_start"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/UncoveredFragment|required:needs_review",
+   "fingerprint": "required=needs_review"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/UncoveredFragment|required:review_reasons",
+   "fingerprint": "required=review_reasons"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/UncoveredFragment|required:source_segment_id",
+   "fingerprint": "required=source_segment_id"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/UncoveredFragment|required:source_text",
+   "fingerprint": "required=source_text"
+  },
+  {
+   "defense_id": "translated-transcript#/$defs/review_reason|enum",
+   "fingerprint": "enum=[\"alignment_uncertain\",\"low_confidence\",\"other\",\"source_ambiguous\",\"untranslated_span\"]"
+  },
+  {
+   "defense_id": "translated-transcript#/properties/coverage_status|enum",
+   "fingerprint": "enum=[\"complete\",\"partial\"]"
+  },
+  {
+   "defense_id": "translated-transcript#/properties/feature_status|closed",
+   "fingerprint": "closed=[properties:segment_alignment,properties:translation_confidence]"
+  },
+  {
+   "defense_id": "translated-transcript#/properties/feature_status|required:segment_alignment",
+   "fingerprint": "required=segment_alignment"
+  },
+  {
+   "defense_id": "translated-transcript#/properties/feature_status|required:translation_confidence",
+   "fingerprint": "required=translation_confidence"
+  },
+  {
+   "defense_id": "translated-transcript#/properties/provenance/properties/adapter_version|range:minLength",
+   "fingerprint": "minLength=1"
+  },
+  {
+   "defense_id": "translated-transcript#/properties/provenance|closed",
+   "fingerprint": "closed=[properties:adapter_id,properties:adapter_version,properties:params_hash,properties:seed]"
+  },
+  {
+   "defense_id": "translated-transcript#/properties/provenance|required:adapter_id",
+   "fingerprint": "required=adapter_id"
+  },
+  {
+   "defense_id": "translated-transcript#/properties/provenance|required:adapter_version",
+   "fingerprint": "required=adapter_version"
+  },
+  {
+   "defense_id": "translated-transcript#/properties/provenance|required:params_hash",
+   "fingerprint": "required=params_hash"
+  },
+  {
+   "defense_id": "translated-transcript#/properties/streams|range:minItems",
+   "fingerprint": "minItems=1"
+  },
+  {
+   "defense_id": "translated-transcript#/|closed",
+   "fingerprint": "closed=[properties:capability_report,properties:coverage_status,properties:feature_status,properties:provenance,properties:schema_version,properties:source_transcript,properties:streams,properties:target_language,properties:timebase_ref,properties:translated_transcript_id,properties:uncovered_source_fragments]"
+  },
+  {
+   "defense_id": "translated-transcript#/|required:capability_report",
+   "fingerprint": "required=capability_report"
+  },
+  {
+   "defense_id": "translated-transcript#/|required:coverage_status",
+   "fingerprint": "required=coverage_status"
+  },
+  {
+   "defense_id": "translated-transcript#/|required:feature_status",
+   "fingerprint": "required=feature_status"
+  },
+  {
+   "defense_id": "translated-transcript#/|required:provenance",
+   "fingerprint": "required=provenance"
+  },
+  {
+   "defense_id": "translated-transcript#/|required:schema_version",
+   "fingerprint": "required=schema_version"
+  },
+  {
+   "defense_id": "translated-transcript#/|required:source_transcript",
+   "fingerprint": "required=source_transcript"
+  },
+  {
+   "defense_id": "translated-transcript#/|required:streams",
+   "fingerprint": "required=streams"
+  },
+  {
+   "defense_id": "translated-transcript#/|required:target_language",
+   "fingerprint": "required=target_language"
+  },
+  {
+   "defense_id": "translated-transcript#/|required:timebase_ref",
+   "fingerprint": "required=timebase_ref"
+  },
+  {
+   "defense_id": "translated-transcript#/|required:translated_transcript_id",
+   "fingerprint": "required=translated_transcript_id"
+  },
+  {
+   "defense_id": "translated-transcript#/|required:uncovered_source_fragments",
+   "fingerprint": "required=uncovered_source_fragments"
+  }
+ ],
+ "equivalent": [
+  {
+   "defense_id": "adapter-capability-report#/$defs/language_tag|range:minLength",
+   "fingerprint": "minLength=2",
+   "reason": "같은 노드의 pattern `^[a-z]{2,8}(-[A-Za-z0-9]{1,8})*$`가 최소 2자를 이미 보장한다. minLength 2만 어기는 입력을 만들 수 없으므로 단독 kill이 원리적으로 불가능하다. 감사 공백이 아니라 중복 선언이며, pattern 방어는 별도 항목으로 kill된다."
+  },
+  {
+   "defense_id": "transcript#/$defs/extension_id|range:minLength",
+   "fingerprint": "minLength=3",
+   "reason": "같은 노드의 pattern `^x-[A-Za-z0-9][A-Za-z0-9._:-]*$`가 최소 3자를 이미 보장한다. 위와 같은 이유로 단독 kill이 불가능하며 pattern 방어가 따로 kill된다."
+  }
+ ]
+}

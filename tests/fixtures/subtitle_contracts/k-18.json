@@ -1,0 +1,256 @@
+{
+ "case_id": "K-18",
+ "title": "LID 미지원 adapter가 language_spans를 냈다",
+ "mutation_id": "IM-33",
+ "expected": {
+  "valid": false,
+  "findings": [
+   {
+    "code": "E_CAPABILITY_MISMATCH",
+    "location": "transcript/feature_status/language_id"
+   },
+   {
+    "code": "E_CAPABILITY_MISMATCH",
+    "location": "transcript/streams/0/segments/0/language_spans"
+   }
+  ]
+ },
+ "documents": {
+  "speech_segments": [
+   {
+    "schema_version": "1.0.0",
+    "segment_id": "sp-m1",
+    "timebase_ref": "tb-source",
+    "start_seconds": 0.0,
+    "end_seconds": 2.0,
+    "audio_ref": {
+     "schema_version": "1.0.0",
+     "artifact_id": "art-sp-m1",
+     "kind": "audio",
+     "uri": "work/sp-m1.wav",
+     "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+     "byte_size": 1024,
+     "media_type": "audio/wav",
+     "produced_by": {
+      "stage_id": "stage-synthetic",
+      "job_id": "job-029"
+     },
+     "created_at": "2026-08-29T00:00:00Z",
+     "parent_refs": [],
+     "is_estimate": false
+    },
+    "stream_id": "s-1",
+    "concurrent_stream_ids": [],
+    "overlap_kind": "none",
+    "separation_method": "none",
+    "source_track_index": 0,
+    "channel_semantics": "unknown",
+    "processing_chain": [
+     {
+      "step": "vad",
+      "params_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+     }
+    ],
+    "provenance": {
+     "adapter_id": "audio-synthetic",
+     "adapter_version": "0.0.1",
+     "config_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    }
+   },
+   {
+    "schema_version": "1.0.0",
+    "segment_id": "sp-m2",
+    "timebase_ref": "tb-source",
+    "start_seconds": 2.0,
+    "end_seconds": 4.0,
+    "audio_ref": {
+     "schema_version": "1.0.0",
+     "artifact_id": "art-sp-m2",
+     "kind": "audio",
+     "uri": "work/sp-m2.wav",
+     "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+     "byte_size": 1024,
+     "media_type": "audio/wav",
+     "produced_by": {
+      "stage_id": "stage-synthetic",
+      "job_id": "job-029"
+     },
+     "created_at": "2026-08-29T00:00:00Z",
+     "parent_refs": [],
+     "is_estimate": false
+    },
+    "stream_id": "s-1",
+    "concurrent_stream_ids": [],
+    "overlap_kind": "none",
+    "separation_method": "none",
+    "source_track_index": 0,
+    "channel_semantics": "unknown",
+    "processing_chain": [
+     {
+      "step": "vad",
+      "params_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+     }
+    ],
+    "provenance": {
+     "adapter_id": "audio-synthetic",
+     "adapter_version": "0.0.1",
+     "config_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    }
+   },
+   {
+    "schema_version": "1.0.0",
+    "segment_id": "sp-m3",
+    "timebase_ref": "tb-source",
+    "start_seconds": 4.0,
+    "end_seconds": 6.0,
+    "audio_ref": {
+     "schema_version": "1.0.0",
+     "artifact_id": "art-sp-m3",
+     "kind": "audio",
+     "uri": "work/sp-m3.wav",
+     "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+     "byte_size": 1024,
+     "media_type": "audio/wav",
+     "produced_by": {
+      "stage_id": "stage-synthetic",
+      "job_id": "job-029"
+     },
+     "created_at": "2026-08-29T00:00:00Z",
+     "parent_refs": [],
+     "is_estimate": false
+    },
+    "stream_id": "s-1",
+    "concurrent_stream_ids": [],
+    "overlap_kind": "none",
+    "separation_method": "none",
+    "source_track_index": 0,
+    "channel_semantics": "unknown",
+    "processing_chain": [
+     {
+      "step": "vad",
+      "params_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+     }
+    ],
+    "provenance": {
+     "adapter_id": "audio-synthetic",
+     "adapter_version": "0.0.1",
+     "config_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    }
+   }
+  ],
+  "transcript": {
+   "schema_version": "1.0.0",
+   "transcript_id": "tx-mini",
+   "timebase_ref": "tb-source",
+   "token_unit": "provider_token",
+   "streams": [
+    {
+     "stream_id": "s-1",
+     "segments": [
+      {
+       "segment_id": "tm-1",
+       "source_speech_segment_ids": [
+        "sp-m1"
+       ],
+       "start_seconds": 0.0,
+       "end_seconds": 2.0,
+       "text": "日本語",
+       "is_low_confidence": false,
+       "needs_review": false,
+       "review_reasons": [],
+       "language_spans": [
+        {
+         "char_start": 0,
+         "char_end": 3,
+         "language": "ja"
+        }
+       ]
+      },
+      {
+       "segment_id": "tm-2",
+       "source_speech_segment_ids": [
+        "sp-m2"
+       ],
+       "start_seconds": 2.0,
+       "end_seconds": 4.0,
+       "text": "aé👍b",
+       "is_low_confidence": false,
+       "needs_review": false,
+       "review_reasons": []
+      },
+      {
+       "segment_id": "tm-3",
+       "source_speech_segment_ids": [
+        "sp-m3"
+       ],
+       "start_seconds": 4.0,
+       "end_seconds": 6.0,
+       "text": "Good morning",
+       "is_low_confidence": false,
+       "needs_review": false,
+       "review_reasons": []
+      }
+     ]
+    }
+   ],
+   "feature_status": {
+    "token_timing": "unsupported",
+    "token_confidence": "unsupported",
+    "segment_confidence": "unsupported",
+    "language_id": "unsupported",
+    "language_confidence": "unsupported",
+    "speaker_diarization": "unsupported",
+    "nbest": "unsupported"
+   },
+   "capability_report": {
+    "schema_version": "1.0.0",
+    "adapter_id": "asr-bare",
+    "adapter_version": "0.0.1",
+    "supported_languages": [],
+    "token_timing_units": [],
+    "supports_word_timing": false,
+    "token_confidence_semantics": "none",
+    "segment_confidence_semantics": "none",
+    "supports_language_id": false,
+    "supports_intra_sentential_lid": false,
+    "language_confidence_semantics": "none",
+    "supports_diarization": false,
+    "supports_independent_channel_input": false,
+    "supports_overlap_streams": false,
+    "supports_nbest": false,
+    "nbest_score_semantics": "none",
+    "restricts_candidate_languages": false,
+    "term_injection_modes": [],
+    "network_requirement": "none",
+    "requires_gpu": false,
+    "determinism_tier": "T1",
+    "limitations": [
+     "timing·confidence·language id를 지원하지 않는다 — 없는 값을 채우지 않고 생략한다"
+    ]
+   },
+   "provenance": {
+    "adapter_id": "asr-bare",
+    "adapter_version": "0.0.1",
+    "params_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+   }
+  },
+  "document_refs": {
+   "transcript": {
+    "schema_version": "1.0.0",
+    "artifact_id": "art-tx-mini",
+    "kind": "text",
+    "uri": "jobs/job-029/transcript.json",
+    "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "byte_size": 1024,
+    "media_type": "application/json",
+    "produced_by": {
+     "stage_id": "stage-synthetic",
+     "job_id": "job-029"
+    },
+    "created_at": "2026-08-29T00:00:00Z",
+    "parent_refs": [],
+    "is_estimate": false
+   }
+  }
+ }
+}

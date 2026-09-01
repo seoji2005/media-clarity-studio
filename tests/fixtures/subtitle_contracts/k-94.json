@@ -1,0 +1,408 @@
+{
+ "case_id": "K-94",
+ "title": "번역 문서만 있고 원문 Transcript가 문서 집합에 없다",
+ "mutation_id": "IM-161",
+ "expected": {
+  "valid": false,
+  "findings": [
+   {
+    "code": "E_SOURCE_REF",
+    "location": "translated_transcript/source_transcript"
+   }
+  ]
+ },
+ "documents": {
+  "speech_segments": [
+   {
+    "schema_version": "1.0.0",
+    "segment_id": "sp-1",
+    "timebase_ref": "tb-source",
+    "start_seconds": 0.0,
+    "end_seconds": 2.0,
+    "audio_ref": {
+     "schema_version": "1.0.0",
+     "artifact_id": "art-sp-1",
+     "kind": "audio",
+     "uri": "work/sp-1.wav",
+     "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+     "byte_size": 1024,
+     "media_type": "audio/wav",
+     "produced_by": {
+      "stage_id": "stage-synthetic",
+      "job_id": "job-029"
+     },
+     "created_at": "2026-08-29T00:00:00Z",
+     "parent_refs": [],
+     "is_estimate": false
+    },
+    "stream_id": "s-main",
+    "concurrent_stream_ids": [
+     "s-alt"
+    ],
+    "overlap_kind": "partial",
+    "separation_method": "channel",
+    "source_track_index": 0,
+    "channel_semantics": "independent",
+    "processing_chain": [
+     {
+      "step": "vad",
+      "params_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+     }
+    ],
+    "provenance": {
+     "adapter_id": "audio-synthetic",
+     "adapter_version": "0.0.1",
+     "config_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    "source_channel_index": 0,
+    "speaker_label": "CH-L"
+   },
+   {
+    "schema_version": "1.0.0",
+    "segment_id": "sp-2",
+    "timebase_ref": "tb-source",
+    "start_seconds": 1.0,
+    "end_seconds": 4.0,
+    "audio_ref": {
+     "schema_version": "1.0.0",
+     "artifact_id": "art-sp-2",
+     "kind": "audio",
+     "uri": "work/sp-2.wav",
+     "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+     "byte_size": 1024,
+     "media_type": "audio/wav",
+     "produced_by": {
+      "stage_id": "stage-synthetic",
+      "job_id": "job-029"
+     },
+     "created_at": "2026-08-29T00:00:00Z",
+     "parent_refs": [],
+     "is_estimate": false
+    },
+    "stream_id": "s-alt",
+    "concurrent_stream_ids": [
+     "s-main"
+    ],
+    "overlap_kind": "partial",
+    "separation_method": "channel",
+    "source_track_index": 0,
+    "channel_semantics": "independent",
+    "processing_chain": [
+     {
+      "step": "vad",
+      "params_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+     }
+    ],
+    "provenance": {
+     "adapter_id": "audio-synthetic",
+     "adapter_version": "0.0.1",
+     "config_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    "source_channel_index": 1,
+    "speaker_label": "CH-R"
+   },
+   {
+    "schema_version": "1.0.0",
+    "segment_id": "sp-3",
+    "timebase_ref": "tb-source",
+    "start_seconds": 3.0,
+    "end_seconds": 4.0,
+    "audio_ref": {
+     "schema_version": "1.0.0",
+     "artifact_id": "art-sp-3",
+     "kind": "audio",
+     "uri": "work/sp-3.wav",
+     "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+     "byte_size": 1024,
+     "media_type": "audio/wav",
+     "produced_by": {
+      "stage_id": "stage-synthetic",
+      "job_id": "job-029"
+     },
+     "created_at": "2026-08-29T00:00:00Z",
+     "parent_refs": [],
+     "is_estimate": false
+    },
+    "stream_id": "s-main",
+    "concurrent_stream_ids": [
+     "s-alt"
+    ],
+    "overlap_kind": "partial",
+    "separation_method": "channel",
+    "source_track_index": 0,
+    "channel_semantics": "independent",
+    "processing_chain": [
+     {
+      "step": "vad",
+      "params_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+     }
+    ],
+    "provenance": {
+     "adapter_id": "audio-synthetic",
+     "adapter_version": "0.0.1",
+     "config_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    "source_channel_index": 0,
+    "speaker_label": "CH-L"
+   },
+   {
+    "schema_version": "1.0.0",
+    "segment_id": "sp-4",
+    "timebase_ref": "tb-source",
+    "start_seconds": 4.0,
+    "end_seconds": 6.0,
+    "audio_ref": {
+     "schema_version": "1.0.0",
+     "artifact_id": "art-sp-4",
+     "kind": "audio",
+     "uri": "work/sp-4.wav",
+     "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+     "byte_size": 1024,
+     "media_type": "audio/wav",
+     "produced_by": {
+      "stage_id": "stage-synthetic",
+      "job_id": "job-029"
+     },
+     "created_at": "2026-08-29T00:00:00Z",
+     "parent_refs": [],
+     "is_estimate": false
+    },
+    "stream_id": "s-main",
+    "concurrent_stream_ids": [],
+    "overlap_kind": "none",
+    "separation_method": "channel",
+    "source_track_index": 0,
+    "channel_semantics": "independent",
+    "processing_chain": [
+     {
+      "step": "vad",
+      "params_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+     }
+    ],
+    "provenance": {
+     "adapter_id": "audio-synthetic",
+     "adapter_version": "0.0.1",
+     "config_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    "source_channel_index": 0,
+    "speaker_label": "CH-L"
+   }
+  ],
+  "translated_transcript": {
+   "schema_version": "1.0.0",
+   "translated_transcript_id": "tl-base",
+   "timebase_ref": "tb-source",
+   "source_transcript": {
+    "schema_version": "1.0.0",
+    "artifact_id": "art-tx-base",
+    "kind": "text",
+    "uri": "jobs/job-029/transcript.json",
+    "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "byte_size": 1024,
+    "media_type": "application/json",
+    "produced_by": {
+     "stage_id": "stage-synthetic",
+     "job_id": "job-029"
+    },
+    "created_at": "2026-08-29T00:00:00Z",
+    "parent_refs": [],
+    "is_estimate": false
+   },
+   "target_language": "ko",
+   "streams": [
+    {
+     "stream_id": "s-main",
+     "segments": [
+      {
+       "segment_id": "tl-1",
+       "source_fragments": [
+        {
+         "source_segment_id": "tr-1",
+         "char_start": 0,
+         "char_end": 11,
+         "source_text": "今日はsunnyですね"
+        }
+       ],
+       "target_text": "오늘은 맑네요",
+       "alignment_kind": "one_to_one",
+       "alignment_evidence_source": "adapter",
+       "confidence": 0.82,
+       "is_low_confidence": false,
+       "needs_review": false,
+       "review_reasons": []
+      },
+      {
+       "segment_id": "tl-2",
+       "source_fragments": [
+        {
+         "source_segment_id": "tr-2",
+         "char_start": 0,
+         "char_end": 5,
+         "source_text": "Hello"
+        }
+       ],
+       "target_text": "안녕",
+       "alignment_kind": "split",
+       "alignment_evidence_source": "orchestrator",
+       "is_low_confidence": false,
+       "needs_review": false,
+       "review_reasons": []
+      },
+      {
+       "segment_id": "tl-3",
+       "source_fragments": [
+        {
+         "source_segment_id": "tr-2",
+         "char_start": 5,
+         "char_end": 11,
+         "source_text": " world"
+        }
+       ],
+       "target_text": " 세계",
+       "alignment_kind": "split",
+       "alignment_evidence_source": "orchestrator",
+       "is_low_confidence": false,
+       "needs_review": true,
+       "review_reasons": [
+        "alignment_uncertain"
+       ]
+      },
+      {
+       "segment_id": "tl-5",
+       "source_fragments": [
+        {
+         "source_segment_id": "tr-4",
+         "char_start": 0,
+         "char_end": 3,
+         "source_text": "Yes"
+        },
+        {
+         "source_segment_id": "tr-5",
+         "char_start": 0,
+         "char_end": 2,
+         "source_text": "No"
+        }
+       ],
+       "target_text": "네 아니요",
+       "alignment_kind": "merged",
+       "alignment_evidence_source": "orchestrator",
+       "is_low_confidence": false,
+       "needs_review": false,
+       "review_reasons": []
+      }
+     ]
+    },
+    {
+     "stream_id": "s-alt",
+     "segments": [
+      {
+       "segment_id": "tl-4",
+       "source_fragments": [
+        {
+         "source_segment_id": "tr-3",
+         "char_start": 0,
+         "char_end": 7,
+         "source_text": "Mmm hmm"
+        }
+       ],
+       "target_text": "",
+       "alignment_kind": "dropped",
+       "alignment_evidence_source": "orchestrator",
+       "is_low_confidence": false,
+       "needs_review": true,
+       "review_reasons": [
+        "untranslated_span"
+       ]
+      },
+      {
+       "segment_id": "tl-6",
+       "source_fragments": [
+        {
+         "source_segment_id": "tr-6",
+         "char_start": 0,
+         "char_end": 2,
+         "source_text": "Ah"
+        }
+       ],
+       "target_text": "아é👍",
+       "alignment_kind": "unknown",
+       "alignment_evidence_source": "orchestrator",
+       "is_low_confidence": false,
+       "needs_review": true,
+       "review_reasons": [
+        "source_ambiguous"
+       ]
+      }
+     ]
+    }
+   ],
+   "coverage_status": "complete",
+   "uncovered_source_fragments": [],
+   "feature_status": {
+    "segment_alignment": "produced",
+    "translation_confidence": "produced"
+   },
+   "capability_report": {
+    "adapter_id": "mt-synthetic",
+    "adapter_version": "0.0.1",
+    "supported_source_languages": [
+     "en",
+     "ja"
+    ],
+    "supported_target_languages": [
+     "ko"
+    ],
+    "supports_segment_alignment": true,
+    "supports_document_context": true,
+    "supports_code_switching_input": true,
+    "translation_confidence_semantics": "calibrated_probability",
+    "network_requirement": "none",
+    "requires_gpu": false,
+    "determinism_tier": "T2",
+    "limitations": [
+     "합성 fixture adapter"
+    ]
+   },
+   "provenance": {
+    "adapter_id": "mt-synthetic",
+    "adapter_version": "0.0.1",
+    "params_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+    "seed": 11
+   }
+  },
+  "document_refs": {
+   "transcript": {
+    "schema_version": "1.0.0",
+    "artifact_id": "art-tx-base",
+    "kind": "text",
+    "uri": "jobs/job-029/transcript.json",
+    "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "byte_size": 1024,
+    "media_type": "application/json",
+    "produced_by": {
+     "stage_id": "stage-synthetic",
+     "job_id": "job-029"
+    },
+    "created_at": "2026-08-29T00:00:00Z",
+    "parent_refs": [],
+    "is_estimate": false
+   },
+   "translated_transcript": {
+    "schema_version": "1.0.0",
+    "artifact_id": "art-tl-base",
+    "kind": "text",
+    "uri": "jobs/job-029/translated.json",
+    "content_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "byte_size": 1024,
+    "media_type": "application/json",
+    "produced_by": {
+     "stage_id": "stage-synthetic",
+     "job_id": "job-029"
+    },
+    "created_at": "2026-08-29T00:00:00Z",
+    "parent_refs": [],
+    "is_estimate": false
+   }
+  }
+ }
+}

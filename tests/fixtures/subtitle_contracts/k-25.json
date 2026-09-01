@@ -1,0 +1,157 @@
+{
+ "case_id": "K-25",
+ "title": "separation_method=none인데 speaker_label을 주장했다",
+ "mutation_id": "IM-50",
+ "expected": {
+  "valid": false,
+  "findings": [
+   {
+    "code": "E_CHANNEL_SEMANTICS",
+    "location": "speech_segments/0/speaker_label"
+   }
+  ]
+ },
+ "documents": {
+  "speech_segments": [
+   {
+    "schema_version": "1.0.0",
+    "segment_id": "sp-m1",
+    "timebase_ref": "tb-source",
+    "start_seconds": 0.0,
+    "end_seconds": 2.0,
+    "audio_ref": {
+     "schema_version": "1.0.0",
+     "artifact_id": "art-sp-m1",
+     "kind": "audio",
+     "uri": "work/sp-m1.wav",
+     "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+     "byte_size": 1024,
+     "media_type": "audio/wav",
+     "produced_by": {
+      "stage_id": "stage-synthetic",
+      "job_id": "job-029"
+     },
+     "created_at": "2026-08-29T00:00:00Z",
+     "parent_refs": [],
+     "is_estimate": false
+    },
+    "stream_id": "s-1",
+    "concurrent_stream_ids": [],
+    "overlap_kind": "none",
+    "separation_method": "none",
+    "source_track_index": 0,
+    "channel_semantics": "unknown",
+    "processing_chain": [
+     {
+      "step": "vad",
+      "params_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+     }
+    ],
+    "provenance": {
+     "adapter_id": "audio-synthetic",
+     "adapter_version": "0.0.1",
+     "config_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    "speaker_label": "SPK-X"
+   },
+   {
+    "schema_version": "1.0.0",
+    "segment_id": "sp-m2",
+    "timebase_ref": "tb-source",
+    "start_seconds": 2.0,
+    "end_seconds": 4.0,
+    "audio_ref": {
+     "schema_version": "1.0.0",
+     "artifact_id": "art-sp-m2",
+     "kind": "audio",
+     "uri": "work/sp-m2.wav",
+     "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+     "byte_size": 1024,
+     "media_type": "audio/wav",
+     "produced_by": {
+      "stage_id": "stage-synthetic",
+      "job_id": "job-029"
+     },
+     "created_at": "2026-08-29T00:00:00Z",
+     "parent_refs": [],
+     "is_estimate": false
+    },
+    "stream_id": "s-1",
+    "concurrent_stream_ids": [],
+    "overlap_kind": "none",
+    "separation_method": "none",
+    "source_track_index": 0,
+    "channel_semantics": "unknown",
+    "processing_chain": [
+     {
+      "step": "vad",
+      "params_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+     }
+    ],
+    "provenance": {
+     "adapter_id": "audio-synthetic",
+     "adapter_version": "0.0.1",
+     "config_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    }
+   },
+   {
+    "schema_version": "1.0.0",
+    "segment_id": "sp-m3",
+    "timebase_ref": "tb-source",
+    "start_seconds": 4.0,
+    "end_seconds": 6.0,
+    "audio_ref": {
+     "schema_version": "1.0.0",
+     "artifact_id": "art-sp-m3",
+     "kind": "audio",
+     "uri": "work/sp-m3.wav",
+     "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+     "byte_size": 1024,
+     "media_type": "audio/wav",
+     "produced_by": {
+      "stage_id": "stage-synthetic",
+      "job_id": "job-029"
+     },
+     "created_at": "2026-08-29T00:00:00Z",
+     "parent_refs": [],
+     "is_estimate": false
+    },
+    "stream_id": "s-1",
+    "concurrent_stream_ids": [],
+    "overlap_kind": "none",
+    "separation_method": "none",
+    "source_track_index": 0,
+    "channel_semantics": "unknown",
+    "processing_chain": [
+     {
+      "step": "vad",
+      "params_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+     }
+    ],
+    "provenance": {
+     "adapter_id": "audio-synthetic",
+     "adapter_version": "0.0.1",
+     "config_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    }
+   }
+  ],
+  "document_refs": {
+   "transcript": {
+    "schema_version": "1.0.0",
+    "artifact_id": "art-tx-mini",
+    "kind": "text",
+    "uri": "jobs/job-029/transcript.json",
+    "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "byte_size": 1024,
+    "media_type": "application/json",
+    "produced_by": {
+     "stage_id": "stage-synthetic",
+     "job_id": "job-029"
+    },
+    "created_at": "2026-08-29T00:00:00Z",
+    "parent_refs": [],
+    "is_estimate": false
+   }
+  }
+ }
+}

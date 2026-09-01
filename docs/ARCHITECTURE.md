@@ -92,7 +92,7 @@ ArtifactRef/v1:
   artifact_id      : 문자열                 # 프로젝트 내 고유
   kind             : "audio" | "video" | "frames" | "text" | "mask"
                      | "subtitle" | "report" | "reference_bundle" | "blob"
-  uri              : 문자열                 # storage 상대 경로
+  uri              : 문자열                 # 불투명 위치 문자열 (아래 URI 규칙)
   content_hash     : 문자열                 # 무결성·캐시 키
   byte_size        : 정수
   media_type       : 문자열                 # 예: "audio/wav", "application/json"
@@ -108,6 +108,84 @@ ArtifactRef/v1:
 - `content_hash`가 같으면 같은 산출물로 취급합니다 (캐시 적중).
 - `parent_refs`로 **계보 추적**이 가능해야 합니다. 어떤 입력에서 나왔는지 역추적할 수 없는 산출물은 평가에 쓰지 않습니다.
 - 형식이 바뀌면 `schema_version`의 major를 올립니다. **하위 호환이 깨진 산출물끼리 비교하지 않습니다.**
+
+**`uri` 규칙 — generic ArtifactRef와 TASK-028 store 출력은 다릅니다 (REVIEW-026 D-04)**
+
+| 대상 | `uri`가 담는 것 | 강제하는 곳 |
+|---|---|---|
+| **generic `ArtifactRef`** (기계 정본 `common-v1` `$defs/ArtifactRef`) | **불투명 문자열.** 사용자가 고른 외부 입력 매체의 URI도 담을 수 있어 run 산출물 경로 제한을 적용하지 **않습니다** | `common-v1` schema — `type: string`, `minLength: 1`뿐 |
+| **TASK-028 content-addressed store가 만든 artifact** | project root 기준 **portable relative path**. 외부 절대 경로를 담지 않습니다 | store 구현(`artifact_store.py`)과 §7.8. schema가 아니라 **생산 규칙**입니다 |
+
+즉 §7.8의 relative-path 규칙은 **store가 자기 출력에 대해 지키는 약속**이지 모든
+`ArtifactRef`에 대한 schema 제약이 아닙니다. 외부 입력 매체를 가리키는 ref에 그 제약을
+적용하면 사용자가 고른 파일을 참조할 수 없게 됩니다. 두 규칙을 하나로 합치지 않습니다.
+
+`uri`가 같다는 것이 **같은 artifact라는 뜻인지**는 아직 계약이 없습니다. identity는
+`artifact_id` + `content_hash`이며(§7.12), `uri`·`produced_by`·`created_at`·`parent_refs`·
+`timebase_ref`의 동일성 의미는 **오너 결정 항목으로 열려 있습니다** (TASK-029 §17.8-6).
+TASK-029 validator는 이 다섯 field를 비교하지 않습니다.
+
+### 2.1.1 `document_refs` — 검증 컨텍스트 envelope (공개 계약)
+
+**문서 안에 자기 자신의 `ArtifactRef`를 둘 수 없습니다.** `content_hash`는 그 문서 바이트의
+해시이므로 문서 안에 적으면 순환이 됩니다. 그래서 "지금 검증하는 이 문서가 실제로 어떤
+artifact인가"는 문서가 아니라 **검증 호출의 컨텍스트**로 받습니다. 이 envelope은 구현
+세부가 아니라 검증 API의 일부이므로 여기 적습니다 (REVIEW-026 D-04).
+
+```
+검증 입력 (문서 집합):
+  speech_segments?       : SpeechSegment[]
+  transcript?            : Transcript
+  translated_transcript? : TranslatedTranscript
+  subtitle_document?     : SubtitleDocument
+  document_refs?         : {                      # 검증 컨텍스트 envelope
+      transcript?             : ArtifactRef       # 이 Transcript 자신의 ref
+      translated_transcript?  : ArtifactRef       # 이 TranslatedTranscript 자신의 ref
+  }
+```
+
+| 항목 | 계약 |
+|---|---|
+| role | `transcript`와 `translated_transcript` **둘뿐**입니다. 다른 key는 `E_SCHEMA`이며 그 key 이름은 finding location에 남지 않습니다 |
+| 값의 모양 | 각 role의 값은 `common-v1` `$defs/ArtifactRef` 전체를 만족해야 합니다. 계약 밖 field는 거부합니다 |
+| 종류 결박 | 문서 artifact이므로 `kind`와 `media_type`이 문서용 값이어야 합니다. `kind="video"` 같은 매체 ref를 문서 identity로 쓸 수 없습니다 |
+| **선택이 아님** | 계보 identity를 검사해야 하는 조합에서 **필수**입니다. 없거나 필요한 role이 빠지면 조용히 건너뛰지 않고 `E_SOURCE_REF`로 거부합니다. "확인하지 못했다"를 `VALID`로 돌려주지 않습니다. 어느 조합에서 무엇이 필요한지는 아래 표에 **전부** 적습니다 |
+| identity 비교 | 같은 `artifact_id`를 가리키는 모든 ref는 `schema_version`·`content_hash`·`kind`·`media_type`·`byte_size`·`is_estimate`가 일치해야 합니다 (§7.12) |
+| 비교하지 않는 field | `uri`·`produced_by`·`created_at`·`parent_refs`·`timebase_ref` — 동일성 의미가 **오너 결정 항목**입니다 (위 §2.1) |
+
+**어떤 문서 조합에서 어떤 role이 필요한가 (전부)**
+
+| 검증 입력에 든 문서 | 필요한 role |
+|---|---|
+| `speech_segments`만 / `transcript`까지 | **없음.** 상류 문서를 참조하는 문서가 없습니다 |
+| `translated_transcript` 포함 | `transcript` |
+| `subtitle_document`, `text_axis="source"` | `transcript` |
+| `subtitle_document`, `text_axis="target"` | `transcript` **와** `translated_transcript` |
+
+**값이 만족해야 하는 것**
+
+| 항목 | 계약 |
+|---|---|
+| `kind` | `"text"` 고정입니다. 상류 문서는 전부 JSON 문서이므로 `kind="video"` 같은 매체 ref를 문서 identity로 쓸 수 없습니다 |
+| `media_type` | essence가 `"application/json"`이어야 합니다. `; charset=utf-8` 같은 parameter가 붙어도 되고 대소문자도 구분하지 않습니다 — **다만 그것은 종류 결박 규칙일 뿐입니다.** identity 비교(위 표)는 **문자열이 정확히 일치**해야 하므로, 같은 artifact를 가리키는 ref 중 한 곳만 표기를 바꾸면 `E_SOURCE_REF`입니다 |
+| 두 role의 분리 | `transcript`와 `translated_transcript`가 **같은 `(artifact_id, content_hash)`로 붕괴하면** `E_SOURCE_REF`입니다. 서로 다른 문서가 한 artifact가 되면 계보가 무너집니다 |
+| 문서 쪽과의 일치 | `translated_transcript.source_transcript`, `subtitle_document.input_document_ref`, `subtitle_document.source_transcript_ref`가 각각 컨텍스트의 해당 role과 **같은 identity**를 가리켜야 합니다 |
+
+**finding 위치 규약**
+
+컨텍스트가 없거나 role이 빠졌을 때의 finding은 `document_refs/...`가 아니라 **그 검사가 붙는
+실제 문서 field**를 가리킵니다 — `translated_transcript/source_transcript`,
+`subtitle_document/input_document_ref`, `subtitle_document/source_transcript_ref`. 읽는 사람이
+"무엇을 확인하지 못했는가"를 문서 쪽에서 바로 보게 하기 위해서입니다. 두 role이 같은
+artifact로 붕괴한 경우만 `document_refs/translated_transcript`를 가리킵니다.
+
+계약 밖 key는 `E_SCHEMA` @ `document_refs`이며 **그 key 이름은 finding location에 남지
+않습니다** (TASK-029 §8.2 비식별화 계약).
+
+> 이 envelope을 채우는 것은 **producer(orchestrator)의 몫**입니다. store가 문서를 쓰면서
+> 돌려준 ref를 그대로 넘깁니다. 기계 정본은
+> [`schemas/`](../schemas/)의 다섯 파일 + `common-v1`이고, 검증 진입점 계약은
+> [`docs/tasks/TASK-029.md`](tasks/TASK-029.md) §8에 있습니다.
 
 ### 2.2 `Timebase/v1` — 정준 시간축 (Canonical Timeline)
 
@@ -293,6 +371,41 @@ ReferenceBundle/v1:
 > **번역 모델·API·공급자·프레임워크는 이 계약이 고르지 않습니다** (U-22).
 > 이 절은 **정답을 어디에 담고 무엇과 비교하는가**만 규정합니다.
 > 두 축의 지표 정의는 [`EVALS.md`](EVALS.md) §4.1(원문 축)·§4.7(번역 축)에 있습니다.
+
+### 3.0.2 언어 authority는 **정답 쪽**과 **가설 쪽**을 나눠 읽습니다 (TASK-029)
+
+§3.0은 **정답(`ReferenceBundle`) 안에서** 무엇이 언어의 정답인지를 정합니다.
+가설 산출물 쪽에도 같은 표현을 그대로 옮겨 쓰면 "cue에도 `language_spans`가 있어야 한다"는
+잘못된 읽기가 생깁니다 (REVIEW-023 D-01). 세 자리를 구분합니다.
+
+| 자리 | 지위 | 어디에 있나 |
+|---|---|---|
+| `ReferenceBundle.language_spans[]` | **평가 정답(ground truth).** 언어 지표가 채점 기준으로 쓰는 유일한 값 (§3.0) | `ReferenceBundle` |
+| `Transcript.streams[].segments[].language_spans[]` | **가설 쪽 LID의 단일 출처(single source).** ASR/LID가 낸 언어 가설은 여기에만 있습니다 | `transcript-v1.schema.json` |
+| `SubtitleDocument` | **독립 LID 가설을 갖지 않습니다.** cue에 `language_spans`·`dominant_language`를 두지 않습니다 | `subtitle-document-v1.schema.json` |
+
+**규칙**
+
+| # | 규칙 |
+|---|---|
+| **L-1** | 가설 쪽 언어 판단의 정본은 `Transcript.language_spans[]` 하나입니다. `dominant_language`는 그 파생 편의 필드이며 정답으로 쓰지 않습니다 (§7.3) |
+| **L-2** | `SubtitleDocument`는 **자체 LID를 주장하지 않습니다.** cue 수준 **문자 범위** 언어는 현재 계약으로 계산할 수 없으므로 **미지원**입니다(REVIEW-024 D-02). cue는 `lineage_fragments[]`로 입력 segment까지, 번역이면 그 segment의 `source_fragments[]`로 원문 segment까지 **segment 수준으로 추적**됩니다. 그 이상은 후속 TASK가 source↔target 문자 정렬과 문자↔시간 매핑을 정의한 뒤의 일입니다 |
+| **L-3** | cue의 `review_reasons`에 남는 `language_switch`는 **검토 신호**이지 언어 정답이 아닙니다 |
+| **L-4** | `supports_language_id=false`이면 `language_spans`도 `dominant_language`도 **부재**여야 합니다. 설정에서 받은 후보 언어를 결과처럼 기록하지 않습니다 |
+| **L-5** | 맞닿은 두 `language_span`의 언어가 같으면 **하나로 합친 것이 정규형**입니다. 같은 시간 구간을 두 가지 표현으로 적을 수 없습니다. TASK-029 validator가 `E_OFFSET_ORDER`로 거부합니다 (ADR-0029) |
+| **L-6** | **공식 LID 정확도 채점은 미지원입니다** (ADR-0029). 이 표현들은 계보·검토 신호로 쓰이며, 채점 지표는 [`EVALS.md`](EVALS.md) §4.5(a)가 `status: "unsupported"`로 고정합니다. 동시 발화 구간의 단일 정답 label 규칙이 없기 때문이며, 그 규칙은 후속 화자/정렬 평가 TASK가 정합니다 |
+
+> 원문 축 `Transcript` 가설의 언어 시간 귀속 범위는 [`EVALS.md`](EVALS.md) §4.5(a)에 있습니다.
+> **공식 LID 정확도 지표 자체가 미지원**이며, 그 절이 후속 구현을 위해 고정한 것은 격자
+> origin·interval·꼬리 프레임 규약과 인접 동일 언어 정규화, 동시 다른 언어 stream의 표현,
+> 분모 0의 표현입니다 (ADR-0029). segment 안쪽 문자→시간 투영은 token에 문자 오프셋이 없어
+> 여전히 계약이 없습니다 (REVIEW-025 D-03).
+> 저장 위치를 늘리지 않는 쪽을 택한 이유는, 같은 사실을 두 곳에 적으면 둘이 갈라졌을 때
+> 어느 쪽이 정답인지 정할 방법이 없기 때문입니다.
+>
+> **cue 문자 범위 LID를 "결정적으로 투영한다"고 쓰지 않습니다.** 현재 계약에는 번역
+> target 문자와 원문 문자 사이의 정렬이 없고, `Transcript` token에는 문자 오프셋이 없으며,
+> `norm-v1`(U-19)도 미정입니다. 없는 대응을 있다고 쓰는 것이 저장 중복보다 나쁩니다.
 
 ### 3.1 부분 번들 (Partial Bundle)
 
@@ -549,6 +662,12 @@ SpeechSegment/v1:
 다만 과도한 잡음 제거·과도한 VAD는 실제 발화를 버립니다.
 **강도는 평가로 결정할 항목입니다 (U-12).**
 
+> **기계 정본: [`schemas/speech-segment-v1.schema.json`](../schemas/speech-segment-v1.schema.json)** (TASK-029).
+> 위 블록은 설계 의도를 읽기 위한 pseudo-contract이며, 필드·enum이 다르면 **schema가 정답**입니다.
+> ID 유일성과 concurrent 참조 대칭성은 하나의 segment 객체로 표현할 수 없어
+> [`src/media_clarity/subtitle_contracts.py`](../src/media_clarity/subtitle_contracts.py)의
+> ordered 집합 validator가 검사합니다. 차이 목록은 §7.12를 보십시오.
+
 ---
 
 ### 7.3 `asr` — 음성 인식
@@ -594,6 +713,11 @@ Transcript/v1:
 - `tokens`, `confidence`, `language_spans`는 **전부 선택 필드(optional)** 입니다.
   모든 ASR 모델이 이를 제공하지는 않기 때문입니다.
 
+> **기계 정본: [`schemas/transcript-v1.schema.json`](../schemas/transcript-v1.schema.json)** (TASK-029).
+> `Transcript/v1`은 **immutable ASR evidence**입니다. 번역·사람 교정·forced alignment가 이 문서를
+> 덮어쓰지 않으며, forced alignment 결과는 **후속 별도 artifact**입니다 (TASK-029에서 만들지 않음).
+> 모든 문자 offset은 exact stored `text`의 **Unicode scalar value index** 반개구간입니다.
+
 #### 7.3.1 어댑터 능력 보고와 대체 동작 (Fallback)
 
 **능력이 없는 것과 값이 0인 것은 다릅니다.** 이를 혼동하면 평가가 조용히 틀립니다.
@@ -620,14 +744,27 @@ AdapterCapabilityReport:
 |---|---|---|
 | 단어 타이밍 없음 | `tokens` 생략. 세그먼트 경계만 사용. 강제 정렬(forced alignment)을 **별도 단계로** 시도할 수 있으나, 그 사실을 `provenance`에 기록 | 토큰 단위 타임스탬프 지표는 **미지원** |
 | 신뢰도 없음 | `confidence` 필드 **생략**. 1.0으로 채우지 않는다 | 신뢰도 기반 지표는 **미지원**. `needs_review` 판정은 다른 신호로 대체 |
-| 언어 식별 없음 | `language_spans` 생략. `dominant_language`를 설정에서 받은 값으로 기록하되 `switch_kind: "unknown"` | 언어 식별 정확도 지표는 **미지원** |
+| 언어 식별 없음 | `language_spans`와 `dominant_language`를 **둘 다 생략.** 설정에서 받은 언어를 `dominant_language`에 적지 않는다 | 언어 식별 정확도 지표는 **미지원** |
 | 문장 내 LID 없음 | 세그먼트 전체를 하나의 span으로 기록 | 문장 내 전환 지표는 **미지원** |
 | 겹침 스트림 없음 | 단일 스트림만 생성 | cpWER은 **미지원**, 완화 지표로 대체 ([`EVALS.md`](EVALS.md) §4.2) |
 
 > **금지:** 없는 값을 기본값으로 채우는 것. `confidence = 1.0`, `language = "en"` 같은
 > 조용한 채움은 지표를 오염시키고 오염 사실을 숨깁니다.
 
+> **이전 판의 LID 대체 동작을 철회합니다 (REVIEW-026 D-04).** 이전 표는 `supports_language_id`가
+> 거짓일 때 "설정에서 받은 `dominant_language`를 기록하라"고 적었습니다. 그것은 **어댑터가 하지
+> 않은 판단을 어댑터의 가설처럼 저장하는 것**이고, 위 금지 문장과도 정면으로 어긋납니다.
+> 기계 정본(`transcript-v1`)과 TASK-029 validator는 capability가 거짓이면
+> `language_spans`와 `dominant_language`가 **둘 다 없을 것**을 요구합니다. 설정 언어는
+> 실행 옵션이지 관측이 아니므로 `provenance`의 `params_hash`가 담을 값이며 문서 본문에
+> 언어 가설로 옮겨 적지 않습니다.
+
 **다국어 전략은 아직 미정입니다 (U-13).** (a) 구간별 LID 후 언어별 모델, (b) 다국어 통합 모델.
+
+> **기계 정본: [`schemas/adapter-capability-report-v1.schema.json`](../schemas/adapter-capability-report-v1.schema.json)** (TASK-029).
+> 정본은 위 목록에 없는 축(token timing unit, confidence semantics, channel 입력, term injection,
+> candidate language, network 요구)을 추가로 고정하고, 실행 결과와의 결박을 Transcript의
+> `feature_status` 일곱 key로 표현합니다 (`produced | not_requested | no_result | unsupported`).
 
 ---
 
@@ -682,6 +819,13 @@ SubtitleDocument/v1:
   표현되지 않을 수 있습니다. **표현하지 못한 것을 조용히 버리지 않고 기록**합니다.
 - `review_reason`은 사람이 어디를 봐야 하는지 알려줍니다.
   자동 결과는 초안이며, **어디가 불확실한지 말해주는 것이 "다 맞다"보다 유용**합니다.
+
+> **기계 정본: [`schemas/subtitle-document-v1.schema.json`](../schemas/subtitle-document-v1.schema.json)** (TASK-029).
+> 정본은 cue마다 **line별 exact scalar fragment lineage**(`lineage_fragments[]`)와, 원문 whitespace를
+> 줄 경계로 옮긴 기록(`line_break_whitespace[]`)을 필수로 둡니다. 직접 입력 문서의 모든 scalar 범위는
+> 둘 중 하나로 **정확히 한 번** 덮여야 하며, 공백 없는 일본어 줄 분할도 인접 visible range로 표현합니다.
+> U-18이 미정이므로 CPS·줄 길이·표시시간 숫자는 schema 기본값이 아니라
+> `style_profile_id`/`style_profile_version`과 실행 시점 `resolved_style` snapshot으로 남깁니다.
 
 ---
 
@@ -981,6 +1125,54 @@ TranslationCapabilityReport:
 > **`translate`의 상세 설계는 TASK-005·TASK-006의 범위입니다.**
 > 이 절은 **모듈 경계·계약·미지원 처리**만 고정하며, 지표의 구체 정의는
 > [`EVALS.md`](EVALS.md) §4.7에 있습니다.
+
+> **기계 정본: [`schemas/translated-transcript-v1.schema.json`](../schemas/translated-transcript-v1.schema.json)** (TASK-029).
+> `TranslationCapabilityReport`는 그 파일의 `#/$defs/TranslationCapabilityReport`에 **한 번만**
+> 정의하며 다른 schema나 Python 상수가 같은 enum·field set을 복제하지 않습니다.
+> 정본은 `source_segment_ids` 대신 **exact source fragment**(`source_segment_id` + scalar
+> `char_start`/`char_end` + `source_text`)를 쓰고, `coverage_status`(`complete | partial`)와
+> `uncovered_source_fragments[]`가 원문의 모든 non-empty scalar 범위를 **정확히 한 번 partition**합니다.
+
+---
+
+### 7.12 pseudo-contract → TASK-029 기계 정본 migration note
+
+§7.2·§7.3·§7.3.1·§7.4·§7.11의 블록은 **읽기 위한 pseudo-contract로 그대로 보존**합니다.
+아래는 그 산문과 [TASK-029](tasks/TASK-029.md) 정본 schema의 **실제 차이**이며, 조용히 바뀐 것이
+없음을 보이기 위한 기록입니다. 충돌하면 schema가 정답입니다 (§10 문서 우선순위).
+
+| 기존 pseudo-contract | TASK-029 정본 |
+|---|---|
+| SpeechSegment confidence가 사실상 필수 (`0..1`) | 선택이며, 있으면 `*_confidence_semantics`(`calibrated_probability \| model_score \| provider_opaque`)를 함께 기록. `calibrated_probability`만 `[0,1]`. 미지원값을 1.0으로 채우지 않음 |
+| channel 선택의 출처·독립성이 불명확 | `source_track_index`·선택 `source_channel_index`와 `channel_semantics`(`independent \| mixed \| unknown`)로 분리. `separation_method="channel"`은 independent channel일 때만 허용하고, `"none"`이면 speaker label을 주장할 수 없음 |
+| Transcript token timing의 출처가 불명확 | **raw ASR timing만** 허용. forced alignment는 후속 별도 artifact이며 이 문서에 합치지 않음 |
+| Transcript segment 경계가 명시되지 않음 | source timebase의 `[start_seconds, end_seconds)`와 `source_speech_segment_ids[]` lineage 필수. ASR segment 시간은 참조한 입력 구간 합집합 안에 있어야 함 |
+| 문자 offset 단위가 불명확 | exact stored `text`의 **Unicode scalar value index**. lone surrogate가 있는 text는 계약 실패 |
+| language span gap·switch 경계 의미가 불명확 | gap과 explicit `und`는 **모두** unknown + `needs_review` + `language_unknown`. 둘 중 하나라도 있으면 `dominant_language` 생략. `switch_kind`는 그 span의 `char_start`로 **들어오는 경계**를 설명하며 첫 span에는 두지 않음 |
+| LID 미지원 fallback이 설정값 `dominant_language`를 결과처럼 기록 | `supports_language_id=false`이면 `language_spans`·`dominant_language` 모두 부재. 후보 언어는 실행 options·provenance의 후속 계약 |
+| ASR n-best/alternative score의 의미가 불명확 | `supports_nbest`·`nbest_score_semantics`와 실행 `feature_status.nbest`로 결박. score는 semantics가 `none`이 아닐 때만 존재 |
+| capability에 channel·term·candidate·network 축이 없음 | capability report에 `supports_independent_channel_input`·`term_injection_modes[]`·`restricts_candidate_languages`·`network_requirement`를 명시 |
+| Transcript `streams[].speaker_label?`의 출처가 불명확 | `speaker_label`에는 `speaker_label_source`(`input \| adapter`)가 반드시 동반. input/channel에서 복사한 label은 `feature_status.speaker_diarization="produced"`의 근거가 되지 않음 |
+| 번역 capability의 `supports_confidence` boolean | `translation_confidence_semantics`(4값)로 대체. `supports_document_context`·`supports_code_switching_input`은 닫힌 report에 그대로 보존 |
+| 번역 `source_segment_ids` 생략 fallback | adapter가 정렬을 보고하지 못해도 orchestrator의 실제 입력 fragment lineage는 **항상** 보존. `alignment_evidence_source`(`adapter \| orchestrator`)가 둘을 구분 |
+| `source_language_authority` literal 문자열 경로 | 제거. 원문 언어의 authority는 `source_transcript` ref와 segment lineage이며, literal 경로는 stream 계층을 누락하고 ASR 가설을 정답처럼 표현했음 |
+| merged/split에서 source text 범위가 불명확 | exact source fragment + scalar offset. `one_to_one`은 전체, `split`은 non-empty strict subrange, `merged`는 서로 다른 2개 이상, `dropped`는 빈 `target_text` + `untranslated_span` |
+| 번역 coverage 개념 없음 | `coverage_status`와 `uncovered_source_fragments[]`가 `complete`·`partial` 모두에서 원문을 정확히 한 번 partition |
+| Subtitle cue upstream lineage가 불명확 | 축별 **line별 exact scalar fragment lineage**와 `line_break_whitespace[]`. 직접 입력의 모든 scalar를 정확히 한 번 덮어야 함 |
+| target Subtitle에 언어가 없음 | `text_axis="target"`이면 `target_language="ko"`와 원본 Transcript ref가 필수 |
+| document-level `unsupported_features[]` 문자열 | `cue_id`·`feature_kind`·`feature_identifier`·`reason_code`·`action`을 갖는 구조형 record. cue 비율을 계산할 수 있음 |
+| inline `style_profile` 숫자가 U-18과 충돌 가능 | `style_profile_id`/`style_profile_version` + `resolved_style` snapshot. schema에 기본 숫자를 두지 않음 |
+| cue `language_spans[]`·`dominant_language?` | **정본에서 제외.** 가설 쪽 LID의 단일 출처는 `Transcript.language_spans`이고(§3.0.2 L-1), `SubtitleDocument`는 독립 LID 가설을 갖지 않습니다(L-2). cue 수준 **문자 범위** 언어는 현재 계약으로 계산할 수 없어 **미지원**이며(EVALS §4.5(a), REVIEW-024 D-02) cue는 segment 수준으로만 원문까지 추적됩니다. cue의 `review_reasons`에 남는 `language_switch`는 검토 신호이지 정답이 아닙니다 |
+| cue `confidence?`·`speaker_label?` | **정본에서 제외.** 결박할 capability 축이 자막 계층에 없어 근거 없는 숫자·label이 되기 때문입니다. 신뢰도 신호는 upstream 문서와 `needs_review`/`review_reasons`가, 화자 표시는 `stream_id`와 lineage가 담당하며 표시 형식은 후속 export/QC TASK의 몫입니다 |
+
+**정본 안에서 한 번만 정의하는 것과, 한 번 더 나타나는 것**
+
+`TranslationCapabilityReport`는 `translated-transcript-v1.schema.json#/$defs`에만 있습니다.
+language tag의 구조 subset(`^[a-z]{2,8}(-[A-Za-z0-9]{1,8})*$`)은 `adapter-capability-report-v1`
+에만 **타입으로** 정의하고 나머지 schema가 상대 `$ref`로 재사용합니다. 다만
+`resolved_style.language_overrides`의 `patternProperties` **key**는 정규식 자체이므로 `$ref`로
+대신할 수 없어 그 한 곳에만 같은 문자열이 다시 나타납니다. `common-v1.schema.json`은 TASK-029에서
+수정 대상이 아니므로 이 공통 타입을 공통 파일로 올리지 않았습니다.
 
 ---
 
