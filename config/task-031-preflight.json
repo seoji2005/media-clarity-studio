@@ -1,0 +1,155 @@
+{
+  "schema_version": "1.0.0",
+  "task_id": "TASK-031",
+  "generated_at": "2026-09-01T13:58:26Z",
+  "target_system": {
+    "os": "windows",
+    "os_version": "11",
+    "architecture": "x86_64",
+    "python_version": "3.12",
+    "gpu": "NVIDIA GeForce RTX 4070 SUPER",
+    "vram_mib": 12288
+  },
+  "dependency_environments": [
+    {
+      "environment_id": "download",
+      "dependency_input_path": "requirements/task-031/download.in",
+      "dependency_input_sha256": "4b3f2de135ace9eb65088565aca3d65d16d4a0327b1a011b7ac2c35c3a4b98e9",
+      "direct_packages": [
+        {
+          "name": "huggingface-hub",
+          "version": "1.29.0",
+          "official_source": "https://pypi.org/project/huggingface-hub/1.29.0/"
+        }
+      ],
+      "lock_status": "pending_windows_resolution",
+      "lock_path": "requirements/task-031/locks/download-windows-py312.lock",
+      "lock_sha256": "",
+      "resolver_name": "uv",
+      "resolver_version": "",
+      "resolver_platform": "windows-x86_64",
+      "cuda_stack_status": "not_applicable",
+      "torch_version": "",
+      "cuda_version": "",
+      "cudnn_version": ""
+    },
+    {
+      "environment_id": "faster-whisper",
+      "dependency_input_path": "requirements/task-031/faster-whisper.in",
+      "dependency_input_sha256": "a0e33d44fb0f6e7b348f475f40b9395baa4f2c9739a6bdba663835169f600c84",
+      "direct_packages": [
+        {
+          "name": "faster-whisper",
+          "version": "1.2.1",
+          "official_source": "https://pypi.org/project/faster-whisper/1.2.1/"
+        }
+      ],
+      "lock_status": "pending_windows_resolution",
+      "lock_path": "requirements/task-031/locks/faster-whisper-windows-py312.lock",
+      "lock_sha256": "",
+      "resolver_name": "uv",
+      "resolver_version": "",
+      "resolver_platform": "windows-x86_64",
+      "cuda_stack_status": "pending_windows_probe",
+      "torch_version": "",
+      "cuda_version": "12",
+      "cudnn_version": "9"
+    },
+    {
+      "environment_id": "qwen-asr",
+      "dependency_input_path": "requirements/task-031/qwen-asr.in",
+      "dependency_input_sha256": "14c0a82fe791fa12b32e84f4aa3f598568b9fbc91c76f2c231589ab3fc147349",
+      "direct_packages": [
+        {
+          "name": "qwen-asr",
+          "version": "0.0.6",
+          "official_source": "https://pypi.org/project/qwen-asr/0.0.6/"
+        }
+      ],
+      "lock_status": "pending_windows_resolution",
+      "lock_path": "requirements/task-031/locks/qwen-asr-windows-py312.lock",
+      "lock_sha256": "",
+      "resolver_name": "uv",
+      "resolver_version": "",
+      "resolver_platform": "windows-x86_64",
+      "cuda_stack_status": "pending_windows_probe",
+      "torch_version": "",
+      "cuda_version": "",
+      "cudnn_version": ""
+    },
+    {
+      "environment_id": "translation",
+      "dependency_input_path": "requirements/task-031/translation.in",
+      "dependency_input_sha256": "7554a236d766c1ca3094f555e646d33c6d4a92c775aac241e98f7494bbf344bb",
+      "direct_packages": [
+        {
+          "name": "accelerate",
+          "version": "1.12.0",
+          "official_source": "https://pypi.org/project/accelerate/1.12.0/"
+        },
+        {
+          "name": "sentencepiece",
+          "version": "0.2.1",
+          "official_source": "https://pypi.org/project/sentencepiece/0.2.1/"
+        },
+        {
+          "name": "transformers",
+          "version": "5.16.1",
+          "official_source": "https://pypi.org/project/transformers/5.16.1/"
+        }
+      ],
+      "lock_status": "pending_windows_resolution",
+      "lock_path": "requirements/task-031/locks/translation-windows-py312.lock",
+      "lock_sha256": "",
+      "resolver_name": "uv",
+      "resolver_version": "",
+      "resolver_platform": "windows-x86_64",
+      "cuda_stack_status": "pending_windows_probe",
+      "torch_version": "",
+      "cuda_version": "",
+      "cudnn_version": ""
+    }
+  ],
+  "models": [
+    {
+      "role": "asr",
+      "model_id": "Systran/faster-whisper-large-v3",
+      "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+      "license": "MIT",
+      "environment_id": "faster-whisper",
+      "local_dir": "models/task-031/faster-whisper-large-v3"
+    },
+    {
+      "role": "asr",
+      "model_id": "Qwen/Qwen3-ASR-1.7B",
+      "revision": "7278e1e70fe206f11671096ffdd38061171dd6e5",
+      "license": "Apache-2.0",
+      "environment_id": "qwen-asr",
+      "local_dir": "models/task-031/qwen3-asr-1.7b"
+    },
+    {
+      "role": "translation",
+      "model_id": "google/madlad400-3b-mt",
+      "revision": "fa184c675da0b5c9e1c8694fccd4e12e2d422094",
+      "license": "Apache-2.0",
+      "environment_id": "translation",
+      "local_dir": "models/task-031/madlad400-3b-mt"
+    },
+    {
+      "role": "translation",
+      "model_id": "Qwen/Qwen3.5-4B",
+      "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+      "license": "Apache-2.0",
+      "environment_id": "translation",
+      "local_dir": "models/task-031/qwen3.5-4b"
+    },
+    {
+      "role": "alignment",
+      "model_id": "Qwen/Qwen3-ForcedAligner-0.6B",
+      "revision": "c7cbfc2048c462b0d63a45797104fc9db3ad62b7",
+      "license": "Apache-2.0",
+      "environment_id": "qwen-asr",
+      "local_dir": "models/task-031/qwen3-forced-aligner-0.6b"
+    }
+  ]
+}

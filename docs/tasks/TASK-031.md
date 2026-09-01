@@ -8,7 +8,7 @@
 | **Reviewer** | 계약 checkpoint는 이번 Codex 작성자와 다른 fresh GPT/Codex 세션이 fixed HEAD `395a014fcda033c2be574e21d351e3bfec4c7e0e`를 Gate H로 승인했다. 구현 최종 coherent HEAD도 작성자와 다른 fresh reviewer가 검토한다 (R8) |
 | **Phase** | Phase 1a — 첫 실제 자막 vertical slice와 calibration |
 | **Gate** | H — 외부 모델·dependency, 12 GB GPU, Windows, cache/resume와 품질 판정 |
-| **Status** | `In progress` — 계약 checkpoint Gate H 승인·PR #50 병합 완료. dependency/model/network owner gate 대기; 구현·실측 미착수 |
+| **Status** | `In progress` — 계약 checkpoint와 병합 후 정합화 완료. 2026-09-01 제품 오너가 dependency/model/network gate를 승인했고, 첫 preflight 기반 구현·검증 중. Windows/RTX 실측은 미착수 |
 | **기준 main** | `356b964505c3d852e9a264d79da12f15e5e707e0` (PR #49 merge commit) |
 | **계약 checkpoint** | 승인 HEAD `395a014fcda033c2be574e21d351e3bfec4c7e0e`, tree `c101ffcee0afc0c89fa4f4dada240ec2c8a6e59b`, PR #50 merge `e33ca4a15bfe0ba7091af6509bfdd9896904656c` |
 
@@ -26,19 +26,31 @@ vertical slice다. 모델 우열이나 제품 완성도를 테스트 수로 주�
 
 | 항목 | 값 |
 |---|---|
-| Source | live `main@e33ca4a15bfe0ba7091af6509bfdd9896904656c` (PR #50 merge) |
+| Source | live `main@e9e7a4eb102a1573cf7479cb005a0fb4d647fa88` (PR #51 merge) |
 | Active TASK | TASK-031 / `In progress` |
 | Gate | H |
 | Author / Reviewer | Lean Root Author / 구현 최종 coherent HEAD의 작성자와 다른 future fresh GPT·Codex session |
-| Approved scope | U-22 A-min 계약 기록, 실행 준비, 실제 10분 로컬 calibration과 보고 |
-| PR / branch | 계약 checkpoint #50 Closed/Merged / `lean-root/task-031-a-min-calibration` |
-| Current checkpoint | Gate H 승인 HEAD `395a014f…`가 merge `e33ca4a…`로 `main`에 반영됨. 구현 code·tests·실측은 아직 없음 |
-| Blocker | dependency manifest, 모델 weight 다운로드, 외부 network 사용은 별도 owner gate 전 금지 |
-| Next allowed action | 병합 후 상태 정합화 뒤 제품 오너가 TASK-031 dependency/model/network gate 승인 여부를 결정 |
-| Forbidden now | gate 전 구현, 모델/weight 다운로드, dependency 설치·manifest 추가, 외부 network 사용, 원격 추론, 사용자 미디어 commit |
+| Approved scope | U-22 A-min 계약 기록, 재현 가능한 dependency manifest·Windows hash lock 준비, 고정 revision model weight 준비를 위한 network, 실제 10분 local calibration과 보고 |
+| PR / branch | 계약 checkpoint #50·정합화 #51 Closed/Merged / 구현 `lean-root/task-031-implementation` |
+| Current checkpoint | 첫 구현 slice가 닫힌 preflight manifest/schema/CLI, backend별 direct dependency pin, model receipt·readiness validator와 focused mutation test를 만든다. target Windows lock·weight·실측은 아직 없음 |
+| Blocker | 현재 Work 환경은 Windows 11 / RTX 4070 SUPER가 아니므로 Windows transitive hash lock·CUDA stack·model cache receipt와 실제 측정 증거를 만들 수 없음 |
+| Next allowed action | 첫 preflight slice를 fresh Gate H review로 고정한 뒤 target Windows에서 네 격리 환경 lock과 exact-revision model snapshot을 준비하고 faster-whisper×MADLAD smoke로 진행 |
+| Forbidden now | remote inference/comparator, 사용자 미디어 업로드·commit, model weight commit, 결과 전 기본 모델 채택, exact-HEAD 승인 없는 merge |
 
 계약 checkpoint의 고정 좌표는 위 역사 기록으로 보존한다. 이후 구현 reviewer는 새 구현 PR의 live HEAD와
 base를 별도로 고정하고 compact handoff와 repository tree를 대조한다.
+
+### dependency/model/network 제품 오너 gate — 승인
+
+2026-09-01 사람 제품 오너는 TASK-031 범위 안에서 다음을 승인했다.
+
+- backend별 재현 가능한 dependency manifest와 Windows hash lock 준비
+- §2의 다섯 공식 model ID를 고정 revision으로 준비·다운로드하는 데 필요한 외부 network 사용
+- 준비 evidence를 바탕으로 local-only calibration 구현을 계속하는 것
+
+이 승인은 remote inference/comparator, 사용자 미디어 전송, model weight의 Git commit, 영구/default model
+채택 또는 PR 병합 승인이 아니다. target Windows에서 lock·CUDA stack·model receipt가 모두 검증되기 전에는
+실행 readiness를 통과시키지 않는다.
 
 ### escalation 기록 — `AGENTS.md` §3 trigger 3
 

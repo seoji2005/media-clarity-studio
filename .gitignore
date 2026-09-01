@@ -13,3 +13,8 @@ fixture-source.mkv
 # 테스트와 smoke는 임시 디렉터리를 쓰므로 평소에는 생기지 않는다.
 /artifacts/
 /jobs/
+
+# TASK-031 — model weight, content-locked pack과 calibration 산출물은 Git 밖에 둔다.
+/models/
+/calibration-data/
+/calibration-runs/

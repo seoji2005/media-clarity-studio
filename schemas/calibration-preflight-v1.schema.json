@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://media-clarity-studio.local/schemas/calibration-preflight-v1.schema.json",
+  "title": "TASK-031 calibration dependency and model preflight",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "task_id",
+    "generated_at",
+    "target_system",
+    "dependency_environments",
+    "models"
+  ],
+  "properties": {
+    "schema_version": {"$ref": "common-v1.schema.json#/$defs/schema_version"},
+    "task_id": {"const": "TASK-031"},
+    "generated_at": {"$ref": "common-v1.schema.json#/$defs/timestamp"},
+    "target_system": {"$ref": "#/$defs/target_system"},
+    "dependency_environments": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {"$ref": "#/$defs/dependency_environment"}
+    },
+    "models": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {"$ref": "#/$defs/model"}
+    }
+  },
+  "$defs": {
+    "target_system": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "os_version", "architecture", "python_version", "gpu", "vram_mib"],
+      "properties": {
+        "os": {"const": "windows"},
+        "os_version": {"const": "11"},
+        "architecture": {"const": "x86_64"},
+        "python_version": {"const": "3.12"},
+        "gpu": {"const": "NVIDIA GeForce RTX 4070 SUPER"},
+        "vram_mib": {"const": 12288}
+      }
+    },
+    "direct_package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "official_source"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+        "version": {"type": "string", "minLength": 1},
+        "official_source": {"type": "string", "pattern": "^https://"}
+      }
+    },
+    "dependency_environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "environment_id",
+        "dependency_input_path",
+        "dependency_input_sha256",
+        "direct_packages",
+        "lock_status",
+        "lock_path",
+        "lock_sha256",
+        "resolver_name",
+        "resolver_version",
+        "resolver_platform",
+        "cuda_stack_status",
+        "torch_version",
+        "cuda_version",
+        "cudnn_version"
+      ],
+      "properties": {
+        "environment_id": {"enum": ["download", "faster-whisper", "qwen-asr", "translation"]},
+        "dependency_input_path": {"type": "string", "minLength": 1},
+        "dependency_input_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "direct_packages": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/direct_package"}
+        },
+        "lock_status": {"enum": ["pending_windows_resolution", "windows_resolved"]},
+        "lock_path": {"type": "string", "minLength": 1},
+        "lock_sha256": {"type": "string", "pattern": "^([0-9a-f]{64})?$"},
+        "resolver_name": {"const": "uv"},
+        "resolver_version": {"type": "string"},
+        "resolver_platform": {"const": "windows-x86_64"},
+        "cuda_stack_status": {"enum": ["not_applicable", "pending_windows_probe", "windows_locked"]},
+        "torch_version": {"type": "string"},
+        "cuda_version": {"type": "string"},
+        "cudnn_version": {"type": "string"}
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "model_id", "revision", "license", "environment_id", "local_dir"],
+      "properties": {
+        "role": {"enum": ["asr", "translation", "alignment"]},
+        "model_id": {"type": "string", "pattern": "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$"},
+        "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "license": {"enum": ["MIT", "Apache-2.0"]},
+        "environment_id": {"enum": ["faster-whisper", "qwen-asr", "translation"]},
+        "local_dir": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}
