@@ -3,7 +3,7 @@
 **"지금 무엇이 되어 있고, 누가 무엇을 들고 있는가."**
 새 세션을 시작하는 에이전트는 [`AGENTS.md`](AGENTS.md) 다음으로 이 파일을 봅니다 (`AGENTS.md` §0.2).
 
-마지막 갱신: 2026-09-01 (TASK-031 / PR #50 — H-01 StageSpec `depends_on`·`cacheable` runtime 결박 제한 수정)
+마지막 갱신: 2026-09-01 (TASK-031 / PR #50 계약 checkpoint 병합 후 정합화)
 현재 단계: **Phase 1a** — 첫 실제 10분 로컬 자막 vertical slice 착수
 
 ---
@@ -16,13 +16,13 @@
 | Phase 0 | **완료 — `main`에 병합됨** (PR #1, 병합 SHA `d11b2450d324ac7f509741acc1ac591313876d30`) |
 | 기능 코드 | **있음** — TASK-022 CLI: local input → probe → SRT → soft-sub → verify → local staging export |
 | 런타임 / 의존성 | Python 3.12+ 표준 라이브러리와 FFmpeg/ffprobe. Python package 의존성·모델·CI·비밀정보 없음 |
-| 주요 병합 PR | **#1·#5·#16·#18·#19·#21·#22·#23·#24·#25·#28·#33·#34·#36·#42·#45·#47·#48** — TASK-029 merge commit은 `6f94705598c1ef57a4d25682938cbcbbaf044732`, TASK-030 merge commit은 `116d1c7fbb90e79acf15947385c1ac4f905ffb12`, post-merge 상태 정합화는 `1d76ac91568c1a5dc01bc305f88b8ba70b269241`; 이후 상태 전용 follow-up과 최신 `main`은 GitHub live state로 확인 |
-| 열린 PR | **#6~#10·#12·#14·#15·#17·#29~#32·#46·#50** — #50은 TASK-031 계약 checkpoint Draft, #46은 TASK-029 review 기록 Draft; 나머지 과거 Draft는 현재 실행 차단 아님 |
+| 주요 병합 PR | **#1·#5·#16·#18·#19·#21·#22·#23·#24·#25·#28·#33·#34·#36·#42·#45·#47·#48·#50** — TASK-029 merge commit은 `6f94705598c1ef57a4d25682938cbcbbaf044732`, TASK-030 merge commit은 `116d1c7fbb90e79acf15947385c1ac4f905ffb12`, TASK-031 계약 checkpoint merge commit은 `e33ca4a15bfe0ba7091af6509bfdd9896904656c` |
+| 열린 PR | **#6~#10·#12·#14·#15·#17·#29~#32·#37~#40·#46** — 전부 과거 Draft 또는 review 기록이며 현재 TASK-031 구현을 차단하지 않음 |
 | 미병합 종료 | **#2·#3·#4·#11·#41** — #41은 REVIEW-022 원문이 PR #42로 `main`에 보존된 뒤 종료 |
 | 운영 구조 | **TASK-030 적용 중** — GPT-primary·승인 연속성·run resilience·제한적 Claude escalation (`AGENTS.md` §3, ADR-0030). PR #45/TASK-029에는 소급 적용하지 않음 |
-| 현재 작업 | **TASK-031 / PR #50** — H-01 runtime attempt identity·final-output 계보와 H-02 timed digest·NVML scoping을 계약에서 닫음. GPT 제한 수정 2회 뒤 `AGENTS.md` §3 trigger 3으로 Claude Code specialist가 attempt 3·4를 작성해 실제 `AttemptRecord` 이름·모양까지 정정했다. `d03885f…` 재검토에서 canonical StageSpec document의 `depends_on`·`cacheable`이 실행 증거에 결박되지 않은 단일 잔여를 확인했고, 2026-09-01 사람 제품 오너가 이 결함만 Codex Author에게 명시적으로 재배정했다. 두 값을 `dependency_cache_keys`·`AttemptRecord.cacheable`에 fail-closed로 결박했으며 새 fixed-HEAD 재검토 대기 |
+| 현재 작업 | **TASK-031** — 계약 checkpoint fixed HEAD `395a014f…`는 fresh Gate H 승인을 받았고 PR #50 merge `e33ca4a…`로 `main`에 반영됐다. TASK는 `Done`이 아니며 실제 adapter·validator·calibration 구현과 Windows/RTX 실측은 미착수 |
 | U-31 | **답변됨 (2026-08-22)** — 번역 대상 언어 **한국어(`ko`)** |
-| 다음 실행 의존성 | 잔여 H-01·H-02 제한 수정의 live HEAD를 고정해 fresh independent Gate H 제한 재검토를 수행한다. 승인과 별도 dependency/model/network gate가 모두 닫힌 뒤 한 조합 preflight smoke부터 구현하며, smoke만으로 U-22 완료를 주장하지 않음 |
+| 다음 실행 의존성 | 제품 오너가 TASK-031의 재현 가능한 dependency manifest, 고정 revision 모델 weight 다운로드, 준비 단계의 외부 network 사용을 승인할지 결정한다. 승인 뒤 최신 `main`에서 구현 PR을 시작하고 한 조합 preflight smoke부터 검증하되, smoke만으로 U-22 완료를 주장하지 않음 |
 | U-08 | **답변됨 (2026-08-09)** — **채점 정답은 번역 자막** |
 | U-11 | **부분 답변됨 (2026-08-09)** — **약 2개월·품질 우선.** 정확한 제출 날짜는 **미확정** |
 | 차단 요인 | **TASK-031 범위와 A-min은 승인됨. dependency manifest·모델 weight 다운로드·외부 network 사용은 별도 owner gate 전 미승인.** U-16 보관 정책은 미정이므로 자동 삭제·GC를 범위 밖에 둠 |
@@ -70,7 +70,7 @@
 | [TASK-028](docs/tasks/TASK-028.md) | Content-addressed artifact store와 재개 가능한 stage runtime | Claude Code 구현 세션 | Lean Root 고정 HEAD Gate H 검토 — `REVIEW-018`~`021` 변경 요청, [`REVIEW-022`](docs/reviews/REVIEW-022.md) 승인 | Phase 1a shared storage·orchestrator foundation | **Done — PR #36 병합** (`1d05de31aa39fd4dc8790d6c6e6442c0f8765ddc`) |
 | [TASK-029](docs/tasks/TASK-029.md) | SpeechSegment·Transcript·capability·translation·subtitle 실행 계약 정본화 | Claude Code 구현 세션 | Lean Root 고정 HEAD Gate H 검토 | Phase 1a subtitle data spine | **Done** — REVIEW-027 승인, 제품 오너가 exact HEAD `4b0d2cd041d7a133640355dd0b96874ef4329074` 승인, PR #45 병합 (`6f94705598c1ef57a4d25682938cbcbbaf044732`). 시작 당시 ownership/review 계약 유지 |
 | [TASK-030](docs/tasks/TASK-030.md) | GPT-primary 운영 계약과 Markdown 정합화 | Lean Root Orchestrator | fresh GPT/Codex 고정 HEAD 검토 | Project operations | **Done** — Gate M 승인, PR #47 병합 (`116d1c7fbb90e79acf15947385c1ac4f905ffb12`) |
-| [TASK-031](docs/tasks/TASK-031.md) | U-22 A-min 로컬 자막 calibration vertical slice | Lean Root Author; 이번 두 필드 잔여는 제품 오너가 Codex Author에게 명시적 재배정 | 작성자와 다른 fresh GPT/Codex fixed-HEAD Gate H reviewer (R8) | Phase 1a subtitle calibration | **In review — H-01 StageSpec `depends_on`·`cacheable` runtime 결박까지 계약에서 닫음, 새 fixed-HEAD 재검토 대기**, dependency/model/network gate 대기 |
+| [TASK-031](docs/tasks/TASK-031.md) | U-22 A-min 로컬 자막 calibration vertical slice | Lean Root Author | 구현 최종 coherent HEAD의 작성자와 다른 fresh GPT/Codex Gate H reviewer (R8) | Phase 1a subtitle calibration | **In progress — 계약 Gate H 승인·PR #50 병합 완료**, dependency/model/network gate 대기; 구현·실측 미착수 |
 | [TASK-012](docs/tasks/TASK-012.md) | Phase 1 계획 기준선 확립 | Claude Code 주 세션 | TASK-013~017 / REVIEW-005~009 (사람 오너의 예외 승인) | Phase 1 planning / 1a 진입 | **Done** — REVIEW-009 승인 후 PR #5 병합 (`10d34b4a4545f9ae8894c8038e7f1cc9a7706d61`) |
 | [TASK-013](docs/tasks/TASK-013.md) | TASK-012 고정 HEAD 독립 검토 | **이 독립 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 review | **In review** (판정: 변경 요청 — [REVIEW-005](docs/reviews/REVIEW-005.md)) |
 | [TASK-014](docs/tasks/TASK-014.md) | TASK-012 M-01·M-02 제한 재검토 | **REVIEW-005를 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 limited rereview | **In review** (M-01·M-02 부분 해소 · 판정: 변경 요청 — [REVIEW-006](docs/reviews/REVIEW-006.md)) |
@@ -303,6 +303,17 @@ Codex·Codex Cloud·GitHub `@codex review`는 **당시 미래 역할·배정·�
 - PR #47은 merge commit `116d1c7fbb90e79acf15947385c1ac4f905ffb12`로 병합됐다. 부모는 reviewed base와 approved HEAD이며 tree `62b2977b64c42a3689d024860a8573b7d9452e2d`가 승인 대상과 일치한다.
 - GPT-primary·approval continuity·run resilience·제한적 Claude escalation 계약은 이 merge 뒤 시작하는 작업부터 적용한다. PR #45/TASK-029 이력에는 소급 적용하지 않는다.
 
+### 3.24 TASK-031 계약 checkpoint 승인·병합 (PR #50)
+
+- 작성자와 다른 fresh GPT/Codex 제한 재검토는 fixed HEAD
+  `395a014fcda033c2be574e21d351e3bfec4c7e0e`의 잔여 H-01 해소와 prohibited drift 없음을 `승인`했다.
+- 사람 제품 오너가 PR #50·전체 HEAD·reviewed base
+  `356b964505c3d852e9a264d79da12f15e5e707e0`를 정확히 승인했다.
+- PR #50은 merge commit `e33ca4a15bfe0ba7091af6509bfdd9896904656c`로 병합됐다. 부모는 reviewed base와
+  승인 HEAD이며 tree `c101ffcee0afc0c89fa4f4dada240ec2c8a6e59b`가 승인 대상과 일치한다.
+- 이는 TASK-031의 계약 checkpoint만 완료한 것이다. TASK 상태는 `In progress`이며 dependency/model/network
+  owner gate, 구현·Windows/RTX 실측, calibration 결과와 후속 Pro challenge는 남아 있다.
+
 ---
 
 ## 4. 다음 작업
@@ -311,7 +322,7 @@ Codex·Codex Cloud·GitHub `@codex review`는 **당시 미래 역할·배정·�
 
 | TASK | 내용 | Owner |
 |---|---|---|
-| [TASK-031](docs/tasks/TASK-031.md) | 고정 10분 pack에서 ASR 2종 × 번역 2종의 실제 로컬 자막 vertical slice와 resume calibration — PR #50 계약 검토 | 이번 잔여: Codex Author → 다른 fresh GPT/Codex Gate H reviewer |
+| [TASK-031](docs/tasks/TASK-031.md) | 고정 10분 pack에서 ASR 2종 × 번역 2종의 실제 로컬 자막 vertical slice와 resume calibration — 계약 병합, 구현 gate 대기 | Lean Root Author |
 
 > **판정과 반영 상태는 서로 다른 사실입니다. 섞지 마십시오.**
 >
@@ -350,7 +361,7 @@ Codex·Codex Cloud·GitHub `@codex review`는 **당시 미래 역할·배정·�
 | TASK-006 코드 구현 | schema·validator·fixture | TASK-006 계약 승인·병합 | **Done — PR #28** |
 | **TASK-028** | 공용 artifact/cache/resume runtime | TASK-006 완료 | **Done — REVIEW-022 승인, PR #36 병합** |
 | **TASK-029** | 자막 spine 기계 계약 정본화 | TASK-028 완료와 별도 TASK 계약 | **Done — Gate H 승인, PR #45 병합 (`6f94705598c1ef57a4d25682938cbcbbaf044732`)** |
-| **TASK-031** | U-22 A-min 10분 로컬 자막 calibration | TASK-029 완료와 제품 오너 A-min 결정 | **In review — PR #50 계약 Gate H; dependency/model/network gate 대기** |
+| **TASK-031** | U-22 A-min 10분 로컬 자막 calibration | TASK-029 완료와 제품 오너 A-min 결정 | **In progress — 계약 Gate H 승인·PR #50 병합; dependency/model/network gate 대기** |
 
 > **TASK-005 평가 하네스 설계와 TASK-006 평가 실행 계약은 완료됐습니다.** TASK-006 계약은 PR #27,
 > schema·validator·fixture 구현은 Gate H REVIEW-017 승인 뒤 PR #28로 병합됐습니다.
