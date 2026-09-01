@@ -16,13 +16,13 @@
 | Phase 0 | **완료 — `main`에 병합됨** (PR #1, 병합 SHA `d11b2450d324ac7f509741acc1ac591313876d30`) |
 | 기능 코드 | **있음** — TASK-022 CLI: local input → probe → SRT → soft-sub → verify → local staging export |
 | 런타임 / 의존성 | Python 3.12+ 표준 라이브러리와 FFmpeg/ffprobe. Python package 의존성·모델·CI·비밀정보 없음 |
-| 병합된 PR | **#1·#5·#16·#18·#19·#21·#22·#23·#24·#25·#28·#33·#34·#36·#42·#45·#47** — TASK-029 merge commit은 `6f94705598c1ef57a4d25682938cbcbbaf044732`, TASK-030 merge commit은 `116d1c7fbb90e79acf15947385c1ac4f905ffb12`; 나머지는 §3에 기록 |
+| 주요 병합 PR | **#1·#5·#16·#18·#19·#21·#22·#23·#24·#25·#28·#33·#34·#36·#42·#45·#47·#48** — TASK-029 merge commit은 `6f94705598c1ef57a4d25682938cbcbbaf044732`, TASK-030 merge commit은 `116d1c7fbb90e79acf15947385c1ac4f905ffb12`, post-merge 상태 정합화는 `1d76ac91568c1a5dc01bc305f88b8ba70b269241`; 이후 상태 전용 follow-up과 최신 `main`은 GitHub live state로 확인 |
 | 열린 PR | **#6~#10·#12·#14·#15·#17·#29~#32·#46** — #46은 TASK-029 review 기록 Draft; 나머지 과거 Draft는 현재 실행 차단 아님 |
 | 미병합 종료 | **#2·#3·#4·#11·#41** — #41은 REVIEW-022 원문이 PR #42로 `main`에 보존된 뒤 종료 |
 | 운영 구조 | **TASK-030 적용 중** — GPT-primary·승인 연속성·run resilience·제한적 Claude escalation (`AGENTS.md` §3, ADR-0030). PR #45/TASK-029에는 소급 적용하지 않음 |
 | 현재 작업 | **활성 기능 TASK 없음** — TASK-030은 fresh Gate M 승인과 제품 오너 exact-HEAD 승인 뒤 PR #47로 병합 완료 |
 | U-31 | **답변됨 (2026-08-22)** — 번역 대상 언어 **한국어(`ko`)** |
-| 다음 실행 의존성 | 최신 `main@116d1c7fbb90e79acf15947385c1ac4f905ffb12`에서 다음 기능 scope·TASK·Owner·Reviewer를 정한다. 별도 승인 전 dependency/model/network 반입이나 기능 구현을 시작하지 않음 |
+| 다음 실행 의존성 | GitHub에서 live `main`을 조회한 뒤 다음 기능 scope·TASK·Owner·Reviewer를 정한다. 상태 문서가 자신을 포함한 merge SHA를 내장해 반복 정합화를 만들지 않으며, 별도 승인 전 dependency/model/network 반입이나 기능 구현을 시작하지 않음 |
 | U-08 | **답변됨 (2026-08-09)** — **채점 정답은 번역 자막** |
 | U-11 | **부분 답변됨 (2026-08-09)** — **약 2개월·품질 우선.** 정확한 제출 날짜는 **미확정** |
 | 차단 요인 | **다음 기능 범위와 의존성·모델 가중치 반입 gate가 미승인.** U-16 보관 정책은 미정이므로 자동 삭제·GC를 범위 밖에 두며, 다른 U-XX도 임의 확정하지 않음 |
