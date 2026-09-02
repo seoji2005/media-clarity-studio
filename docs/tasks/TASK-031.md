@@ -142,7 +142,12 @@ review evidence로 가장하지 않는다.
   correction/interruption 의미와 final-output producer ancestry가 구현되기 전 `completed`는 fail-closed다.
 - 다음 slice가 exact 8 manifest·12 measurement의 full synthetic fixture와 누락·추가·재정렬·foreign/reuse
   mutation을 exhaustive하게 고정한다. 이 slice의 단일-link positive test를 실제 calibration 완료로 해석하지 않는다.
-- focused manifest/report 15건, 기존 evidence 25건, preflight 16건과 전체 552 tests·FFmpeg smoke를 통과했다.
+- fresh Gate H는 fixed HEAD `51a7e08b15667956341898d34bc646c7ac44bcf5`에서 escaped unpaired
+  surrogate를 포함한 referenced manifest/measurement의 canonical 재직렬화가 structured finding 대신
+  `UnicodeEncodeError`를 유발하는 G56-01을 **변경 요청**했다. 제한 remediation은
+  `UnicodeEncodeError`·`TypeError`·`ValueError`를 `E_CALIBRATION_ARTIFACT`로 변환하고 양쪽 참조 경계의
+  mutation test를 고정한다. 새 fixed HEAD는 작성자와 다른 fresh reviewer 재검토가 필요하다.
+- focused manifest/report 17건, 기존 evidence 25건, preflight 16건과 전체 554 tests·FFmpeg smoke를 통과했다.
 
 ## 1. 고정 입력
 

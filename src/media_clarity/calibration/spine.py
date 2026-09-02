@@ -241,7 +241,14 @@ def _load_json_ref(
     if not isinstance(document, Mapping):
         findings.append(_finding(location, "E_CALIBRATION_ARTIFACT", "JSON evidence root가 객체가 아니다"))
         return None
-    if payload != canonical_json_bytes(document):
+    try:
+        canonical_payload = canonical_json_bytes(document)
+    except (UnicodeEncodeError, TypeError, ValueError):
+        findings.append(
+            _finding(location, "E_CALIBRATION_ARTIFACT", "JSON evidence를 canonical serialization으로 재직렬화할 수 없다")
+        )
+        return None
+    if payload != canonical_payload:
         findings.append(_finding(location, "E_CALIBRATION_ARTIFACT", "JSON evidence가 canonical serialization이 아니다"))
         return None
     return document

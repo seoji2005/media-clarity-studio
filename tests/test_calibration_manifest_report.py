@@ -370,6 +370,16 @@ class ManifestMutationTests(ManifestReportCase):
         )
         self.assertTrue(validate_calibration_run_manifest(manifest, self.root))
 
+    def test_unpaired_surrogate_measurement_returns_artifact_finding(self) -> None:
+        manifest, _ = self.build_independent_asr()
+        manifest["candidate_stages"][0]["performance_measurement_ref"] = self._store_bytes(
+            "surrogate-measurement.json",
+            b'{"run_id":"\\ud800"}',
+            kind="text",
+            media_type="application/json",
+        )
+        self.assertIn("E_CALIBRATION_ARTIFACT", self.codes(manifest))
+
     def test_pack_hash_is_bound_to_pack_manifest(self) -> None:
         manifest, _ = self.build_independent_asr()
         manifest["pack_hash"] = manifest["pack_audio_ref"]["content_hash"]
@@ -443,6 +453,16 @@ class ReportMutationTests(ManifestReportCase):
             "malformed-manifest.json", malformed_manifest
         )
         self.assertTrue(validate_calibration_report(report, self.root))
+
+    def test_unpaired_surrogate_manifest_returns_artifact_finding(self) -> None:
+        report, _ = self.build_report()
+        report["runs"][0]["manifest_ref"] = self._store_bytes(
+            "surrogate-manifest.json",
+            b'{"run_id":"\\ud800"}',
+            kind="text",
+            media_type="application/json",
+        )
+        self.assertIn("E_CALIBRATION_ARTIFACT", self.codes(report))
 
 
 if __name__ == "__main__":

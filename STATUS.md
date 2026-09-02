@@ -375,7 +375,11 @@ Codex·Codex Cloud·GitHub `@codex review`는 **당시 미래 역할·배정·�
   correction/interruption 의미와 final-output producer ancestry 검증 전의 `completed` 자기 선언은 거부한다.
 - exact 8개 manifest·12개 measurement의 exhaustive synthetic fixture와 mutation matrix는 다음 coherent slice다.
   target Windows evidence, model snapshot/weight, 실제 calibration·RTF/VRAM 결과를 만들었다고 주장하지 않는다.
-- focused manifest/report 15건, 기존 evidence 25건, preflight 16건과 전체 552 tests·FFmpeg smoke를 통과했다.
+- fresh Gate H는 fixed HEAD `51a7e08b15667956341898d34bc646c7ac44bcf5`에서 escaped unpaired
+  surrogate를 포함한 referenced JSON의 canonical 재직렬화가 예외를 유발하는 G56-01을 **변경 요청**했다.
+  제한 remediation은 이 경계를 `E_CALIBRATION_ARTIFACT`로 변환하고 report→manifest와
+  manifest→measurement 두 mutation을 고정했다. 새 fixed HEAD는 작성자와 다른 fresh reviewer 재검토가 필요하다.
+- focused manifest/report 17건, 기존 evidence 25건, preflight 16건과 전체 554 tests·FFmpeg smoke를 통과했다.
 
 ---
 
