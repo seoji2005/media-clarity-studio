@@ -1,0 +1,257 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.media-clarity-studio.invalid/calibration-run-manifest-v1.schema.json",
+  "title": "CalibrationRunManifest/v1",
+  "description": "TASK-031 §5.1의 hardware-independent run evidence index. timing/NVML/correction의 최종 의미 검증 전에는 completed를 semantic validator가 거부한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "run_id",
+    "run_kind",
+    "matrix_cell_id",
+    "created_at",
+    "status",
+    "candidate_chain_hash",
+    "pipeline_id",
+    "pipeline_source_commit",
+    "attempt_record_mode",
+    "environment_runtime_version",
+    "environment_schema_version",
+    "environment_ref",
+    "pack_manifest_ref",
+    "pack_audio_ref",
+    "pack_hash",
+    "pack_duration_ns",
+    "candidate_config_hash",
+    "style_hash",
+    "chunk_stitch_hash",
+    "candidate_stages",
+    "correction_record_refs",
+    "incomplete_reasons"
+  ],
+  "properties": {
+    "schema_version": { "$ref": "common-v1.schema.json#/$defs/schema_version" },
+    "kind": { "const": "CalibrationRunManifest/v1" },
+    "run_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "run_kind": { "enum": ["independent_asr", "independent_mt", "end_to_end"] },
+    "matrix_cell_id": { "$ref": "#/$defs/matrix_cell_id" },
+    "created_at": { "$ref": "common-v1.schema.json#/$defs/timestamp" },
+    "started_at": { "$ref": "common-v1.schema.json#/$defs/timestamp" },
+    "ended_at": { "$ref": "common-v1.schema.json#/$defs/timestamp" },
+    "status": { "enum": ["incomplete", "completed", "failed", "aborted", "invalid"] },
+    "candidate_chain_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+    "pipeline_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "pipeline_source_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "attempt_record_mode": { "const": "canonical_path" },
+    "environment_runtime_version": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "environment_schema_version": { "$ref": "common-v1.schema.json#/$defs/schema_version" },
+    "environment_ref": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" },
+    "pack_manifest_ref": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" },
+    "pack_audio_ref": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" },
+    "pack_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+    "pack_duration_ns": { "const": 600000000000 },
+    "candidate_config_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+    "style_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+    "chunk_stitch_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+    "candidate_stages": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "items": { "$ref": "#/$defs/candidate_stage" }
+    },
+    "final_pipeline_output_refs": {
+      "type": "array",
+      "maxItems": 4,
+      "items": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" }
+    },
+    "correction_record_refs": {
+      "type": "array",
+      "maxItems": 2,
+      "items": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" }
+    },
+    "interruption_record_ref": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" },
+    "incomplete_reasons": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/incomplete_reason" }
+    }
+  },
+  "$defs": {
+    "matrix_cell_id": {
+      "enum": [
+        "asr-faster-whisper",
+        "asr-qwen3-asr",
+        "mt-madlad",
+        "mt-qwen3.5",
+        "e2e-faster-whisper__madlad",
+        "e2e-faster-whisper__qwen3.5",
+        "e2e-qwen3-asr__madlad",
+        "e2e-qwen3-asr__qwen3.5"
+      ]
+    },
+    "incomplete_reason": {
+      "enum": [
+        "environment",
+        "model_snapshot",
+        "runtime_provenance",
+        "corrections",
+        "interruption",
+        "materialization",
+        "timing",
+        "nvml",
+        "final_outputs"
+      ]
+    },
+    "candidate_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "official_model_id",
+        "model_revision",
+        "weight_hash",
+        "backend_identity_hash",
+        "precision",
+        "quantization",
+        "config_hash"
+      ],
+      "properties": {
+        "official_model_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "model_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "weight_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+        "backend_identity_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+        "precision": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "quantization": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "config_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" }
+      }
+    },
+    "runtime_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job_id",
+        "runtime_stage_id",
+        "attempt_id",
+        "attempt_record_ref",
+        "cache_key",
+        "stage_spec_digest",
+        "stage_spec_document_ref",
+        "input_ref_tuple",
+        "output_ref_tuple",
+        "dependency_cache_keys"
+      ],
+      "properties": {
+        "job_id": { "$ref": "job-v1.schema.json#/$defs/path_segment_identifier" },
+        "runtime_stage_id": { "$ref": "job-v1.schema.json#/$defs/path_segment_identifier" },
+        "attempt_id": { "$ref": "job-v1.schema.json#/$defs/path_segment_identifier" },
+        "attempt_record_ref": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "cache_key": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+        "stage_spec_digest": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+        "stage_spec_document_ref": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" },
+        "input_ref_tuple": {
+          "type": "array",
+          "items": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" }
+        },
+        "output_ref_tuple": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" }
+        },
+        "dependency_cache_keys": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^[A-Za-z0-9][A-Za-z0-9._:-]*$": {
+              "$ref": "common-v1.schema.json#/$defs/content_hash"
+            }
+          }
+        }
+      }
+    },
+    "candidate_stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_stage_id",
+        "adapter_role",
+        "candidate_identity",
+        "unit_ids",
+        "stage_spec_digests",
+        "stage_spec_document_refs",
+        "attempt_ids",
+        "cache_keys",
+        "input_ref_tuples",
+        "output_ref_tuples",
+        "raw_output_refs",
+        "runtime_identities",
+        "aggregate_normalized_output_ref",
+        "measurement_id",
+        "performance_measurement_ref"
+      ],
+      "properties": {
+        "candidate_stage_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+        "adapter_role": { "enum": ["asr", "mt"] },
+        "candidate_identity": { "$ref": "#/$defs/candidate_identity" },
+        "unit_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+        },
+        "stage_spec_digests": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "common-v1.schema.json#/$defs/content_hash" }
+        },
+        "stage_spec_document_refs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" }
+        },
+        "attempt_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "job-v1.schema.json#/$defs/path_segment_identifier" }
+        },
+        "cache_keys": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "common-v1.schema.json#/$defs/content_hash" }
+        },
+        "input_ref_tuples": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "array",
+            "items": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" }
+          }
+        },
+        "output_ref_tuples": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "items": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" }
+          }
+        },
+        "raw_output_refs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" }
+        },
+        "runtime_identities": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/runtime_identity" }
+        },
+        "aggregate_normalized_output_ref": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" },
+        "measurement_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+        "performance_measurement_ref": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" }
+      }
+    }
+  }
+}

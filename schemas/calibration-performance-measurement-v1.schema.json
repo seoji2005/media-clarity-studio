@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.media-clarity-studio.invalid/calibration-performance-measurement-v1.schema.json",
+  "title": "PerformanceMeasurement/v1 runtime spine",
+  "description": "TASK-031 §6.4 중 hardware-independent runtime projection. timing/NVML 필드가 구현되기 전에는 status=incomplete만 허용한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "status",
+    "incomplete_reasons",
+    "measurement_id",
+    "run_id",
+    "matrix_cell_id",
+    "candidate_stage_id",
+    "adapter_role",
+    "candidate_identity",
+    "candidate_chain_hash",
+    "attempt_record_mode",
+    "pipeline_id",
+    "environment_runtime_version",
+    "environment_schema_version",
+    "environment_ref",
+    "unit_ids",
+    "stage_spec_digests",
+    "stage_spec_document_refs",
+    "attempt_ids",
+    "cache_keys",
+    "input_ref_tuples",
+    "output_ref_tuples",
+    "raw_output_refs",
+    "runtime_identities",
+    "aggregate_normalized_output_ref"
+  ],
+  "properties": {
+    "schema_version": { "$ref": "common-v1.schema.json#/$defs/schema_version" },
+    "kind": { "const": "PerformanceMeasurement/v1" },
+    "status": { "const": "incomplete" },
+    "incomplete_reasons": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "environment",
+          "model_snapshot",
+          "materialization",
+          "timing",
+          "nvml"
+        ]
+      }
+    },
+    "measurement_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "run_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "matrix_cell_id": { "$ref": "calibration-run-manifest-v1.schema.json#/$defs/matrix_cell_id" },
+    "candidate_stage_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "adapter_role": { "enum": ["asr", "mt"] },
+    "candidate_identity": { "$ref": "calibration-run-manifest-v1.schema.json#/$defs/candidate_identity" },
+    "candidate_chain_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+    "attempt_record_mode": { "const": "canonical_path" },
+    "pipeline_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "environment_runtime_version": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "environment_schema_version": { "$ref": "common-v1.schema.json#/$defs/schema_version" },
+    "environment_ref": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" },
+    "unit_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+    },
+    "stage_spec_digests": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "common-v1.schema.json#/$defs/content_hash" }
+    },
+    "stage_spec_document_refs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" }
+    },
+    "attempt_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "job-v1.schema.json#/$defs/path_segment_identifier" }
+    },
+    "cache_keys": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "common-v1.schema.json#/$defs/content_hash" }
+    },
+    "input_ref_tuples": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "array",
+        "items": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" }
+      }
+    },
+    "output_ref_tuples": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "items": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" }
+      }
+    },
+    "raw_output_refs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" }
+    },
+    "runtime_identities": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "calibration-run-manifest-v1.schema.json#/$defs/runtime_identity" }
+    },
+    "aggregate_normalized_output_ref": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" }
+  }
+}
