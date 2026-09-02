@@ -239,11 +239,13 @@ def _require_projection(
                 )
             )
 
-    if measurement["matrix_cell_id"] not in MATRIX_CELL_IDS:
+    matrix_cell_id = measurement["matrix_cell_id"]
+    if isinstance(matrix_cell_id, str) and matrix_cell_id not in MATRIX_CELL_IDS:
         findings.append(
             _finding(f"{location}/matrix_cell_id", "E_MEASUREMENT_IDENTITY", "고정 8-cell 집합 밖의 값")
         )
-    if measurement["adapter_role"] not in {"asr", "mt"}:
+    adapter_role = measurement["adapter_role"]
+    if isinstance(adapter_role, str) and adapter_role not in {"asr", "mt"}:
         findings.append(
             _finding(f"{location}/adapter_role", "E_MEASUREMENT_IDENTITY", "asr 또는 mt여야 한다")
         )
@@ -253,8 +255,12 @@ def _require_projection(
         "mt-madlad": "mt",
         "mt-qwen3.5": "mt",
     }
-    expected_role = role_by_independent_cell.get(measurement["matrix_cell_id"])
-    if expected_role is not None and measurement["adapter_role"] != expected_role:
+    expected_role = (
+        role_by_independent_cell.get(matrix_cell_id)
+        if isinstance(matrix_cell_id, str)
+        else None
+    )
+    if expected_role is not None and adapter_role != expected_role:
         findings.append(
             _finding(
                 f"{location}/adapter_role",
@@ -708,10 +714,10 @@ def validate_measurement_runtime_evidence(
             _finding(location, "E_MEASUREMENT_IDENTITY", "ordered unit 배열은 같은 non-zero 길이여야 한다")
         )
         return sort_findings(findings)
-    if len(set(measurement["unit_ids"])) != len(measurement["unit_ids"]):
-        findings.append(_finding(f"{location}/unit_ids", "E_MEASUREMENT_IDENTITY", "unit_id가 중복됐다"))
+    valid_unit_ids = True
     for index, unit_id in enumerate(measurement["unit_ids"]):
         if not isinstance(unit_id, str) or _IDENTIFIER_RE.fullmatch(unit_id) is None:
+            valid_unit_ids = False
             findings.append(
                 _finding(
                     f"{location}/unit_ids/{index}",
@@ -719,6 +725,8 @@ def validate_measurement_runtime_evidence(
                     "공통 identifier 형식이 아니다",
                 )
             )
+    if valid_unit_ids and len(set(measurement["unit_ids"])) != len(measurement["unit_ids"]):
+        findings.append(_finding(f"{location}/unit_ids", "E_MEASUREMENT_IDENTITY", "unit_id가 중복됐다"))
 
     store = ArtifactStore(Path(project_root))
     validator = SchemaValidator(schemas or evidence_schema_set())

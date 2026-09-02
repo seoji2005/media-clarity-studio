@@ -347,6 +347,30 @@ class RuntimeIdentityMutationTests(CalibrationEvidenceCase):
         )
         self.assertIn("E_MEASUREMENT_IDENTITY", {finding.code for finding in findings})
 
+    def test_malformed_unhashable_matrix_cell_returns_findings(self) -> None:
+        measurement, _, _ = self.build_measurement()
+        measurement["matrix_cell_id"] = []
+        findings = validate_measurement_runtime_evidence_set(
+            (measurement,), self.root
+        )
+        self.assertIn("E_MEASUREMENT_IDENTITY", {finding.code for finding in findings})
+
+    def test_malformed_unhashable_adapter_role_returns_findings(self) -> None:
+        measurement, _, _ = self.build_measurement()
+        measurement["adapter_role"] = []
+        findings = validate_measurement_runtime_evidence_set(
+            (measurement,), self.root
+        )
+        self.assertIn("E_MEASUREMENT_IDENTITY", {finding.code for finding in findings})
+
+    def test_malformed_unhashable_unit_id_returns_findings(self) -> None:
+        measurement, _, _ = self.build_measurement()
+        measurement["unit_ids"][0] = []
+        findings = validate_measurement_runtime_evidence_set(
+            (measurement,), self.root
+        )
+        self.assertIn("E_MEASUREMENT_IDENTITY", {finding.code for finding in findings})
+
 
 if __name__ == "__main__":
     unittest.main()
