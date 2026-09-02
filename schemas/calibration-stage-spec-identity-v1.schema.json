@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.media-clarity-studio.invalid/calibration-stage-spec-identity-v1.schema.json",
+  "title": "TASK-031 canonical StageSpec identity v1",
+  "description": "TASK-031 §5.1.1.1. AttemptRecord에 없는 StageSpec identity를 CAS 문서로 고정한다. 선택 fingerprint는 생략하지 않고 null로 기록한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "runtime_version",
+    "schema_version",
+    "pipeline_id",
+    "stage_id",
+    "implementation_version",
+    "depends_on",
+    "config_hash",
+    "dependency_fingerprint",
+    "source_hash",
+    "chunking_hash",
+    "model_hash",
+    "context_hash",
+    "random_seed",
+    "reproducibility_tier",
+    "cacheable"
+  ],
+  "properties": {
+    "kind": { "const": "task031_stage_spec_identity" },
+    "runtime_version": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "schema_version": { "$ref": "common-v1.schema.json#/$defs/schema_version" },
+    "pipeline_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "stage_id": { "$ref": "job-v1.schema.json#/$defs/path_segment_identifier" },
+    "implementation_version": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "depends_on": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "job-v1.schema.json#/$defs/path_segment_identifier" }
+    },
+    "config_hash": { "$ref": "#/$defs/nullable_content_hash" },
+    "dependency_fingerprint": { "$ref": "#/$defs/nullable_content_hash" },
+    "source_hash": { "$ref": "#/$defs/nullable_content_hash" },
+    "chunking_hash": { "$ref": "#/$defs/nullable_content_hash" },
+    "model_hash": { "$ref": "#/$defs/nullable_content_hash" },
+    "context_hash": { "$ref": "#/$defs/nullable_content_hash" },
+    "random_seed": { "type": ["integer", "null"] },
+    "reproducibility_tier": {
+      "type": ["string", "null"],
+      "enum": ["T1", "T2", "T3", null]
+    },
+    "cacheable": { "type": "boolean" }
+  },
+  "$defs": {
+    "nullable_content_hash": {
+      "type": ["string", "null"],
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

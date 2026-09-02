@@ -5,7 +5,8 @@ export PYTHONPATH := src
 	fixtures-task-006 test-task-006 verify-task-006 \
 	fixtures-task-028 test-task-028 smoke-task-028 verify-task-028 \
 	fixtures-task-029 test-task-029 audit-task-029 verify-task-029 \
-	preflight-task-031 test-task-031-preflight verify-task-031-preflight
+	preflight-task-031 test-task-031-preflight verify-task-031-preflight \
+	test-task-031-evidence verify-task-031-evidence
 
 static:
 	$(PYTHON) -m compileall -q src tests scripts
@@ -72,3 +73,10 @@ test-task-031-preflight:
 
 # 준비 manifest 자체는 통과해야 하지만 Windows lock/model readiness는 아직 별도 hard gate다.
 verify-task-031-preflight: preflight-task-031 test-task-031-preflight static
+
+# TASK-031 offline evidence core — 실제 TASK-028 attempt/CAS 기반 identity mutation test
+test-task-031-evidence:
+	$(PYTHON) -m unittest discover -s tests -p 'test_calibration_evidence.py'
+
+# Windows/model/GPU 없이 실행 가능한 evidence core + 기존 preflight 회귀
+verify-task-031-evidence: test-task-031-evidence test-task-031-preflight static

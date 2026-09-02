@@ -8,7 +8,7 @@
 | **Reviewer** | 계약 checkpoint fixed HEAD `395a014fcda033c2be574e21d351e3bfec4c7e0e`와 preflight fixed HEAD `e209653d869362fda5eeac73775685649d594098`는 각각 작성자와 다른 fresh GPT/Codex 세션이 Gate H로 승인했다. 이후 최종 coherent HEAD도 작성자와 다른 fresh reviewer가 검토한다 (R8) |
 | **Phase** | Phase 1a — 첫 실제 자막 vertical slice와 calibration |
 | **Gate** | H — 외부 모델·dependency, 12 GB GPU, Windows, cache/resume와 품질 판정 |
-| **Status** | `In progress` — preflight fixed HEAD `e209653…` Gate H 승인과 PR #52 병합 완료. target Windows lock/environment evidence·model snapshot과 Windows/RTX 실측은 미착수 |
+| **Status** | `In progress` — preflight PR #52와 정합화 PR #53 병합 완료. 현재 offline evidence core(runtime identity·canonical StageSpec CAS binding)를 구현·검증 중이며 target Windows lock/environment evidence·model snapshot과 Windows/RTX 실측은 미착수 |
 | **기준 main** | `356b964505c3d852e9a264d79da12f15e5e707e0` (PR #49 merge commit) |
 | **계약 checkpoint** | 승인 HEAD `395a014fcda033c2be574e21d351e3bfec4c7e0e`, tree `c101ffcee0afc0c89fa4f4dada240ec2c8a6e59b`, PR #50 merge `e33ca4a15bfe0ba7091af6509bfdd9896904656c` |
 
@@ -26,15 +26,15 @@ vertical slice다. 모델 우열이나 제품 완성도를 테스트 수로 주�
 
 | 항목 | 값 |
 |---|---|
-| Source | live `main@033032ef14e2f130be18685010fc4fac2792d95f` (PR #52 merge) |
+| Source | live `main@47df9935eb662b7d7e8176f416df656d07371cd6` (PR #53 merge) |
 | Active TASK | TASK-031 / `In progress` |
 | Gate | H |
-| Author / Reviewer | Lean Root Author / preflight `e209653…`은 작성자·이전 변경 요청 reviewer와 분리된 fresh GPT/Codex가 승인. 이후 coherent HEAD도 작성자와 다른 fresh reviewer가 검토 |
+| Author / Reviewer | 현재 offline evidence core는 Lean Root/Codex Author / fixed HEAD는 작성자와 다른 fresh GPT/Codex가 Gate H 검토. preflight `e209653…` 승인 이력은 유지 |
 | Approved scope | U-22 A-min 계약 기록, 재현 가능한 dependency manifest·Windows hash lock 준비, 고정 revision model weight 준비를 위한 network, 실제 10분 local calibration과 보고 |
-| PR / branch | 계약 checkpoint #50·정합화 #51·preflight #52 Closed/Merged / 다음 target-Windows 실행 branch 미생성 |
-| Current checkpoint | PR #52 fixed HEAD `e209653d869362fda5eeac73775685649d594098`의 direct-lock binding과 target-Windows receipt/live re-probe를 fresh Gate H reviewer가 승인했고 merge `033032ef14e2f130be18685010fc4fac2792d95f`로 `main`에 반영했다. 실제 target Windows lock·evidence·weight·실측은 아직 없음 |
+| PR / branch | 계약 checkpoint #50·정합화 #51·preflight #52·정합화 #53 Closed/Merged / `lean-root/task-031-offline-evidence-core` 구현 중 |
+| Current checkpoint | preflight 승인 HEAD `e209653d869362fda5eeac73775685649d594098`은 merge `033032ef…`, 정합화는 merge `47df993…`로 `main`에 반영됐다. 현재 slice는 실제 TASK-028 AttemptRecord를 생성해 canonical StageSpec CAS document, fingerprints·cacheable·depends_on/cache-key, ordered input/output와 attempt 유일성을 검증한다. timing/NVML/8-cell 집계와 실제 Windows evidence는 아직 없음 |
 | Blocker | 현재 Work 환경은 Windows 11 / RTX 4070 SUPER가 아니므로 Windows transitive hash lock·CUDA stack·model cache receipt와 실제 측정 증거를 만들 수 없음 |
-| Next allowed action | target Windows에서 네 격리 환경의 transitive hash lock과 machine evidence를 capture·검증하고, 승인된 network 경계 안에서 다섯 exact-revision model snapshot receipt를 준비 |
+| Next allowed action | 현재 환경에서 offline evidence core를 fixed HEAD로 고정해 fresh Gate H 검토를 받고, 승인·병합 뒤 manifest/report evidence spine과 synthetic 8-cell validation을 별도 coherent slice로 진행. target Windows 접근이 가능해지면 lock·machine evidence·다섯 exact-revision model receipt를 준비 |
 | Forbidden now | remote inference/comparator, 사용자 미디어 업로드·commit, model weight commit, 결과 전 기본 모델 채택, exact-HEAD 승인 없는 merge |
 
 계약 checkpoint의 고정 좌표는 위 역사 기록으로 보존한다. 이후 구현 reviewer는 새 구현 PR의 live HEAD와
