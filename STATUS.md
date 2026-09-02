@@ -3,7 +3,7 @@
 **"지금 무엇이 되어 있고, 누가 무엇을 들고 있는가."**
 새 세션을 시작하는 에이전트는 [`AGENTS.md`](AGENTS.md) 다음으로 이 파일을 봅니다 (`AGENTS.md` §0.2).
 
-마지막 갱신: 2026-09-01 (TASK-031 PR #52 preflight Gate H remediation 검증·재검토 대기)
+마지막 갱신: 2026-09-02 (TASK-031 dependency/model preflight PR #52 승인·병합)
 현재 단계: **Phase 1a** — 첫 실제 10분 로컬 자막 vertical slice 착수
 
 ---
@@ -16,13 +16,13 @@
 | Phase 0 | **완료 — `main`에 병합됨** (PR #1, 병합 SHA `d11b2450d324ac7f509741acc1ac591313876d30`) |
 | 기능 코드 | **있음** — TASK-022 CLI: local input → probe → SRT → soft-sub → verify → local staging export |
 | 런타임 / 의존성 | 기존 production은 Python 3.12+ 표준 라이브러리와 FFmpeg/ffprobe. TASK-031은 backend별 direct pin과 준비 manifest를 추가하지만 아직 package 설치·Windows hash lock·model weight는 없음 |
-| 주요 병합 PR | **#1·#5·#16·#18·#19·#21·#22·#23·#24·#25·#28·#33·#34·#36·#42·#45·#47·#48·#50·#51** — TASK-031 계약 checkpoint merge는 `e33ca4a15bfe0ba7091af6509bfdd9896904656c`, 정합화 merge는 `e9e7a4eb102a1573cf7479cb005a0fb4d647fa88` |
+| 주요 병합 PR | **#1·#5·#16·#18·#19·#21·#22·#23·#24·#25·#28·#33·#34·#36·#42·#45·#47·#48·#50·#51·#52** — TASK-031 preflight merge는 `033032ef14e2f130be18685010fc4fac2792d95f` |
 | 열린 PR | **#6~#10·#12·#14·#15·#17·#29~#32·#37~#40·#46** — 전부 과거 Draft 또는 review 기록이며 현재 TASK-031 구현을 차단하지 않음 |
 | 미병합 종료 | **#2·#3·#4·#11·#41** — #41은 REVIEW-022 원문이 PR #42로 `main`에 보존된 뒤 종료 |
 | 운영 구조 | **TASK-030 적용 중** — GPT-primary·승인 연속성·run resilience·제한적 Claude escalation (`AGENTS.md` §3, ADR-0030). PR #45/TASK-029에는 소급 적용하지 않음 |
-| 현재 작업 | **TASK-031** — PR #52 fixed HEAD `5f56b12…`의 Gate H 변경 요청 두 건을 같은 구현 branch에서 제한 수정했고 focused 16·전체 512 tests 통과. 새 direct-child fixed HEAD의 fresh review 대기 |
+| 현재 작업 | **TASK-031** — preflight fixed HEAD `e209653…` Gate H 승인과 PR #52 병합 완료. 실제 target Windows lock/environment evidence·model snapshot 준비 대기 |
 | U-31 | **답변됨 (2026-08-22)** — 번역 대상 언어 **한국어(`ko`)** |
-| 다음 실행 의존성 | PR #52 remediation direct-child HEAD의 fresh Gate H 제한 재검토 뒤 target Windows에서 네 hash lock·environment evidence·CUDA stack을 고정하고 exact-revision model snapshot receipt를 만든다 |
+| 다음 실행 의존성 | target Windows에서 네 hash lock·environment evidence·CUDA stack을 고정하고 다섯 exact-revision model snapshot receipt를 만든다 |
 | U-08 | **답변됨 (2026-08-09)** — **채점 정답은 번역 자막** |
 | U-11 | **부분 답변됨 (2026-08-09)** — **약 2개월·품질 우선.** 정확한 제출 날짜는 **미확정** |
 | 차단 요인 | **dependency/model/network owner gate는 승인됨.** 현재 Work 환경에는 target Windows 11 / RTX 4070 SUPER와 실제 model cache가 없어 Windows lock·CUDA·VRAM·RTF evidence는 만들 수 없음. U-16 보관 정책은 미정이므로 자동 삭제·GC는 범위 밖 |
@@ -70,7 +70,7 @@
 | [TASK-028](docs/tasks/TASK-028.md) | Content-addressed artifact store와 재개 가능한 stage runtime | Claude Code 구현 세션 | Lean Root 고정 HEAD Gate H 검토 — `REVIEW-018`~`021` 변경 요청, [`REVIEW-022`](docs/reviews/REVIEW-022.md) 승인 | Phase 1a shared storage·orchestrator foundation | **Done — PR #36 병합** (`1d05de31aa39fd4dc8790d6c6e6442c0f8765ddc`) |
 | [TASK-029](docs/tasks/TASK-029.md) | SpeechSegment·Transcript·capability·translation·subtitle 실행 계약 정본화 | Claude Code 구현 세션 | Lean Root 고정 HEAD Gate H 검토 | Phase 1a subtitle data spine | **Done** — REVIEW-027 승인, 제품 오너가 exact HEAD `4b0d2cd041d7a133640355dd0b96874ef4329074` 승인, PR #45 병합 (`6f94705598c1ef57a4d25682938cbcbbaf044732`). 시작 당시 ownership/review 계약 유지 |
 | [TASK-030](docs/tasks/TASK-030.md) | GPT-primary 운영 계약과 Markdown 정합화 | Lean Root Orchestrator | fresh GPT/Codex 고정 HEAD 검토 | Project operations | **Done** — Gate M 승인, PR #47 병합 (`116d1c7fbb90e79acf15947385c1ac4f905ffb12`) |
-| [TASK-031](docs/tasks/TASK-031.md) | U-22 A-min 로컬 자막 calibration vertical slice | Lean Root Author | 각 coherent 구현 HEAD의 작성자와 다른 fresh GPT/Codex Gate H reviewer (R8) | Phase 1a subtitle calibration | **In progress — PR #52 remediation 검증 완료·fresh review 대기**, Windows/RTX 실측 미착수 |
+| [TASK-031](docs/tasks/TASK-031.md) | U-22 A-min 로컬 자막 calibration vertical slice | Lean Root Author | 각 coherent 구현 HEAD의 작성자와 다른 fresh GPT/Codex Gate H reviewer (R8) | Phase 1a subtitle calibration | **In progress — preflight PR #52 승인·병합 완료**, target Windows 준비·실측 미착수 |
 | [TASK-012](docs/tasks/TASK-012.md) | Phase 1 계획 기준선 확립 | Claude Code 주 세션 | TASK-013~017 / REVIEW-005~009 (사람 오너의 예외 승인) | Phase 1 planning / 1a 진입 | **Done** — REVIEW-009 승인 후 PR #5 병합 (`10d34b4a4545f9ae8894c8038e7f1cc9a7706d61`) |
 | [TASK-013](docs/tasks/TASK-013.md) | TASK-012 고정 HEAD 독립 검토 | **이 독립 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 review | **In review** (판정: 변경 요청 — [REVIEW-005](docs/reviews/REVIEW-005.md)) |
 | [TASK-014](docs/tasks/TASK-014.md) | TASK-012 M-01·M-02 제한 재검토 | **REVIEW-005를 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 limited rereview | **In review** (M-01·M-02 부분 해소 · 판정: 변경 요청 — [REVIEW-006](docs/reviews/REVIEW-006.md)) |
@@ -328,9 +328,16 @@ Codex·Codex Cloud·GitHub `@codex review`는 **당시 미래 역할·배정·�
   (H-01) lock이 `.in` direct package를 포함하지 않아도 통과하고, (H-02) resolver/CUDA 값이 target-Windows
   evidence 없이 자기 선언만으로 통과하는 두 false-pass에 **변경 요청**을 판정했다.
 - 같은 Author가 direct package exact binding과 고정 environment Python의 capture receipt+readiness live
-  re-probe로 두 finding만 제한 수정한다. 새 coherent HEAD는 작성자·이 reviewer와 다른 fresh reviewer에게 넘긴다.
+  re-probe로 두 finding만 제한 수정했다.
 - focused 16 tests와 전체 512 tests, preparation CLI, `git diff --check`가 통과했다. 실제 target-Windows
   capture/live re-probe는 이 Work 환경에서 확인하지 않았으며 다음 Windows 단계의 hard gate로 남는다.
+- 작성자와 이전 변경 요청 reviewer 모두와 분리된 fresh GPT/Codex는 fixed HEAD
+  `e209653d869362fda5eeac73775685649d594098`의 H-01·H-02 해소와 prohibited drift 없음을 **승인**했다.
+- 사람 제품 오너가 PR #52·전체 HEAD·reviewed base를 정확히 승인했고, PR #52는 merge commit
+  `033032ef14e2f130be18685010fc4fac2792d95f`로 병합됐다. merge tree
+  `561c0ea437b8b9225c15079992286a234e9bb99d`는 승인 HEAD와 같고 변경 파일은 0개다.
+- 이 병합은 preflight 기반만 완료한다. target Windows lock/environment evidence, model snapshot,
+  실제 calibration·Windows/RTX 실측과 기본 모델 채택은 남아 있다.
 
 ---
 
@@ -340,7 +347,7 @@ Codex·Codex Cloud·GitHub `@codex review`는 **당시 미래 역할·배정·�
 
 | TASK | 내용 | Owner |
 |---|---|---|
-| [TASK-031](docs/tasks/TASK-031.md) | 고정 10분 pack에서 ASR 2종 × 번역 2종의 실제 로컬 자막 vertical slice와 resume calibration — dependency/model/network gate 승인, preflight 기반 구현 중 | Lean Root Author |
+| [TASK-031](docs/tasks/TASK-031.md) | 고정 10분 pack에서 ASR 2종 × 번역 2종의 실제 로컬 자막 vertical slice와 resume calibration — preflight 기반 병합, target Windows 준비 대기 | Lean Root Author |
 
 > **판정과 반영 상태는 서로 다른 사실입니다. 섞지 마십시오.**
 >
@@ -379,7 +386,7 @@ Codex·Codex Cloud·GitHub `@codex review`는 **당시 미래 역할·배정·�
 | TASK-006 코드 구현 | schema·validator·fixture | TASK-006 계약 승인·병합 | **Done — PR #28** |
 | **TASK-028** | 공용 artifact/cache/resume runtime | TASK-006 완료 | **Done — REVIEW-022 승인, PR #36 병합** |
 | **TASK-029** | 자막 spine 기계 계약 정본화 | TASK-028 완료와 별도 TASK 계약 | **Done — Gate H 승인, PR #45 병합 (`6f94705598c1ef57a4d25682938cbcbbaf044732`)** |
-| **TASK-031** | U-22 A-min 10분 로컬 자막 calibration | TASK-029 완료와 제품 오너 A-min 결정 | **In progress — dependency/model/network gate 승인; preflight 기반 구현·검증 중** |
+| **TASK-031** | U-22 A-min 10분 로컬 자막 calibration | TASK-029 완료와 제품 오너 A-min 결정 | **In progress — preflight PR #52 병합; target Windows 준비·실측 미착수** |
 
 > **TASK-005 평가 하네스 설계와 TASK-006 평가 실행 계약은 완료됐습니다.** TASK-006 계약은 PR #27,
 > schema·validator·fixture 구현은 Gate H REVIEW-017 승인 뒤 PR #28로 병합됐습니다.
