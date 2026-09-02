@@ -8,7 +8,7 @@
 | **Reviewer** | 계약 checkpoint는 이번 Codex 작성자와 다른 fresh GPT/Codex 세션이 fixed HEAD `395a014fcda033c2be574e21d351e3bfec4c7e0e`를 Gate H로 승인했다. 구현 최종 coherent HEAD도 작성자와 다른 fresh reviewer가 검토한다 (R8) |
 | **Phase** | Phase 1a — 첫 실제 자막 vertical slice와 calibration |
 | **Gate** | H — 외부 모델·dependency, 12 GB GPU, Windows, cache/resume와 품질 판정 |
-| **Status** | `In progress` — 계약 checkpoint Gate H 승인·PR #50 병합 완료. dependency/model/network owner gate 대기; 구현·실측 미착수 |
+| **Status** | `In progress` — 계약 checkpoint와 병합 후 정합화 완료. PR #52 fixed HEAD `5f56b12…`의 H-01·H-02 제한 remediation은 focused 16 tests·전체 512 tests를 통과했고 새 fixed-HEAD review 대기. Windows/RTX 실측은 미착수 |
 | **기준 main** | `356b964505c3d852e9a264d79da12f15e5e707e0` (PR #49 merge commit) |
 | **계약 checkpoint** | 승인 HEAD `395a014fcda033c2be574e21d351e3bfec4c7e0e`, tree `c101ffcee0afc0c89fa4f4dada240ec2c8a6e59b`, PR #50 merge `e33ca4a15bfe0ba7091af6509bfdd9896904656c` |
 
@@ -26,19 +26,61 @@ vertical slice다. 모델 우열이나 제품 완성도를 테스트 수로 주�
 
 | 항목 | 값 |
 |---|---|
-| Source | live `main@e33ca4a15bfe0ba7091af6509bfdd9896904656c` (PR #50 merge) |
+| Source | live `main@e9e7a4eb102a1573cf7479cb005a0fb4d647fa88` (PR #51 merge) |
 | Active TASK | TASK-031 / `In progress` |
 | Gate | H |
-| Author / Reviewer | Lean Root Author / 구현 최종 coherent HEAD의 작성자와 다른 future fresh GPT·Codex session |
-| Approved scope | U-22 A-min 계약 기록, 실행 준비, 실제 10분 로컬 calibration과 보고 |
-| PR / branch | 계약 checkpoint #50 Closed/Merged / `lean-root/task-031-a-min-calibration` |
-| Current checkpoint | Gate H 승인 HEAD `395a014f…`가 merge `e33ca4a…`로 `main`에 반영됨. 구현 code·tests·실측은 아직 없음 |
-| Blocker | dependency manifest, 모델 weight 다운로드, 외부 network 사용은 별도 owner gate 전 금지 |
-| Next allowed action | 병합 후 상태 정합화 뒤 제품 오너가 TASK-031 dependency/model/network gate 승인 여부를 결정 |
-| Forbidden now | gate 전 구현, 모델/weight 다운로드, dependency 설치·manifest 추가, 외부 network 사용, 원격 추론, 사용자 미디어 commit |
+| Author / Reviewer | Lean Root Author / `5f56b12…` 변경 요청 reviewer와 작성자 모두와 분리된 새 coherent HEAD의 future fresh GPT·Codex session |
+| Approved scope | U-22 A-min 계약 기록, 재현 가능한 dependency manifest·Windows hash lock 준비, 고정 revision model weight 준비를 위한 network, 실제 10분 local calibration과 보고 |
+| PR / branch | 계약 checkpoint #50·정합화 #51 Closed/Merged / 구현 `lean-root/task-031-implementation` |
+| Current checkpoint | PR #52 fixed HEAD `5f56b12b0b508f1e01e01f52427760b4f2fc7b5d`의 두 preflight false-pass를 lock↔direct input exact binding과 target-Windows environment receipt↔readiness live re-probe로 수정·검증했다. 새 direct-child fixed HEAD의 fresh review가 필요하며 target Windows lock·weight·실측은 아직 없음 |
+| Blocker | 현재 Work 환경은 Windows 11 / RTX 4070 SUPER가 아니므로 Windows transitive hash lock·CUDA stack·model cache receipt와 실제 측정 증거를 만들 수 없음 |
+| Next allowed action | 두 false-pass mutation과 전체 회귀를 통과한 direct-child HEAD를 push한 뒤 다른 fresh Gate H 제한 재검토. 승인 뒤 target Windows에서 네 격리 환경 lock/evidence와 exact-revision model snapshot을 준비 |
+| Forbidden now | remote inference/comparator, 사용자 미디어 업로드·commit, model weight commit, 결과 전 기본 모델 채택, exact-HEAD 승인 없는 merge |
 
 계약 checkpoint의 고정 좌표는 위 역사 기록으로 보존한다. 이후 구현 reviewer는 새 구현 PR의 live HEAD와
 base를 별도로 고정하고 compact handoff와 repository tree를 대조한다.
+
+### dependency/model/network 제품 오너 gate — 승인
+
+2026-09-01 사람 제품 오너는 TASK-031 범위 안에서 다음을 승인했다.
+
+- backend별 재현 가능한 dependency manifest와 Windows hash lock 준비
+- §2의 다섯 공식 model ID를 고정 revision으로 준비·다운로드하는 데 필요한 외부 network 사용
+- 준비 evidence를 바탕으로 local-only calibration 구현을 계속하는 것
+
+이 승인은 remote inference/comparator, 사용자 미디어 전송, model weight의 Git commit, 영구/default model
+채택 또는 PR 병합 승인이 아니다. target Windows에서 lock·CUDA stack·model receipt가 모두 검증되기 전에는
+실행 readiness를 통과시키지 않는다.
+
+### PR #52 첫 Gate H 변경 요청과 제한 remediation
+
+fresh read-only reviewer는 PR #52 fixed HEAD
+`5f56b12b0b508f1e01e01f52427760b4f2fc7b5d`(tree
+`a92ea7c4077ab80c95551cc09fdf8cd35b052b67`, base/parent
+`e9e7a4eb102a1573cf7479cb005a0fb4d647fa88`)에 **변경 요청**을 판정했다.
+
+- H-01: lock의 SHA와 각 행의 pin/hash 모양만 검사해 `.in` direct package가 전부 빠지고
+  `unrelated-package==9.9.9`만 있어도 readiness가 통과했다.
+- H-02: `resolver_version`·`torch_version`·`cuda_version`·`cudnn_version`에 임의 문자열을 넣고
+  `cuda_stack_status="windows_locked"`로 선언하면 target-Windows 기계 evidence 없이 통과했다.
+
+remediation은 다음으로 한정한다.
+
+1. lock의 각 resolved requirement는 exact pin+SHA-256을 유지하고, 실제 `.in`과 manifest가 합의한 모든
+   direct package의 canonical name과 exact version이 lock에 존재해야 한다. transitive package는 허용하지만
+   direct 누락·version 교체·unrelated-only lock은 `E_LOCK_INPUT`으로 실패한다.
+2. 네 환경의 Python 경로와 evidence 경로를 고정한다. 각 고정 interpreter의 Windows capture가 resolver
+   실행 파일·raw version, installed direct package, Windows build, GPU/driver, CUDA runtime/PyTorch/cuDNN을
+   닫힌 receipt로 기록하고 manifest version을 그 probe 값으로만 갱신한다.
+3. readiness는 receipt schema·outer digest·raw/parsed/manifest equality 뒤에도 고정 Python을 다시 실행해
+   live probe와 receipt의 exact equality를 확인한다. 임의 version 문자열, receipt 변조 후 재hash, 환경 drift는
+   각각 pending/evidence/live-mismatch finding으로 fail-closed한다. local administrator에 대한 원격 attestation은
+   주장하지 않는다.
+
+이 remediation의 작성자는 Lean Root/Codex이므로 새 HEAD를 승인하지 않으며 R8의 fresh reviewer가 필요하다.
+focused `test_calibration_preflight.py` 16건과 전체 512 tests, preparation CLI, `git diff --check`는 통과했다.
+실제 Windows 11/RTX 4070 SUPER capture와 네 live interpreter 재실행은 이 환경에서 확인하지 않았으며
+review evidence로 가장하지 않는다.
 
 ### escalation 기록 — `AGENTS.md` §3 trigger 3
 
@@ -747,6 +789,8 @@ network·privacy, 비용·사용량, 보존·학습 정책, latency 포함 범�
 
 - [ ] content-locked 10분 pack과 human-corrected source가 결과 확인 전에 hash로 고정됐다.
 - [ ] 네 후보와 aligner의 exact ID·revision·license·환경·설정이 실행 전에 고정됐다.
+- [ ] 네 Windows hash lock이 각 `.in`의 모든 direct package canonical name·exact version을 포함하고, 누락·교체·unrelated-only mutation을 fail-closed로 거부한다.
+- [ ] 네 environment evidence가 고정 Windows Python에서 기계 capture되고, resolver/direct package/GPU/CUDA/PyTorch/cuDNN manifest 값이 receipt와 readiness 시점 live re-probe에 exact equality로 결박된다. 임의 문자열·receipt 변조·environment drift는 통과하지 않는다.
 - [ ] 독립 MT benchmark input, calibration-only subtitle style과 alignment chunk/stitch contract가 hash로 고정됐다.
 - [ ] exact 8-cell matrix의 unique run manifest와 exact 12개 candidate-stage measurement가 raw/corrected/attempt/interruption CAS lineage를 fail-closed로 검증한다.
 - [ ] 12개 measured candidate stage가 §5.1.1의 runtime identity tuple(`job_id`·`runtime_stage_id`=`AttemptRecord.stage_id`·`attempt_id`·`attempt_record_ref`·`cache_key`·ordered `input_ref_tuple`=`inputs[]`·ordered `output_ref_tuple`=`outputs[]`)로 실제 실행 attempt에 결박되고, 그 attempt identity가 전역에서 유일하며, CAS 중복 제거와 실행 재사용을 구분한다.

@@ -2,7 +2,7 @@
 
 `media-clarity-studio`의 로드맵입니다.
 
-마지막 갱신: 2026-09-01 (TASK-031 계약 checkpoint 병합, 구현 gate 대기)
+마지막 갱신: 2026-09-01 (TASK-031 dependency/model/network gate 승인, preflight 기반 구현)
 상태: **제안됨 (Proposed) 유지** — PR #5 병합은 계획 기준선 작업을 완료했지만,
 제안됨 ADR·실행 순서·미해결 U-XX를 자동 승인하거나 해결하지 않습니다
 
@@ -204,7 +204,7 @@ TASK-028  content-addressed artifact/cache/resume runtime — 완료 (PR #36)
 TASK-029  자막 spine 기계 계약·schema·validator·fixture — 완료 (PR #45)
    │
    ▼
-TASK-031  고정 10분 A-min 로컬 자막 calibration vertical slice — 계약 승인·PR #50 병합, 구현 gate 대기
+TASK-031  고정 10분 A-min 로컬 자막 calibration vertical slice — gate 승인, preflight 기반 구현 중
 ```
 
 | 노드 | 성격 | **선행 (이 표가 정답)** | 현재 상태 |
@@ -216,7 +216,7 @@ TASK-031  고정 10분 A-min 로컬 자막 calibration vertical slice — 계약
 | **TASK-006** | `ReferenceBundle/v1`·평가 실행 계약과 schema/validator/fixture (기존 의미 유지) | **TASK-005** | **Done — PR #28** |
 | **TASK-028** | 공용 storage·orchestrator 실행 기반 | TASK-006 완료 | **Done — REVIEW-022 승인, PR #36 병합** |
 | **TASK-029** | 자막 spine 기계 계약과 기계 정본 구현 | TASK-028 완료와 별도 TASK 계약 | **Done — Gate H 승인, PR #45 병합 (`6f94705598c1ef57a4d25682938cbcbbaf044732`)** |
-| **TASK-031** | U-22 A-min 실제 자막 vertical slice와 calibration | TASK-029 완료, 제품 오너 A-min 결정, 별도 dependency/model/network gate | **In progress — 계약 Gate H 승인·PR #50 병합; 실제 반입·실행 gate 대기** |
+| **TASK-031** | U-22 A-min 실제 자막 vertical slice와 calibration | TASK-029 완료, 제품 오너 A-min 결정, 별도 dependency/model/network gate | **In progress — owner gate 승인; dependency/model preflight 기반 구현·검증 중** |
 
 **왜 이렇게 보수적으로 두는가**
 
@@ -231,8 +231,9 @@ TASK-031  고정 10분 A-min 로컬 자막 calibration vertical slice — 계약
 > **TASK-028 계약은 PR #34, 구현은 REVIEW-022 승인 뒤 PR #36으로 병합됐습니다.**
 > **TASK-029 계약·구현은 Gate H 검토와 제품 오너의 exact-HEAD 승인 뒤 PR #45로 병합됐습니다.**
 > 다음 기능은 TASK-031로 고정됐습니다. 세부 실행 정본은 [`TASK-031`](docs/tasks/TASK-031.md)과
-> ADR-0031이며, 계약 checkpoint는 Gate H 승인 뒤 PR #50으로 병합됐습니다. 모델 weight·dependency·network
-> 반입과 구현은 별도 제품 오너 gate가 닫히기 전에는 시작하지 않습니다.
+> ADR-0031이며, 계약 checkpoint는 Gate H 승인 뒤 PR #50으로 병합됐습니다. 2026-09-01 제품 오너가
+> dependency/model/network gate를 승인했으며, target Windows hash lock·exact model receipt를 먼저
+> fail-closed로 준비한 뒤 실제 calibration으로 진행합니다.
 > 위의 PR #16 합성 plumbing은
 > 사람 오너가 승인한 좁은 예외이며 일반 ASR·번역·외부 코퍼스 구현 착수를 뜻하지 않습니다.
 > **PR #34와 #36의 승인은 TASK-028에 한정됩니다.** 나머지 실행 순서와 후속 노드는 계속 제안 상태입니다.
