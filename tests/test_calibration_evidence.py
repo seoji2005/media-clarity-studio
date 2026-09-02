@@ -238,6 +238,19 @@ class RuntimeIdentityMutationTests(CalibrationEvidenceCase):
         measurement["runtime_identities"][0]["stage_spec_digest"] = forged
         self.assertIn("E_STAGE_SPEC_IDENTITY", self.codes(measurement))
 
+    def test_stage_spec_document_must_use_its_exact_cas_uri(self) -> None:
+        measurement, _, _ = self.build_measurement()
+        original = measurement["stage_spec_document_refs"][0]
+        shadow = self.root / "shadow" / "stage-spec.json"
+        shadow.parent.mkdir(parents=True)
+        shadow.write_bytes(
+            self.runtime.store.absolute(original["uri"], "stage_spec").read_bytes()
+        )
+        shadow_ref = {**original, "uri": "shadow/stage-spec.json"}
+        measurement["stage_spec_document_refs"][0] = shadow_ref
+        measurement["runtime_identities"][0]["stage_spec_document_ref"] = shadow_ref
+        self.assertIn("E_STAGE_SPEC_IDENTITY", self.codes(measurement))
+
     def test_fingerprint_mutation_is_bound_to_attempt_record(self) -> None:
         measurement, spec, _ = self.build_measurement()
         stage = StageSpec(
@@ -325,6 +338,14 @@ class RuntimeIdentityMutationTests(CalibrationEvidenceCase):
             )
         }
         self.assertIn("E_ATTEMPT_REUSE", codes)
+
+    def test_malformed_unhashable_identity_returns_findings(self) -> None:
+        measurement, _, _ = self.build_measurement()
+        measurement["measurement_id"] = []
+        findings = validate_measurement_runtime_evidence_set(
+            (measurement,), self.root
+        )
+        self.assertIn("E_MEASUREMENT_IDENTITY", {finding.code for finding in findings})
 
 
 if __name__ == "__main__":

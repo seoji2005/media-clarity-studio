@@ -28,6 +28,8 @@ from typing import Any, Iterable, Mapping, Sequence
 from media_clarity.artifact_store import (
     ArtifactStore,
     ContractViolation,
+    cas_relative_uri,
+    digest_of,
     path_segment_error,
 )
 from media_clarity.job_runtime import (
@@ -357,7 +359,40 @@ def _load_stage_spec_document(
         )
         return None
     try:
-        payload = store.absolute(ref["uri"], f"{location}/uri").read_bytes()
+        expected_uri = cas_relative_uri(digest_of(expected_digest))
+    except (ContractViolation, TypeError):
+        findings.append(
+            _finding(
+                location,
+                "E_STAGE_SPEC_IDENTITY",
+                "stage_spec_digest로 canonical CAS URI를 만들 수 없다",
+            )
+        )
+        return None
+    if ref.get("uri") != expected_uri:
+        findings.append(
+            _finding(
+                f"{location}/uri",
+                "E_STAGE_SPEC_IDENTITY",
+                "stage_spec document URI가 digest의 canonical CAS 경로와 다르다",
+            )
+        )
+        return None
+    artifact_path = store.absolute(expected_uri, f"{location}/uri")
+    cursor = store.project_root
+    for segment in Path(expected_uri).parts:
+        cursor /= segment
+        if cursor.is_symlink():
+            findings.append(
+                _finding(
+                    f"{location}/uri",
+                    "E_STAGE_SPEC_IDENTITY",
+                    "canonical CAS 경로에 symbolic-link alias가 있다",
+                )
+            )
+            return None
+    try:
+        payload = artifact_path.read_bytes()
         document = loads_strict(payload.decode("utf-8"))
     except (ContractViolation, UnicodeDecodeError, JsonInputError):
         findings.append(_finding(location, "E_STAGE_SPEC_IDENTITY", "문서를 안전하게 읽거나 파싱할 수 없다"))
@@ -728,19 +763,23 @@ def validate_measurement_runtime_evidence_set(
         if not isinstance(measurement, Mapping):
             continue
         measurement_id = measurement.get("measurement_id")
-        if measurement_id in seen_measurements:
-            findings.append(
-                _finding(f"{measurement_location}/measurement_id", "E_MEASUREMENT_REUSE", "measurement_id가 재사용됐다")
-            )
-        else:
-            seen_measurements[measurement_id] = measurement_index
-        stage_identity = (measurement.get("run_id"), measurement.get("candidate_stage_id"))
-        if stage_identity in seen_stages:
-            findings.append(
-                _finding(measurement_location, "E_MEASUREMENT_REUSE", "run/candidate stage identity가 재사용됐다")
-            )
-        else:
-            seen_stages[stage_identity] = measurement_index
+        if isinstance(measurement_id, str):
+            if measurement_id in seen_measurements:
+                findings.append(
+                    _finding(f"{measurement_location}/measurement_id", "E_MEASUREMENT_REUSE", "measurement_id가 재사용됐다")
+                )
+            else:
+                seen_measurements[measurement_id] = measurement_index
+        run_id = measurement.get("run_id")
+        candidate_stage_id = measurement.get("candidate_stage_id")
+        if isinstance(run_id, str) and isinstance(candidate_stage_id, str):
+            stage_identity = (run_id, candidate_stage_id)
+            if stage_identity in seen_stages:
+                findings.append(
+                    _finding(measurement_location, "E_MEASUREMENT_REUSE", "run/candidate stage identity가 재사용됐다")
+                )
+            else:
+                seen_stages[stage_identity] = measurement_index
         identities = measurement.get("runtime_identities")
         if not isinstance(identities, list):
             continue
@@ -754,14 +793,16 @@ def validate_measurement_runtime_evidence_set(
             )
             record_ref = identity.get("attempt_record_ref")
             unit_location = f"{measurement_location}/runtime_identities/{unit_index}"
-            if triple in seen_attempts:
-                findings.append(_finding(unit_location, "E_ATTEMPT_REUSE", "attempt identity가 재사용됐다"))
-            else:
-                seen_attempts[triple] = (measurement_index, unit_index)
-            if record_ref in seen_refs:
-                findings.append(_finding(unit_location, "E_ATTEMPT_REUSE", "attempt_record_ref가 재사용됐다"))
-            else:
-                seen_refs[record_ref] = (measurement_index, unit_index)
+            if all(isinstance(value, str) for value in triple):
+                if triple in seen_attempts:
+                    findings.append(_finding(unit_location, "E_ATTEMPT_REUSE", "attempt identity가 재사용됐다"))
+                else:
+                    seen_attempts[triple] = (measurement_index, unit_index)
+            if isinstance(record_ref, str):
+                if record_ref in seen_refs:
+                    findings.append(_finding(unit_location, "E_ATTEMPT_REUSE", "attempt_record_ref가 재사용됐다"))
+                else:
+                    seen_refs[record_ref] = (measurement_index, unit_index)
     return sort_findings(findings)
 
 
