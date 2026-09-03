@@ -773,3 +773,44 @@ challenge와 제품 오너 결정을 거친다.
 **되돌리기:** 결과를 본 뒤 후보별 설정을 다르게 조정하지 않는다. harness 결함이면 영향받은 비교군을
 같은 조건으로 다시 실행하고 이전 evidence를 보존한다. A-min이 12 GB·Windows 또는 license hard gate를
 통과하지 못하면 범위를 조용히 축소하지 않고 후속 ADR에서 대안을 선택한다.
+
+### ADR-0032 — 세 ASR을 Work CPU에서 먼저 screen하고 상위 2종만 local calibration에 제안한다
+
+- **상태:** 승인됨 (2026-09-03, 사람 제품 오너)
+- **구현 계약:** [`TASK-032`](tasks/TASK-032.md)
+- **ADR-0031 관계:** TASK-031의 exact 2×2, 8 logical runs/12 candidate stages는 이 결정만으로 바뀌지 않는다.
+
+**맥락:** target Windows 11 / RTX 4070 SUPER 12 GB에 현재 접근할 수 없지만 Work CPU에서는 공개·허가·합성
+비민감 자료와 open-weight artifact를 준비·실행할 수 있다. Cohere Transcribe 2B는 공개 영어 지표에서 탐색 가치가
+있지만 공식 model card가 단일 언어 tag, 불안정한 code-switching, 비음성 전사 경향을 함께 밝힌다. 기존 두 후보를
+즉시 대체하거나 Cohere를 무시할 근거가 모두 부족하다. 세 후보를 TASK-031에 바로 넣으면 품질 증거 전에 closed
+matrix를 11 run/17 stage와 새 dependency·receipt 경계로 확장한다.
+
+**결정:** Qwen3-ASR-1.7B, Cohere Transcribe 2B, faster-whisper large-v3의 exact revision을 모델 출력 전에
+고정한 18분 primary + 12분 reserve target pack에서 비교한다. 입력은 공개 라이선스, 사용 허가가 확인된 실제
+사람 음성, 합성 비민감 자료만 사용하고 실제·합성 및 strata를 분리 보고한다. Work CPU를 먼저 사용하며 유료
+provider/GPU/API는 승인하지 않는다(추가 지출 상한 0). CPU가 불가능하면 deterministic fixture·harness·receipt와
+Windows bundle을 먼저 완성하고 provider·GPU·지출 상한을 별도 제품 결정으로 올린다.
+
+품질이 1차 기준이다. fatal omission·hallucination·silence hallucination, human correction time, CER/WER와
+mixed-language·names/numbers 오류를 분리 보고하고 단일 종합 점수를 만들지 않는다. 속도는 target local에서
+OOM/crash 없는 fully-local Windows 11/12 GB 실행과 나중에 명시적으로 freeze할 RTF gate의 호환성 판정에만 쓴다.
+cloud/Work CPU 결과를 Windows 적합성 증거로 재사용하지 않는다. 결과는 “이 frozen target pack에서 가장 좋음”
+이상으로 일반화하지 않는다.
+
+세 후보 중 상위 2종만 TASK-031 후보 amendment로 제안할 수 있다. 후보 identity 변경은 fresh Gate H review와
+제품 오너 exact-HEAD 승인을 받아야 하며 Cohere를 조용히 넣거나 8/12를 자동 11/17로 늘리지 않는다. reserve
+뒤에도 세 후보가 비지배적이면 `inconclusive`로 두고 11/17 확장 여부를 별도 제품 결정으로 올린다.
+
+**근거:** target hardware 없이도 품질 위험을 먼저 줄이고 model/dependency/pack evidence를 준비하면 집에서 필요한
+작업을 한 setup/snapshot 명령과 약 10분 winner/fallback ASR run으로 줄일 수 있다. 동시에 로컬 hard gate를
+분리하면 큰 Linux/CPU 환경의 성공을 12 GB Windows 성공으로 오인하지 않는다.
+
+**결과:** TASK-032는 `AsrScreenManifest/v1` 계열의 별도 CAS lineage를 사용하고 TASK-031
+`CalibrationRunManifest/v1` completed evidence를 가장하지 않는다. private media, model weight, raw transcript,
+credential, 큰 generated artifact는 Git에 넣지 않는다. Cohere의 gated access 조건을 수락할 수 없으면 우회하지
+않고 `blocked_access`로 남긴다. Phase 2 live-action enhancement 구현은 subtitle vertical slice 뒤 별도 Gate H다.
+
+**되돌리기:** screening contract나 실행이 무효면 TASK-032 branch/PR과 그 별도 evidence만 폐기하고 TASK-031의
+기존 두 후보와 8/12 계약으로 돌아간다. 이미 본 결과에 맞춰 pack·설정·ranking rule을 바꾸지 않으며 harness 결함은
+영향받은 모든 후보를 동일 조건으로 다시 실행하고 이전 attempt를 보존한다.
