@@ -1,6 +1,6 @@
 # TASK-032 — 공개·합성 frozen target pack 기반 3-ASR Work-CPU screening
 
-- **Status:** In progress — Gate H 계약 checkpoint 작성
+- **Status:** In review — G61-01~03 제한 수정 후 fresh Gate H 재검토 대기
 - **Gate:** H (새 모델·dependency/network 경계와 후속 후보 선택에 영향을 주는 평가 계약)
 - **Created:** 2026-09-03
 - **Base:** `main@0c0f40ea318aff8b69180c9c6f510a627b0e0b9c`
@@ -78,10 +78,17 @@ package/source identity, runtime과 decoding config를 별도 manifest에 고정
 runner source commit, precision·quantization, decoding, punctuation, VAD, language hint, chunk/stitch/context 설정을
 출력 전에 고정한다. 후보별 API 차이는 adapter가 흡수하되 결과를 본 뒤 한 후보만 설정을 바꾸지 않는다.
 
-### 4.2 sentinel과 primary
+### 4.2 sentinel, controlled resume와 primary
 
-- 후보마다 2분 sentinel을 1회 실행해 load 실패, 빈 출력, 반복 hallucination, chunk 조립 오류와 CPU 실행 가능성을 본다.
-- sentinel은 후보를 자동 탈락시키는 속도 경기가 아니다. 실험이 유효하게 실행됐는지 판정한다.
+- 후보마다 ordered clip unit이 둘 이상인 2분 sentinel top-level job을 1회 실행해 load 실패, 빈 출력,
+  반복 hallucination, chunk 조립 오류와 CPU 실행 가능성을 본다.
+- 세 후보 각각의 sentinel에는 controlled interruption을 정확히 한 번 주입한다. 최소 한 unit이 CAS에 완료된 뒤
+  다음 unit이 완료되기 전에 중단하고 같은 job을 resume한다.
+- resume는 이미 완료된 unit의 callable을 다시 실행하지 않고 동일한 attempt/output ref를 재사용해야 한다.
+  interrupted attempt는 보존하고 incomplete/pending unit만 실행하며, 최종 ordered coverage에는 모든 unit이
+  정확히 한 번 있어야 한다. 누락·중복·완료 unit 재실행은 해당 후보 evidence를 invalid로 만든다.
+- sentinel은 후보를 자동 탈락시키는 속도 경기가 아니다. 실험이 유효하게 실행되고 실제 cache/resume 계약을
+  지켰는지 판정한다.
 - valid한 후보는 같은 Work CPU에서 순차·batch 1·무양자화·결정적 decoding으로 18분 primary를 실행한다.
 - clip 경계와 dominant-language hint는 후보 사이에 동일하게 고정한다.
 - 공통 VAD를 쓴다면 경계를 출력 전에 freeze한다. 2분 silence/non-speech probe는 세 후보 모두 VAD를 우회해
@@ -89,9 +96,10 @@ runner source commit, precision·quantization, decoding, punctuation, VAD, langu
 - retry는 환경·harness failure와 candidate failure를 구분하는 frozen 규칙에 따라서만 허용한다. 이전 attempt와
   실패 메시지를 보존하고 조용히 덮어쓰지 않는다.
 
-기본 실행량은 6 top-level jobs, 60 audio-minutes다(2분×3 sentinel + 18분×3 primary). 2위와 3위가
-분리되지 않거나 서로 다른 핵심 stratum에서 비지배적이면 두 후보에만 12분 reserve를 실행한다.
-이 경우 최대 8 jobs, 84 audio-minutes다.
+기본 실행량은 6 top-level jobs, 60 unique scheduled audio-minutes다(2분×3 sentinel + 18분×3 primary).
+§5의 primary predicate가 unique bottom을 만들지 못하면 reserve를 개봉해 **세 후보 모두** 같은 12분을 실행한다.
+이 경우 최대 9 top-level jobs, 96 unique scheduled audio-minutes다. interruption으로 재실행된 미완료 unit의
+실제 처리량은 이 nominal 수치에 숨기지 않고 attempt별 audio-minutes로 별도 보고한다.
 
 ## 5. 품질·사람 평가와 선택 규칙
 
@@ -108,17 +116,61 @@ runner source commit, precision·quantization, decoding, punctuation, VAD, langu
 fatal event만 두 번째 평가자가 독립 판정한다. 사람이 실제로 편집하지 않은 값을 correction time으로 만들거나
 자동 edit distance를 같은 이름으로 기록하지 않는다.
 
-단일 종합 점수는 만들지 않는다. 선택 근거의 우선순위는 다음과 같다.
+단일 종합 점수는 만들지 않는다. primary metric은 clip별
+`fatal_clip_rate = fatal omission·hallucination·silence hallucination 중 하나 이상이 있는 scored clip 수 /
+전체 scored clip 수` 하나다. 나머지는 아래의 순서 있는 secondary tier다.
 
-1. fatal omission·hallucination·silence hallucination과 실험 무효 여부
-2. human correction time
+1. primary `fatal_clip_rate`와 stratum×fatal-event-kind safety cell
+2. human correction seconds per audio minute
 3. Japanese CER·English WER
-4. mixed-language와 names/numbers/technical-term 오류
+4. mixed-language와 names/numbers/technical-term annotated-item error rate
 
-paired clip/stratum 표를 만든다. 3위가 위 우선순위에서 다른 두 후보에 실질적으로 지배되고 독점적 안전 우위가
-없을 때만 상위 2종 승격을 권고한다. primary로 2위/3위가 분리되지 않거나 핵심 stratum별 우승자가 갈리면
-미리 고정한 reserve를 실행한다. reserve 뒤에도 세 후보가 비지배적이면 결과를 `inconclusive`로 두고,
-3-way local 확장은 자동 실행하지 않은 채 11-run/17-stage 계약안을 별도 owner decision으로 올린다.
+### 5.1 출력 전 decision rule freeze
+
+첫 candidate output 전에 닫힌 `AsrScreenDecisionRule/v1`을 CAS에 저장하고 ref와 SHA-256을 pack config,
+모든 run manifest와 report에 넣는다. 최소한 ordered candidate IDs, primary/reserve pack hash, metric/denominator,
+tier order, `source_id` cluster key, percentile cluster-bootstrap 10,000회, bootstrap seed `32061`, 양측 95% CI,
+최소 source group 수 5와 아래 minimum practical effect(MPE)를 포함한다.
+
+| tier | screen 전용 MPE |
+|---|---|
+| `fatal_clip_rate` | `max(1 / eligible_clip_count, 0.01)` absolute rate |
+| correction time | `max(3.0 seconds/audio-minute, pairwise slower mean의 5%)` |
+| CER/WER와 annotated-item error rate | 0.01 absolute rate (1 percentage point) |
+| safety cell event count | 1 event; 한 cell이라도 더 나쁘면 그 pair의 lower-tier 승리를 veto |
+
+이 값은 U-27의 제품 전체 품질 목표가 아니라 이 작은 screen의 후보 제거 규칙이다. 결과 뒤 낮추거나 metric,
+denominator, source grouping, seed, CI, tier 순서를 바꾸지 않는다. model decoding은 sampling 없는 결정 경로여야
+한다. backend stochasticity를 끌 수 없으면 임의의 1-seed 결과를 쓰지 않고 preflight를 `blocked`로 끝낸다.
+
+lower-is-better 지표의 paired 차이를 `A - B`로 둔다.
+
+- 95% CI upper bound가 `-MPE`보다 작으면 A가 B보다 `materially_better`다.
+- CI 전체가 `[-MPE, +MPE]` 안이면 `equivalent`다.
+- 그 밖, CI 누락 또는 `n_sources < 5`는 `indeterminate`이며 승패를 만들지 않는다.
+
+rule document/ref/hash가 없거나 어느 manifest/report와 다르거나 validator가 위 상수를 재계산해 일치시키지
+못하면 verdict는 `blocked`이고 report는 `completed`가 될 수 없다.
+
+### 5.2 pairwise predicate와 reserve
+
+A가 B를 이기는 predicate는 tier를 위에서부터 순서대로 적용한다.
+
+1. A의 `fatal_clip_rate`가 materially better이고 모든 stratum×event safety cell count가 B 이하이면 A 승리다.
+2. 두 fatal rate가 equivalent이고 모든 safety cell count가 정확히 같을 때만 correction tier로 내려간다.
+3. correction time이 materially better이면 A 승리, equivalent일 때만 text tier로 내려간다.
+4. text tier에서는 적용 가능한 모든 rate의 CI upper bound가 `+MPE` 이하이고 하나 이상의 upper bound가
+   `-MPE`보다 작을 때만 A 승리다. metric 하나라도 insufficient이면 승패 없음이다.
+5. 상위 tier가 trade-off 또는 indeterminate이면 lower tier로 덮지 않고 그 pair를 incomparable로 둔다.
+
+후보 C가 다른 두 후보 각각에 이 predicate로 패하고 그런 후보가 정확히 하나일 때만 C를 unique bottom으로
+판정해 나머지 둘을 `top_two`로 권고한다. 다른 경우 primary verdict는 `reserve_required`다. reserve를
+개봉하면 세 후보 모두 실행하고 primary+reserve 합친 동일 clip 집합에 같은 rule/hash를 재적용한다. 합친
+결과에서 unique bottom이 생기면 `top_two`, 아니면 `inconclusive`다. 어떤 필수 evidence가 invalid/누락이면
+`blocked`가 우선한다. paired clip/stratum, CI, MPE, safety veto와 pairwise relation 전체를 report에 보존한다.
+
+reserve 뒤 `inconclusive`이면 3-way local 확장을 자동 실행하지 않고 11-run/17-stage 계약안을 별도 owner
+decision으로 올린다.
 
 ## 6. evidence와 fail-closed 계약
 
@@ -129,16 +181,19 @@ paired clip/stratum 표를 만든다. 3위가 위 우선순위에서 다른 두 
 
 1. frozen pack manifest와 primary/reserve content hash
 2. 세 exact-revision model/access/license/file-hash receipt
-3. dependency/runtime/config lock과 Work CPU environment receipt
+3. dependency/runtime/config lock, Work CPU environment receipt와 `AsrScreenDecisionRule/v1` ref/hash
 4. sentinel·primary·reserve(실행된 경우)의 attempt, raw output, normalized hypothesis, failure record
-5. reference/annotation와 metric records, blinded correction packet과 실제 human correction records
-6. paired clip/stratum report, dominance table, `top_two | inconclusive | blocked` verdict
-7. target Windows용 한 setup/model-snapshot 명령과 winner/fallback 약 10분 probe 명령, 예상 artifact 목록과
+5. 후보별 sentinel interruption/resume record와 completed/incomplete unit의 before/after attempt·output refs
+6. reference/annotation와 metric records, blinded correction packet과 실제 human correction records
+7. paired clip/stratum report, CI·MPE·safety veto·pairwise relation, `top_two | inconclusive | blocked` verdict
+8. target Windows용 한 setup/model-snapshot 명령과 winner/fallback 약 10분 probe 명령, 예상 artifact 목록과
    정확한 fail-closed 오류 메시지 catalog
 
-모든 ref는 digest·size·kind·media type을 검증한다. candidate/config/pack/environment hash가 맞지 않거나,
-필수 clip·attempt·raw output·human record가 없으면 report는 `completed`가 될 수 없다. CAS·cache/resume·lineage,
-중단 attempt 보존, 원본 불변 계약은 TASK-028·031보다 약화하지 않는다.
+모든 ref는 digest·size·kind·media type을 검증한다. candidate/config/pack/environment/decision-rule hash가
+맞지 않거나, 필수 clip·attempt·raw output·human record 또는 후보별 interruption/resume record가 없으면
+report는 `completed`가 될 수 없다. validator는 완료 unit 재실행, incomplete unit 미실행, 이전 interrupted
+attempt 손실, 최종 ordered coverage의 누락·중복을 거부한다. CAS·cache/resume·lineage, 중단 attempt 보존,
+원본 불변 계약은 TASK-028·031보다 약화하지 않는다.
 
 ## 7. target local hard gate와 TASK-031 관계
 
@@ -191,9 +246,9 @@ hard gate를 통과한 후보 사이에서는 속도가 아니라 frozen pack �
 1. contract path allowlist와 TASK-031 무변경을 확인한다.
 2. schema/validator와 small synthetic normal·boundary·failure·recovery fixtures를 먼저 만든다.
 3. pack/license/access/model/dependency preflight를 fail-closed로 실행한다.
-4. Work CPU 2분 sentinel을 후보별로 실행하고 같은 HEAD에서 evidence를 고정한다.
-5. 가능한 후보의 18분 primary, 조건 충족 시 12분 reserve를 실행한다.
-6. blind human records가 들어온 뒤 report를 완성한다.
+4. Work CPU 2분 sentinel을 후보별로 controlled-interrupt/resume하고 reuse·retry·coverage evidence를 고정한다.
+5. 가능한 후보의 18분 primary를 실행하고, predicate가 요구하면 세 후보 모두 12분 reserve를 실행한다.
+6. hash-locked decision rule의 CI·MPE·pairwise predicate를 검증하고 blind human records 뒤 report를 완성한다.
 7. Windows bundle을 dry-run 검증하되 target-hardware success로 표기하지 않는다.
 8. fixed HEAD를 fresh GPT/Codex가 독립 Gate H review한다.
 
@@ -203,16 +258,20 @@ hard gate를 통과한 후보 사이에서는 속도가 아니라 frozen pack �
 - model revision/file hash 또는 dependency/config identity를 고정할 수 없는 경우
 - Cohere gated access가 수락되지 않았거나 offline snapshot을 재현할 수 없는 경우
 - 유료 provider/GPU가 필요하지만 provider·GPU·지출 상한 승인이 없는 경우
-- 결과를 본 뒤 pack, VAD, language hint, chunking, normalization 또는 ranking rule을 바꾸려는 경우
+- 결과를 본 뒤 pack, VAD, language hint, chunking, normalization, decision-rule hash·CI·MPE·ranking predicate를 바꾸려는 경우
 - TASK-031의 8/12 closed set을 이 TASK에서 변경해야 하는 경우
 
 ## 10. acceptance criteria
 
 - [ ] 세 후보의 immutable identity와 access/license/file-hash receipt가 검증된다.
 - [ ] 18분 primary와 12분 reserve가 출력 전에 함께 frozen되고 실제/합성 구성과 라이선스가 검증된다.
-- [ ] 동일 config의 2분 sentinel과 가능한 18분 primary가 Work CPU에서 실행되거나, 정확한 blocker가 재현된다.
+- [ ] reserve가 열리면 세 후보 모두 같은 12분을 실행하며 최대 9 jobs/96 unique scheduled audio-minutes가 검증된다.
+- [ ] `AsrScreenDecisionRule/v1`의 metric·CI·MPE·source 수·predicate·hash가 출력 전에 고정되고 변경/누락이 fail-closed다.
+- [ ] 세 후보 각각의 2분 sentinel에서 실제 controlled interruption/resume가 수행되고 완료 unit 재사용,
+  미완료 unit만 재실행, 이전 attempt 보존, 최종 ordered coverage의 누락·중복 없음이 검증된다.
+- [ ] 동일 config의 가능한 18분 primary가 Work CPU에서 실행되거나, 정확한 blocker가 재현된다.
 - [ ] raw output·attempt·failure·metric·human correction evidence가 별도 CAS lineage로 보존된다.
-- [ ] 누락/위조/foreign ref/재사용/순서 변경이 fail-closed fixture로 거부된다.
+- [ ] 누락/위조/foreign ref/재사용/순서·rule-hash 변경과 resume 위반이 fail-closed fixture로 거부된다.
 - [ ] report가 `top_two`, `inconclusive`, `blocked` 중 하나만 내고, 범위를 넘어선 우월성·Windows 주장을 하지 않는다.
 - [ ] 한 setup/model-snapshot 명령과 한 약 10분 winner/fallback local ASR 명령·expected artifacts·오류 catalog가 준비된다.
 - [ ] TASK-031 exact 8/12 계약, models, dependencies, network, cost는 별도 amendment/approval 없이 바뀌지 않는다.
@@ -224,7 +283,7 @@ rollback unit은 TASK-032 branch/PR 전체다. contract가 거절되면 네 문�
 CAS evidence는 그대로 남는다.
 
 - contract 승인·병합 뒤: deterministic schema/fixture/harness와 무료 Work-CPU preflight를 첫 구현 slice로 만든다.
-- CPU 실행 가능: sentinel → primary → 필요 시 reserve 순서로 진행한다.
+- CPU 실행 가능: 후보별 interrupted/resumed sentinel → primary → 필요 시 세 후보 reserve 순서로 진행한다.
 - CPU 실행 불가능: 준비 tooling을 끝낸 뒤 provider·GPU·지출 상한 decision gate만 제품 오너에게 요청한다.
 - top two가 명확함: TASK-031 후보 identity amendment를 별도 Gate H로 제안한다.
 - 세 후보가 비지배적: 11/17 확장안을 별도 제품 결정으로 올린다.

@@ -3,7 +3,7 @@
 **"지금 무엇이 되어 있고, 누가 무엇을 들고 있는가."**
 새 세션을 시작하는 에이전트는 [`AGENTS.md`](AGENTS.md) 다음으로 이 파일을 봅니다 (`AGENTS.md` §0.2).
 
-마지막 갱신: 2026-09-03 (TASK-032 3-ASR Work-CPU screening 계약 checkpoint)
+마지막 갱신: 2026-09-03 (TASK-032 Gate H G61-01~03 제한 수정)
 현재 단계: **Phase 1a** — 첫 실제 10분 로컬 자막 vertical slice 착수
 
 ---
@@ -20,7 +20,7 @@
 | 열린 PR | **#6~#10·#12·#14·#15·#17·#29~#32·#37~#40·#46·#58** — #58은 PR #59보다 앞선 exact-matrix Draft이며 현재 포인터가 아니다. 나머지는 과거 Draft 또는 review 기록이고 TASK-031을 차단하지 않음 |
 | 미병합 종료 | **#2·#3·#4·#11·#41** — #41은 REVIEW-022 원문이 PR #42로 `main`에 보존된 뒤 종료 |
 | 운영 구조 | **TASK-030 적용 중** — GPT-primary·승인 연속성·run resilience·제한적 Claude escalation (`AGENTS.md` §3, ADR-0030). PR #45/TASK-029에는 소급 적용하지 않음 |
-| 현재 작업 | **TASK-032** — TASK-031 후보 결정을 위한 별도 3-ASR Work-CPU screening 계약 checkpoint. 부모 TASK-031은 `In progress`이며 exact 8-run/12-stage closed set은 변경하지 않음 |
+| 현재 작업 | **TASK-032** — Gate H G61-01~03 제한 수정 완료, fresh fixed-HEAD 재검토 대기. 부모 TASK-031은 `In progress`이며 exact 8-run/12-stage closed set은 변경하지 않음 |
 | U-31 | **답변됨 (2026-08-22)** — 번역 대상 언어 **한국어(`ko`)** |
 | 다음 실행 의존성 | TASK-032 계약의 fresh Gate H review·제품 오너 승인 → deterministic schema/fixture/harness와 무료 Work-CPU preflight. 실제 target-hardware 판정은 Windows 접근 뒤 lock·environment/CUDA evidence와 승인된 exact-revision model receipt가 필요 |
 | U-08 | **답변됨 (2026-08-09)** — **채점 정답은 번역 자막** |
@@ -71,7 +71,7 @@
 | [TASK-029](docs/tasks/TASK-029.md) | SpeechSegment·Transcript·capability·translation·subtitle 실행 계약 정본화 | Claude Code 구현 세션 | Lean Root 고정 HEAD Gate H 검토 | Phase 1a subtitle data spine | **Done** — REVIEW-027 승인, 제품 오너가 exact HEAD `4b0d2cd041d7a133640355dd0b96874ef4329074` 승인, PR #45 병합 (`6f94705598c1ef57a4d25682938cbcbbaf044732`). 시작 당시 ownership/review 계약 유지 |
 | [TASK-030](docs/tasks/TASK-030.md) | GPT-primary 운영 계약과 Markdown 정합화 | Lean Root Orchestrator | fresh GPT/Codex 고정 HEAD 검토 | Project operations | **Done** — Gate M 승인, PR #47 병합 (`116d1c7fbb90e79acf15947385c1ac4f905ffb12`) |
 | [TASK-031](docs/tasks/TASK-031.md) | U-22 A-min 로컬 자막 calibration vertical slice | Lean Root Author | 각 coherent 구현 HEAD의 작성자와 다른 fresh GPT/Codex Gate H reviewer (R8) | Phase 1a subtitle calibration | **In progress — exact synthetic 8-cell/12-stage fixture·mutation matrix Gate H 승인, PR #59 병합 완료**, timing/NVML·correction/interruption·final ancestry, target Windows 준비·실측은 미착수 |
-| [TASK-032](docs/tasks/TASK-032.md) | 공개·합성 frozen pack 3-ASR Work-CPU screening | Lean Root Author | fresh GPT/Codex Gate H reviewer | Phase 1a ASR candidate screening | **In progress — contract checkpoint**, TASK-031 후보·8/12 계약은 변경하지 않음 |
+| [TASK-032](docs/tasks/TASK-032.md) | 공개·합성 frozen pack 3-ASR Work-CPU screening | Lean Root Author | fresh GPT/Codex Gate H reviewer | Phase 1a ASR candidate screening | **In review — G61-01~03 제한 수정, fixed-HEAD 재검토 대기**, TASK-031 후보·8/12 계약은 변경하지 않음 |
 | [TASK-012](docs/tasks/TASK-012.md) | Phase 1 계획 기준선 확립 | Claude Code 주 세션 | TASK-013~017 / REVIEW-005~009 (사람 오너의 예외 승인) | Phase 1 planning / 1a 진입 | **Done** — REVIEW-009 승인 후 PR #5 병합 (`10d34b4a4545f9ae8894c8038e7f1cc9a7706d61`) |
 | [TASK-013](docs/tasks/TASK-013.md) | TASK-012 고정 HEAD 독립 검토 | **이 독립 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 review | **In review** (판정: 변경 요청 — [REVIEW-005](docs/reviews/REVIEW-005.md)) |
 | [TASK-014](docs/tasks/TASK-014.md) | TASK-012 M-01·M-02 제한 재검토 | **REVIEW-005를 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 limited rereview | **In review** (M-01·M-02 부분 해소 · 판정: 변경 요청 — [REVIEW-006](docs/reviews/REVIEW-006.md)) |

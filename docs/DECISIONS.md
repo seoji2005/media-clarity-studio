@@ -799,17 +799,21 @@ cloud/Work CPU 결과를 Windows 적합성 증거로 재사용하지 않는다. 
 이상으로 일반화하지 않는다.
 
 세 후보 중 상위 2종만 TASK-031 후보 amendment로 제안할 수 있다. 후보 identity 변경은 fresh Gate H review와
-제품 오너 exact-HEAD 승인을 받아야 하며 Cohere를 조용히 넣거나 8/12를 자동 11/17로 늘리지 않는다. reserve
-뒤에도 세 후보가 비지배적이면 `inconclusive`로 두고 11/17 확장 여부를 별도 제품 결정으로 올린다.
+제품 오너 exact-HEAD 승인을 받아야 하며 Cohere를 조용히 넣거나 8/12를 자동 11/17로 늘리지 않는다.
+primary가 unique bottom을 만들지 못해 reserve를 열면 세 후보 모두 같은 reserve를 실행한다. 출력 전에
+hash-lock한 CI·MPE·source-group·tier predicate를 primary와 primary+reserve에 동일하게 적용하며, 합친 결과에도
+unique bottom이 없으면 `inconclusive`로 두고 11/17 확장 여부를 별도 제품 결정으로 올린다.
 
 **근거:** target hardware 없이도 품질 위험을 먼저 줄이고 model/dependency/pack evidence를 준비하면 집에서 필요한
 작업을 한 setup/snapshot 명령과 약 10분 winner/fallback ASR run으로 줄일 수 있다. 동시에 로컬 hard gate를
 분리하면 큰 Linux/CPU 환경의 성공을 12 GB Windows 성공으로 오인하지 않는다.
 
 **결과:** TASK-032는 `AsrScreenManifest/v1` 계열의 별도 CAS lineage를 사용하고 TASK-031
-`CalibrationRunManifest/v1` completed evidence를 가장하지 않는다. private media, model weight, raw transcript,
-credential, 큰 generated artifact는 Git에 넣지 않는다. Cohere의 gated access 조건을 수락할 수 없으면 우회하지
-않고 `blocked_access`로 남긴다. Phase 2 live-action enhancement 구현은 subtitle vertical slice 뒤 별도 Gate H다.
+`CalibrationRunManifest/v1` completed evidence를 가장하지 않는다. 세 후보 각각의 sentinel에 실제 controlled
+interruption/resume를 배정하고 완료 unit 재사용·미완료 unit만 재실행·이전 attempt 보존·최종 coverage를
+완료 조건으로 둔다. private media, model weight, raw transcript, credential, 큰 generated artifact는 Git에
+넣지 않는다. Cohere의 gated access 조건을 수락할 수 없으면 우회하지 않고 `blocked_access`로 남긴다.
+Phase 2 live-action enhancement 구현은 subtitle vertical slice 뒤 별도 Gate H다.
 
 **되돌리기:** screening contract나 실행이 무효면 TASK-032 branch/PR과 그 별도 evidence만 폐기하고 TASK-031의
 기존 두 후보와 8/12 계약으로 돌아간다. 이미 본 결과에 맞춰 pack·설정·ranking rule을 바꾸지 않으며 harness 결함은
