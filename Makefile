@@ -6,7 +6,8 @@ export PYTHONPATH := src
 	fixtures-task-028 test-task-028 smoke-task-028 verify-task-028 \
 	fixtures-task-029 test-task-029 audit-task-029 verify-task-029 \
 	preflight-task-031 test-task-031-preflight verify-task-031-preflight \
-	test-task-031-evidence verify-task-031-evidence
+	test-task-031-evidence verify-task-031-evidence \
+	test-task-031-manifest-report verify-task-031-manifest-report
 
 static:
 	$(PYTHON) -m compileall -q src tests scripts
@@ -80,3 +81,10 @@ test-task-031-evidence:
 
 # Windows/model/GPU 없이 실행 가능한 evidence core + 기존 preflight 회귀
 verify-task-031-evidence: test-task-031-evidence test-task-031-preflight static
+
+# TASK-031 manifest/report evidence spine — 닫힌 문서와 CAS cross-reference 검증
+test-task-031-manifest-report:
+	$(PYTHON) -m unittest discover -s tests -p 'test_calibration_manifest_report.py'
+
+# timing/NVML/Windows 없이 정직한 incomplete spine과 기존 evidence/preflight 회귀
+verify-task-031-manifest-report: test-task-031-manifest-report test-task-031-evidence test-task-031-preflight static

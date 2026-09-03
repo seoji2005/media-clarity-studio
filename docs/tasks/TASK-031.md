@@ -8,7 +8,7 @@
 | **Reviewer** | 계약 checkpoint `395a014f…`, preflight `e209653d…`, offline evidence core `2a5ccd38…`은 각각 작성자와 다른 fresh GPT/Codex 세션이 Gate H로 승인했다. 이후 coherent HEAD도 작성자와 다른 fresh reviewer가 검토한다 (R8) |
 | **Phase** | Phase 1a — 첫 실제 자막 vertical slice와 calibration |
 | **Gate** | H — 외부 모델·dependency, 12 GB GPU, Windows, cache/resume와 품질 판정 |
-| **Status** | `In progress` — offline evidence core fixed HEAD `2a5ccd38…` Gate H 승인과 PR #54 병합 완료. 다음 offline slice는 manifest/report evidence spine이며 target Windows lock/environment evidence·model snapshot과 Windows/RTX 실측은 미착수 |
+| **Status** | `In progress` — manifest/report evidence spine 구현·검증 중. target Windows lock/environment evidence·model snapshot과 Windows/RTX 실측은 미착수 |
 | **기준 main** | `356b964505c3d852e9a264d79da12f15e5e707e0` (PR #49 merge commit) |
 | **계약 checkpoint** | 승인 HEAD `395a014fcda033c2be574e21d351e3bfec4c7e0e`, tree `c101ffcee0afc0c89fa4f4dada240ec2c8a6e59b`, PR #50 merge `e33ca4a15bfe0ba7091af6509bfdd9896904656c` |
 
@@ -26,15 +26,15 @@ vertical slice다. 모델 우열이나 제품 완성도를 테스트 수로 주�
 
 | 항목 | 값 |
 |---|---|
-| Source | live `main@1073b984a443caf0db5c1631eb09dbaf7c8830a0` (PR #54 merge) |
+| Source | live `main@ad1e3e09959ca351432ecb2f50e4ba0c0255af28` (PR #55 merge) |
 | Active TASK | TASK-031 / `In progress` |
 | Gate | H |
 | Author / Reviewer | offline evidence core `2a5ccd38…`은 Lean Root/Codex Author와 다른 fresh GPT/Codex가 Gate H 승인. 다음 manifest/report evidence spine도 Lean Root/Codex Author / 별도 fresh reviewer |
 | Approved scope | U-22 A-min 계약 기록, 재현 가능한 dependency manifest·Windows hash lock 준비, 고정 revision model weight 준비를 위한 network, 실제 10분 local calibration과 보고 |
-| PR / branch | #50~#54 Closed/Merged / 다음 manifest/report evidence spine 구현 branch 미생성 |
-| Current checkpoint | offline evidence core 승인 HEAD `2a5ccd38c401a0a33e575f4f0ae4f409c6db7456`은 merge `1073b984a443caf0db5c1631eb09dbaf7c8830a0`로 `main`에 반영됐다. canonical StageSpec CAS·AttemptRecord runtime identity와 malformed evidence fail-closed 검증은 구현됐다. manifest/report spine, timing/NVML/8-cell 집계와 실제 Windows evidence는 아직 없음 |
+| PR / branch | #50~#55 Closed/Merged / `lean-root/task-031-manifest-report-spine` 작성 중 |
+| Current checkpoint | manifest/report/measurement runtime spine의 닫힌 schema와 report → manifest → measurement → AttemptRecord canonical CAS linkage를 구현했다. 정직한 `incomplete`만 허용하며 timing/NVML/correction/interruption/final ancestry와 exhaustive 8-cell fixture는 아직 없음 |
 | Blocker | 현재 Work 환경은 Windows 11 / RTX 4070 SUPER가 아니므로 Windows transitive hash lock·CUDA stack·model cache receipt와 실제 측정 증거를 만들 수 없음 |
-| Next allowed action | 현재 환경에서 manifest/report evidence spine을 별도 coherent slice로 구현·검증한 뒤 fresh Gate H 검토. 그 다음 synthetic 8-cell fail-closed validation과 Windows 실행 준비 도구를 진행. target Windows 접근 뒤 lock·machine evidence·다섯 exact-revision model receipt를 준비 |
+| Next allowed action | manifest/report evidence spine을 coherent fixed HEAD로 고정해 fresh Gate H 검토. 승인·병합 뒤 synthetic 8-cell fail-closed validation과 Windows 실행 준비 도구를 진행. target Windows 접근 뒤 lock·machine evidence·다섯 exact-revision model receipt를 준비 |
 | Forbidden now | remote inference/comparator, 사용자 미디어 업로드·commit, model weight commit, 결과 전 기본 모델 채택, exact-HEAD 승인 없는 merge |
 
 계약 checkpoint의 고정 좌표는 위 역사 기록으로 보존한다. 이후 구현 reviewer는 새 구현 PR의 live HEAD와
@@ -126,6 +126,28 @@ review evidence로 가장하지 않는다.
 - 이는 hardware-independent runtime provenance만 완료한다. TASK-031은 계속 `In progress`이며
   manifest/report spine, synthetic 8-cell validation, timing/NVML, target Windows/model evidence와 실제
   calibration은 완료되지 않았다.
+
+### manifest/report evidence spine 구현 경계
+
+이 slice는 §5.1·§5.5의 evidence index와 hardware-independent runtime linkage만 구현한다.
+
+- `CalibrationRunManifest/v1`, runtime-only `PerformanceMeasurement/v1`, `CalibrationReport/v1`은
+  닫힌 schema이며 report에는 correction/RTF/VRAM 자유 숫자를 두지 않는다.
+- fixed cell은 run kind, ordered adapter role, official model ID와 frozen revision을 결정한다.
+  `candidate_chain_hash`는 ordered role+candidate identity/config record에서 재계산한다.
+- task-local JSON ref는 canonical CAS URI·digest·bytes를 검증하고 report entry와 manifest,
+  manifest candidate stage와 measurement projection은 exact equality여야 한다. measurement는 기존
+  offline evidence core를 호출해 실제 TASK-028 attempt와 다시 결박한다.
+- current validator는 미검증 축을 열거한 `incomplete`만 허용한다. timing/materialization·NVML,
+  correction/interruption 의미와 final-output producer ancestry가 구현되기 전 `completed`는 fail-closed다.
+- 다음 slice가 exact 8 manifest·12 measurement의 full synthetic fixture와 누락·추가·재정렬·foreign/reuse
+  mutation을 exhaustive하게 고정한다. 이 slice의 단일-link positive test를 실제 calibration 완료로 해석하지 않는다.
+- fresh Gate H는 fixed HEAD `51a7e08b15667956341898d34bc646c7ac44bcf5`에서 escaped unpaired
+  surrogate를 포함한 referenced manifest/measurement의 canonical 재직렬화가 structured finding 대신
+  `UnicodeEncodeError`를 유발하는 G56-01을 **변경 요청**했다. 제한 remediation은
+  `UnicodeEncodeError`·`TypeError`·`ValueError`를 `E_CALIBRATION_ARTIFACT`로 변환하고 양쪽 참조 경계의
+  mutation test를 고정한다. 새 fixed HEAD는 작성자와 다른 fresh reviewer 재검토가 필요하다.
+- focused manifest/report 17건, 기존 evidence 25건, preflight 16건과 전체 554 tests·FFmpeg smoke를 통과했다.
 
 ## 1. 고정 입력
 

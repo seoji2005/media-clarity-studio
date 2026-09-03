@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.media-clarity-studio.invalid/calibration-report-v1.schema.json",
+  "title": "CalibrationReport/v1",
+  "description": "TASK-031 §5.5의 자유 숫자 없는 evidence index. 각 값은 CAS run manifest와 measurement record에서만 파생한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "report_id",
+    "created_at",
+    "status",
+    "pack_hash",
+    "runs",
+    "unsupported_metrics",
+    "incomplete_reasons"
+  ],
+  "properties": {
+    "schema_version": { "$ref": "common-v1.schema.json#/$defs/schema_version" },
+    "kind": { "const": "CalibrationReport/v1" },
+    "report_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+    "created_at": { "$ref": "common-v1.schema.json#/$defs/timestamp" },
+    "status": { "enum": ["incomplete", "completed"] },
+    "pack_hash": { "$ref": "common-v1.schema.json#/$defs/content_hash" },
+    "runs": {
+      "type": "array",
+      "maxItems": 8,
+      "items": { "$ref": "#/$defs/run_entry" }
+    },
+    "paired_timestamp_diagnostic_ref": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" },
+    "unsupported_metrics": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": { "enum": ["lid_accuracy", "chrf2"] }
+    },
+    "incomplete_reasons": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/incomplete_reason" }
+    }
+  },
+  "$defs": {
+    "matrix_cell_id": {
+      "enum": [
+        "asr-faster-whisper",
+        "asr-qwen3-asr",
+        "mt-madlad",
+        "mt-qwen3.5",
+        "e2e-faster-whisper__madlad",
+        "e2e-faster-whisper__qwen3.5",
+        "e2e-qwen3-asr__madlad",
+        "e2e-qwen3-asr__qwen3.5"
+      ]
+    },
+    "incomplete_reason": {
+      "enum": [
+        "matrix_coverage",
+        "measurement_coverage",
+        "environment",
+        "model_snapshot",
+        "corrections",
+        "interruption",
+        "materialization",
+        "timing",
+        "nvml",
+        "final_outputs"
+      ]
+    },
+    "run_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "matrix_cell_id",
+        "manifest_ref",
+        "measurement_ids",
+        "performance_measurement_refs"
+      ],
+      "properties": {
+        "run_id": { "$ref": "common-v1.schema.json#/$defs/identifier" },
+        "matrix_cell_id": { "$ref": "#/$defs/matrix_cell_id" },
+        "manifest_ref": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" },
+        "measurement_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": { "$ref": "common-v1.schema.json#/$defs/identifier" }
+        },
+        "performance_measurement_refs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "items": { "$ref": "common-v1.schema.json#/$defs/ArtifactRef" }
+        }
+      }
+    }
+  }
+}
