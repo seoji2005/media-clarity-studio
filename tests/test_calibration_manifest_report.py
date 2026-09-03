@@ -75,6 +75,9 @@ class ManifestReportCase(unittest.TestCase):
         )
 
     def build_independent_asr(self) -> tuple[dict[str, Any], dict[str, Any]]:
+        candidate_config_hash = canonical_hash({"candidate": 1})
+        candidate_backend_hash = canonical_hash({"backend": "fixture"})
+        candidate_weight_hash = canonical_hash({"weight": "fixture"})
         spec = JobSpec(
             job_id="job-asr-faster-whisper",
             pipeline_id="task031-pipeline",
@@ -89,9 +92,9 @@ class ManifestReportCase(unittest.TestCase):
                     stage_id="candidate",
                     implementation_version="candidate/1.0.0",
                     depends_on=("source",),
-                    config_hash=canonical_hash({"candidate": 1}),
-                    dependency_fingerprint=canonical_hash({"dependencies": 1}),
-                    model_hash=canonical_hash({"model": "faster-whisper"}),
+                    config_hash=candidate_config_hash,
+                    dependency_fingerprint=candidate_backend_hash,
+                    model_hash=candidate_weight_hash,
                     random_seed=7,
                     reproducibility_tier="T2",
                 ),
@@ -131,8 +134,8 @@ class ManifestReportCase(unittest.TestCase):
         candidate_identity = {
             "official_model_id": "Systran/faster-whisper-large-v3",
             "model_revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
-            "weight_hash": canonical_hash({"weight": "fixture"}),
-            "backend_identity_hash": canonical_hash({"backend": "fixture"}),
+            "weight_hash": candidate_weight_hash,
+            "backend_identity_hash": candidate_backend_hash,
             "precision": "float16",
             "quantization": "none",
             "config_hash": candidate.config_hash,

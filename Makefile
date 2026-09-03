@@ -7,7 +7,8 @@ export PYTHONPATH := src
 	fixtures-task-029 test-task-029 audit-task-029 verify-task-029 \
 	preflight-task-031 test-task-031-preflight verify-task-031-preflight \
 	test-task-031-evidence verify-task-031-evidence \
-	test-task-031-manifest-report verify-task-031-manifest-report
+	test-task-031-manifest-report verify-task-031-manifest-report \
+	test-task-031-matrix verify-task-031-matrix
 
 static:
 	$(PYTHON) -m compileall -q src tests scripts
@@ -88,3 +89,10 @@ test-task-031-manifest-report:
 
 # timing/NVML/Windows 없이 정직한 incomplete spine과 기존 evidence/preflight 회귀
 verify-task-031-manifest-report: test-task-031-manifest-report test-task-031-evidence test-task-031-preflight static
+
+# TASK-031 exact synthetic matrix — 8 logical cells, 12 unique measured stages
+test-task-031-matrix:
+	$(PYTHON) -m unittest discover -s tests -p 'test_calibration_exact_matrix.py'
+
+# Exact coverage/mutation matrix + previously merged TASK-031 evidence ladders
+verify-task-031-matrix: test-task-031-matrix verify-task-031-manifest-report

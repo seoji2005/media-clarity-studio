@@ -142,6 +142,12 @@ _MEASUREMENT_LINK_FIELDS = tuple(
     if field not in {"measurement_id", "run_id", "matrix_cell_id", "candidate_stage_id", "adapter_role"}
 )
 
+_CANDIDATE_STAGE_SPEC_BINDINGS = (
+    ("config_hash", "config_hash"),
+    ("backend_identity_hash", "dependency_fingerprint"),
+    ("weight_hash", "model_hash"),
+)
+
 
 def spine_schema_set(directory: Path = DEFAULT_SCHEMA_DIR) -> SchemaSet:
     """manifest/report spine이 사용하는 실제 schema 묶음."""
@@ -301,6 +307,47 @@ def _candidate_config_hash(stages: Sequence[Mapping[str, Any]]) -> str:
     )
 
 
+def _validate_candidate_stage_spec_bindings(
+    stage: Mapping[str, Any],
+    *,
+    store: ArtifactStore,
+    validator: SchemaValidator,
+    location: str,
+    findings: list[Finding],
+) -> None:
+    """Candidate identity hashes must describe the measured runtime StageSpec."""
+
+    candidate_identity = stage["candidate_identity"]
+    for index, ref in enumerate(stage["stage_spec_document_refs"]):
+        document_location = f"{location}/stage_spec_document_refs/{index}"
+        document = _load_json_ref(
+            ref,
+            store=store,
+            validator=validator,
+            location=document_location,
+            findings=findings,
+        )
+        if document is None:
+            continue
+        schema_findings = validator.validate(
+            document,
+            STAGE_SPEC_SCHEMA_FILE,
+            document_location,
+        )
+        findings.extend(schema_findings)
+        if schema_findings:
+            continue
+        for candidate_field, stage_spec_field in _CANDIDATE_STAGE_SPEC_BINDINGS:
+            if candidate_identity[candidate_field] != document[stage_spec_field]:
+                findings.append(
+                    _finding(
+                        f"{location}/candidate_identity/{candidate_field}",
+                        "E_CANDIDATE_STAGE_BINDING",
+                        f"StageSpec.{stage_spec_field}와 exact equality가 아니다",
+                    )
+                )
+
+
 def validate_calibration_run_manifest(
     manifest: Any,
     project_root: Path,
@@ -346,6 +393,13 @@ def validate_calibration_run_manifest(
                 _finding(stage_location, "E_MANIFEST_IDENTITY", "ordered candidate-stage unit 배열 길이가 다르다")
             )
             continue
+        _validate_candidate_stage_spec_bindings(
+            stage,
+            store=store,
+            validator=validator,
+            location=stage_location,
+            findings=findings,
+        )
         _verify_cas_ref(
             stage["aggregate_normalized_output_ref"],
             store=store,

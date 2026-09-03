@@ -8,7 +8,7 @@
 | **Reviewer** | 계약 checkpoint `395a014f…`, preflight `e209653d…`, offline evidence core `2a5ccd38…`, manifest/report spine `1764c33b…`은 각각 작성자와 다른 fresh GPT/Codex 세션이 Gate H로 승인했다. 이후 coherent HEAD도 작성자와 다른 fresh reviewer가 검토한다 (R8) |
 | **Phase** | Phase 1a — 첫 실제 자막 vertical slice와 calibration |
 | **Gate** | H — 외부 모델·dependency, 12 GB GPU, Windows, cache/resume와 품질 판정 |
-| **Status** | `In progress` — manifest/report evidence spine 병합 완료, exact synthetic 8-cell/12-stage fail-closed validation 준비 중. target Windows lock/environment evidence·model snapshot과 Windows/RTX 실측은 미착수 |
+| **Status** | `In progress` — exact synthetic 8-cell/12-stage fixture와 fail-closed mutation matrix의 Author 검증 완료, fixed-HEAD Gate H 검토 대기. target Windows lock/environment evidence·model snapshot과 Windows/RTX 실측은 미착수 |
 | **기준 main** | `356b964505c3d852e9a264d79da12f15e5e707e0` (PR #49 merge commit) |
 | **계약 checkpoint** | 승인 HEAD `395a014fcda033c2be574e21d351e3bfec4c7e0e`, tree `c101ffcee0afc0c89fa4f4dada240ec2c8a6e59b`, PR #50 merge `e33ca4a15bfe0ba7091af6509bfdd9896904656c` |
 
@@ -26,15 +26,15 @@ vertical slice다. 모델 우열이나 제품 완성도를 테스트 수로 주�
 
 | 항목 | 값 |
 |---|---|
-| Source | live `main@6cce66fbb07f01d0c5aa5388cdfa9d5525e84ad2` (PR #56 merge) |
+| Source | live `main@ec7cdb93e97a3e823d8745e447edc4b83c7862d7` (PR #57 merge) |
 | Active TASK | TASK-031 / `In progress` |
 | Gate | H |
 | Author / Reviewer | manifest/report spine `1764c33b…`은 Lean Root/Codex Author와 다른 fresh GPT/Codex가 Gate H 승인. 다음 synthetic fixture slice도 Lean Root/Codex Author / 별도 fresh reviewer |
 | Approved scope | U-22 A-min 계약 기록, 재현 가능한 dependency manifest·Windows hash lock 준비, 고정 revision model weight 준비를 위한 network, 실제 10분 local calibration과 보고 |
-| PR / branch | #50~#56 Closed/Merged / `lean-root/task-031-manifest-merge-reconcile` 정합화 중 |
-| Current checkpoint | manifest/report/measurement runtime spine의 닫힌 schema와 report → manifest → measurement → AttemptRecord canonical CAS linkage가 PR #56으로 병합됐다. 정직한 `incomplete`만 허용하며 timing/NVML/correction/interruption/final ancestry와 exhaustive 8-cell fixture는 아직 없음 |
+| PR / branch | #50~#57 Closed/Merged / `lean-root/task-031-exact-matrix-validation` Author branch |
+| Current checkpoint | production TASK-028 runtime/CAS로 8개 logical run과 12개 unique candidate-stage attempt를 만드는 정직한 `incomplete` fixture, cell/stage 누락·추가·재정렬·foreign/reuse mutation이 구현됐다. matrix 반례가 드러낸 candidate `config_hash`·backend identity·weight hash와 실제 StageSpec fingerprint의 미결박도 세 exact mapping으로 닫았다. timing/NVML/correction/interruption/final ancestry는 여전히 미검증이다 |
 | Blocker | 현재 Work 환경은 Windows 11 / RTX 4070 SUPER가 아니므로 Windows transitive hash lock·CUDA stack·model cache receipt와 실제 측정 증거를 만들 수 없음 |
-| Next allowed action | 이 정합화 뒤 exact synthetic 8-cell/12-stage fail-closed fixture와 mutation matrix를 구현·검토한다. 이어 Windows 실행 준비 도구를 진행하고, target Windows 접근 뒤 lock·machine evidence·다섯 exact-revision model receipt를 준비한다 |
+| Next allowed action | coherent HEAD를 push해 Draft PR로 고정하고 작성자와 다른 fresh GPT/Codex가 Gate H로 검토한다. 승인·제품 오너의 exact-HEAD merge 결정 뒤에만 Windows 실행 준비 도구로 진행한다 |
 | Forbidden now | remote inference/comparator, 사용자 미디어 업로드·commit, model weight commit, 결과 전 기본 모델 채택, exact-HEAD 승인 없는 merge |
 
 계약 checkpoint의 고정 좌표는 위 역사 기록으로 보존한다. 이후 구현 reviewer는 새 구현 PR의 live HEAD와
