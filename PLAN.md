@@ -2,7 +2,7 @@
 
 `media-clarity-studio`의 로드맵입니다.
 
-마지막 갱신: 2026-09-02 (TASK-031 manifest/report evidence spine 구현)
+마지막 갱신: 2026-09-03 (TASK-031 manifest/report evidence spine 병합 정합화)
 상태: **제안됨 (Proposed) 유지** — PR #5 병합은 계획 기준선 작업을 완료했지만,
 제안됨 ADR·실행 순서·미해결 U-XX를 자동 승인하거나 해결하지 않습니다
 
@@ -204,7 +204,7 @@ TASK-028  content-addressed artifact/cache/resume runtime — 완료 (PR #36)
 TASK-029  자막 spine 기계 계약·schema·validator·fixture — 완료 (PR #45)
    │
    ▼
-TASK-031  고정 10분 A-min 로컬 자막 calibration vertical slice — manifest/report evidence spine 구현 중
+TASK-031  고정 10분 A-min 로컬 자막 calibration vertical slice — synthetic 8-cell/12-stage validation 준비
 ```
 
 | 노드 | 성격 | **선행 (이 표가 정답)** | 현재 상태 |
@@ -216,7 +216,7 @@ TASK-031  고정 10분 A-min 로컬 자막 calibration vertical slice — manife
 | **TASK-006** | `ReferenceBundle/v1`·평가 실행 계약과 schema/validator/fixture (기존 의미 유지) | **TASK-005** | **Done — PR #28** |
 | **TASK-028** | 공용 storage·orchestrator 실행 기반 | TASK-006 완료 | **Done — REVIEW-022 승인, PR #36 병합** |
 | **TASK-029** | 자막 spine 기계 계약과 기계 정본 구현 | TASK-028 완료와 별도 TASK 계약 | **Done — Gate H 승인, PR #45 병합 (`6f94705598c1ef57a4d25682938cbcbbaf044732`)** |
-| **TASK-031** | U-22 A-min 실제 자막 vertical slice와 calibration | TASK-029 완료, 제품 오너 A-min 결정, 별도 dependency/model/network gate | **In progress — manifest/report evidence spine 구현·검증 중, target Windows 실측은 후속** |
+| **TASK-031** | U-22 A-min 실제 자막 vertical slice와 calibration | TASK-029 완료, 제품 오너 A-min 결정, 별도 dependency/model/network gate | **In progress — manifest/report evidence spine 병합 완료, synthetic 8-cell/12-stage validation 준비 중. target Windows 실측은 후속** |
 
 **왜 이렇게 보수적으로 두는가**
 
@@ -234,8 +234,9 @@ TASK-031  고정 10분 A-min 로컬 자막 calibration vertical slice — manife
 > ADR-0031이며, 계약 checkpoint는 Gate H 승인 뒤 PR #50으로 병합됐습니다. 2026-09-01 제품 오너가
 > dependency/model/network gate를 승인했고, fail-closed preflight 기반은 Gate H 승인 뒤 PR #52로
 > 병합됐습니다. hardware-independent offline evidence core도 Gate H 승인 뒤 PR #54로 병합됐습니다.
-> target Windows에 접근할 수 없는 동안 manifest/report evidence spine을 먼저 구현하고, synthetic 8-cell
-> fail-closed validation과 Windows 실행 준비 도구를 이어서 완성합니다. target Windows 접근 뒤
+> PR #54 병합 상태 정합화는 PR #55로, manifest/report evidence spine은 G56-01 remediation과 Gate H 승인 뒤
+> PR #56으로 병합됐습니다. target Windows에 접근할 수 없는 동안 synthetic 8-cell/12-stage fail-closed
+> validation과 Windows 실행 준비 도구를 이어서 완성합니다. target Windows 접근 뒤
 > hash lock·environment evidence·exact model receipt를 준비하고 실제 calibration으로 진행합니다.
 > 위의 PR #16 합성 plumbing은
 > 사람 오너가 승인한 좁은 예외이며 일반 ASR·번역·외부 코퍼스 구현 착수를 뜻하지 않습니다.

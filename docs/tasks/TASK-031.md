@@ -5,10 +5,10 @@
 | **ID** | TASK-031 |
 | **결정자** | 사람 제품 오너 (2026-09-01, U-22 A-min 확정) |
 | **Owner / Author** | Lean Root Author (TASK 전체). H-01·H-02 attempt 3·4는 Claude Code specialist가 작성했다. `d03885f…` 재검토 뒤 남은 `depends_on`·`cacheable` 결박 하나는 **2026-09-01 사람 제품 오너가 현재 Codex Author에게 명시적으로 재배정**했다 (아래 escalation 기록) |
-| **Reviewer** | 계약 checkpoint `395a014f…`, preflight `e209653d…`, offline evidence core `2a5ccd38…`은 각각 작성자와 다른 fresh GPT/Codex 세션이 Gate H로 승인했다. 이후 coherent HEAD도 작성자와 다른 fresh reviewer가 검토한다 (R8) |
+| **Reviewer** | 계약 checkpoint `395a014f…`, preflight `e209653d…`, offline evidence core `2a5ccd38…`, manifest/report spine `1764c33b…`은 각각 작성자와 다른 fresh GPT/Codex 세션이 Gate H로 승인했다. 이후 coherent HEAD도 작성자와 다른 fresh reviewer가 검토한다 (R8) |
 | **Phase** | Phase 1a — 첫 실제 자막 vertical slice와 calibration |
 | **Gate** | H — 외부 모델·dependency, 12 GB GPU, Windows, cache/resume와 품질 판정 |
-| **Status** | `In progress` — manifest/report evidence spine 구현·검증 중. target Windows lock/environment evidence·model snapshot과 Windows/RTX 실측은 미착수 |
+| **Status** | `In progress` — manifest/report evidence spine 병합 완료, exact synthetic 8-cell/12-stage fail-closed validation 준비 중. target Windows lock/environment evidence·model snapshot과 Windows/RTX 실측은 미착수 |
 | **기준 main** | `356b964505c3d852e9a264d79da12f15e5e707e0` (PR #49 merge commit) |
 | **계약 checkpoint** | 승인 HEAD `395a014fcda033c2be574e21d351e3bfec4c7e0e`, tree `c101ffcee0afc0c89fa4f4dada240ec2c8a6e59b`, PR #50 merge `e33ca4a15bfe0ba7091af6509bfdd9896904656c` |
 
@@ -26,15 +26,15 @@ vertical slice다. 모델 우열이나 제품 완성도를 테스트 수로 주�
 
 | 항목 | 값 |
 |---|---|
-| Source | live `main@ad1e3e09959ca351432ecb2f50e4ba0c0255af28` (PR #55 merge) |
+| Source | live `main@6cce66fbb07f01d0c5aa5388cdfa9d5525e84ad2` (PR #56 merge) |
 | Active TASK | TASK-031 / `In progress` |
 | Gate | H |
-| Author / Reviewer | offline evidence core `2a5ccd38…`은 Lean Root/Codex Author와 다른 fresh GPT/Codex가 Gate H 승인. 다음 manifest/report evidence spine도 Lean Root/Codex Author / 별도 fresh reviewer |
+| Author / Reviewer | manifest/report spine `1764c33b…`은 Lean Root/Codex Author와 다른 fresh GPT/Codex가 Gate H 승인. 다음 synthetic fixture slice도 Lean Root/Codex Author / 별도 fresh reviewer |
 | Approved scope | U-22 A-min 계약 기록, 재현 가능한 dependency manifest·Windows hash lock 준비, 고정 revision model weight 준비를 위한 network, 실제 10분 local calibration과 보고 |
-| PR / branch | #50~#55 Closed/Merged / `lean-root/task-031-manifest-report-spine` 작성 중 |
-| Current checkpoint | manifest/report/measurement runtime spine의 닫힌 schema와 report → manifest → measurement → AttemptRecord canonical CAS linkage를 구현했다. 정직한 `incomplete`만 허용하며 timing/NVML/correction/interruption/final ancestry와 exhaustive 8-cell fixture는 아직 없음 |
+| PR / branch | #50~#56 Closed/Merged / `lean-root/task-031-manifest-merge-reconcile` 정합화 중 |
+| Current checkpoint | manifest/report/measurement runtime spine의 닫힌 schema와 report → manifest → measurement → AttemptRecord canonical CAS linkage가 PR #56으로 병합됐다. 정직한 `incomplete`만 허용하며 timing/NVML/correction/interruption/final ancestry와 exhaustive 8-cell fixture는 아직 없음 |
 | Blocker | 현재 Work 환경은 Windows 11 / RTX 4070 SUPER가 아니므로 Windows transitive hash lock·CUDA stack·model cache receipt와 실제 측정 증거를 만들 수 없음 |
-| Next allowed action | manifest/report evidence spine을 coherent fixed HEAD로 고정해 fresh Gate H 검토. 승인·병합 뒤 synthetic 8-cell fail-closed validation과 Windows 실행 준비 도구를 진행. target Windows 접근 뒤 lock·machine evidence·다섯 exact-revision model receipt를 준비 |
+| Next allowed action | 이 정합화 뒤 exact synthetic 8-cell/12-stage fail-closed fixture와 mutation matrix를 구현·검토한다. 이어 Windows 실행 준비 도구를 진행하고, target Windows 접근 뒤 lock·machine evidence·다섯 exact-revision model receipt를 준비한다 |
 | Forbidden now | remote inference/comparator, 사용자 미디어 업로드·commit, model weight commit, 결과 전 기본 모델 채택, exact-HEAD 승인 없는 merge |
 
 계약 checkpoint의 고정 좌표는 위 역사 기록으로 보존한다. 이후 구현 reviewer는 새 구현 PR의 live HEAD와
@@ -146,8 +146,31 @@ review evidence로 가장하지 않는다.
   surrogate를 포함한 referenced manifest/measurement의 canonical 재직렬화가 structured finding 대신
   `UnicodeEncodeError`를 유발하는 G56-01을 **변경 요청**했다. 제한 remediation은
   `UnicodeEncodeError`·`TypeError`·`ValueError`를 `E_CALIBRATION_ARTIFACT`로 변환하고 양쪽 참조 경계의
-  mutation test를 고정한다. 새 fixed HEAD는 작성자와 다른 fresh reviewer 재검토가 필요하다.
+  mutation test를 고정한다. 새 fixed HEAD는 작성자와 다른 fresh reviewer 재검토가 필요했고 아래 final
+  approval에서 충족됐다.
 - focused manifest/report 17건, 기존 evidence 25건, preflight 16건과 전체 554 tests·FFmpeg smoke를 통과했다.
+
+### PR #55 offline evidence merge 정합화
+
+- Gate M 검토는 fixed HEAD `ad4f7ebb9330f87747fbb1cc90a9a4460b61c7ff`(tree
+  `cfc3a34cef89723e2bb64eddd09582c5cc10e655`)에서 PR #54 병합 좌표와 다음 포인터가 정확하고
+  prohibited drift가 없음을 **승인**했다.
+- 사람 제품 오너는 PR #55·전체 HEAD·reviewed base
+  `1073b984a443caf0db5c1631eb09dbaf7c8830a0`를 정확히 승인했다.
+- PR #55는 merge commit `ad1e3e09959ca351432ecb2f50e4ba0c0255af28`로 병합됐으며 승인 HEAD 대비
+  변경 파일은 0개다.
+
+### PR #56 manifest/report final approval과 merge
+
+- fresh 제한 재검토는 remediation fixed HEAD `1764c33b20c5a8aa9d5568eb7964a8eb44459a46`
+  (tree `4d1d93e5b113a95824cea2b0add41f09ea81aeeb`)에서 G56-01 해소, 기존 정상 canonical CAS 검증
+  보존과 prohibited drift 없음을 **승인**했다.
+- 사람 제품 오너는 PR #56·전체 HEAD·reviewed base
+  `ad1e3e09959ca351432ecb2f50e4ba0c0255af28`를 정확히 승인했다.
+- PR #56은 merge commit `6cce66fbb07f01d0c5aa5388cdfa9d5525e84ad2`로 병합됐다. 승인 HEAD 대비
+  merge commit은 1커밋 앞이고 변경 파일은 0개다.
+- 이 병합은 manifest/report evidence spine만 완료한다. TASK-031은 계속 `In progress`이며 exact synthetic
+  8-cell/12-stage validation, timing/NVML, Windows 실행 준비와 실제 model snapshot·실측은 남아 있다.
 
 ## 1. 고정 입력
 
