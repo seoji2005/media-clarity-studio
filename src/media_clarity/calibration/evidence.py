@@ -593,6 +593,18 @@ def _validate_unit(
         findings.append(
             _finding(f"{unit_location}/stage_spec_document_ref", "E_STAGE_SPEC_IDENTITY", "stage_id가 다르다")
         )
+    candidate_identity = measurement.get("candidate_identity")
+    if (
+        isinstance(candidate_identity, Mapping)
+        and candidate_identity.get("config_hash") != document["config_hash"]
+    ):
+        findings.append(
+            _finding(
+                f"{unit_location}/stage_spec_document_ref/config_hash",
+                "E_STAGE_SPEC_FINGERPRINT",
+                "candidate config hash가 실제 실행 StageSpec과 다르다",
+            )
+        )
     if _project_fingerprints(document) != attempt.get("fingerprints"):
         findings.append(
             _finding(f"{unit_location}/stage_spec_document_ref", "E_STAGE_SPEC_FINGERPRINT", "AttemptRecord.fingerprints와 다르다")
