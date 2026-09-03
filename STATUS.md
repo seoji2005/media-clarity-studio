@@ -3,7 +3,7 @@
 **"지금 무엇이 되어 있고, 누가 무엇을 들고 있는가."**
 새 세션을 시작하는 에이전트는 [`AGENTS.md`](AGENTS.md) 다음으로 이 파일을 봅니다 (`AGENTS.md` §0.2).
 
-마지막 갱신: 2026-09-03 (TASK-031 exact synthetic matrix Author 검증)
+마지막 갱신: 2026-09-03 (TASK-031 exact synthetic matrix 병합 정합화)
 현재 단계: **Phase 1a** — 첫 실제 10분 로컬 자막 vertical slice 착수
 
 ---
@@ -16,13 +16,13 @@
 | Phase 0 | **완료 — `main`에 병합됨** (PR #1, 병합 SHA `d11b2450d324ac7f509741acc1ac591313876d30`) |
 | 기능 코드 | **있음** — TASK-022 CLI: local input → probe → SRT → soft-sub → verify → local staging export |
 | 런타임 / 의존성 | 기존 production은 Python 3.12+ 표준 라이브러리와 FFmpeg/ffprobe. TASK-031은 backend별 direct pin과 준비 manifest를 추가하지만 아직 package 설치·Windows hash lock·model weight는 없음 |
-| 주요 병합 PR | **#1·#5·#16·#18·#19·#21·#22·#23·#24·#25·#28·#33·#34·#36·#42·#45·#47·#48·#50·#51·#52·#53·#54·#55·#56** — TASK-031 manifest/report spine merge는 `6cce66fbb07f01d0c5aa5388cdfa9d5525e84ad2` |
-| 열린 PR | **#6~#10·#12·#14·#15·#17·#29~#32·#37~#40·#46** — 전부 과거 Draft 또는 review 기록이며 현재 TASK-031 구현을 차단하지 않음 |
+| 주요 병합 PR | **#1·#5·#16·#18·#19·#21·#22·#23·#24·#25·#28·#33·#34·#36·#42·#45·#47·#48·#50·#51·#52·#53·#54·#55·#56·#57·#59** — TASK-031 exact synthetic matrix merge는 `557b52f4d25ae377aa492b3cb176dd174e7a4fb9` |
+| 열린 PR | **#6~#10·#12·#14·#15·#17·#29~#32·#37~#40·#46·#58** — #58은 PR #59보다 앞선 exact-matrix Draft이며 현재 포인터가 아니다. 나머지는 과거 Draft 또는 review 기록이고 TASK-031을 차단하지 않음 |
 | 미병합 종료 | **#2·#3·#4·#11·#41** — #41은 REVIEW-022 원문이 PR #42로 `main`에 보존된 뒤 종료 |
 | 운영 구조 | **TASK-030 적용 중** — GPT-primary·승인 연속성·run resilience·제한적 Claude escalation (`AGENTS.md` §3, ADR-0030). PR #45/TASK-029에는 소급 적용하지 않음 |
-| 현재 작업 | **TASK-031** — exact synthetic 8-cell/12-stage fixture·mutation matrix Author 검증 완료; fixed-HEAD Gate H 검토 대기 |
+| 현재 작업 | **TASK-031** — exact synthetic 8-cell/12-stage fixture·mutation matrix Gate H 승인과 PR #59 병합 완료; timing/NVML·correction/interruption·final ancestry, 실행 준비와 실제 측정은 남음 |
 | U-31 | **답변됨 (2026-08-22)** — 번역 대상 언어 **한국어(`ko`)** |
-| 다음 실행 의존성 | exact synthetic matrix fixed-HEAD Gate H 검토·제품 오너 merge 결정 → Windows 실행 준비 도구. 실제 model 실행은 target Windows 접근 뒤 네 lock·environment/CUDA evidence와 다섯 exact-revision model receipt가 필요 |
+| 다음 실행 의존성 | PR #59 병합 상태 정합화 → 별도 ASR 후보 screening 계약과 Windows 실행 준비 도구. 실제 target-hardware 판정은 Windows 접근 뒤 lock·environment/CUDA evidence와 승인된 exact-revision model receipt가 필요 |
 | U-08 | **답변됨 (2026-08-09)** — **채점 정답은 번역 자막** |
 | U-11 | **부분 답변됨 (2026-08-09)** — **약 2개월·품질 우선.** 정확한 제출 날짜는 **미확정** |
 | 차단 요인 | **dependency/model/network owner gate는 승인됨.** 현재 Work 환경에는 target Windows 11 / RTX 4070 SUPER와 실제 model cache가 없어 Windows lock·CUDA·VRAM·RTF evidence는 만들 수 없음. U-16 보관 정책은 미정이므로 자동 삭제·GC는 범위 밖 |
@@ -70,7 +70,7 @@
 | [TASK-028](docs/tasks/TASK-028.md) | Content-addressed artifact store와 재개 가능한 stage runtime | Claude Code 구현 세션 | Lean Root 고정 HEAD Gate H 검토 — `REVIEW-018`~`021` 변경 요청, [`REVIEW-022`](docs/reviews/REVIEW-022.md) 승인 | Phase 1a shared storage·orchestrator foundation | **Done — PR #36 병합** (`1d05de31aa39fd4dc8790d6c6e6442c0f8765ddc`) |
 | [TASK-029](docs/tasks/TASK-029.md) | SpeechSegment·Transcript·capability·translation·subtitle 실행 계약 정본화 | Claude Code 구현 세션 | Lean Root 고정 HEAD Gate H 검토 | Phase 1a subtitle data spine | **Done** — REVIEW-027 승인, 제품 오너가 exact HEAD `4b0d2cd041d7a133640355dd0b96874ef4329074` 승인, PR #45 병합 (`6f94705598c1ef57a4d25682938cbcbbaf044732`). 시작 당시 ownership/review 계약 유지 |
 | [TASK-030](docs/tasks/TASK-030.md) | GPT-primary 운영 계약과 Markdown 정합화 | Lean Root Orchestrator | fresh GPT/Codex 고정 HEAD 검토 | Project operations | **Done** — Gate M 승인, PR #47 병합 (`116d1c7fbb90e79acf15947385c1ac4f905ffb12`) |
-| [TASK-031](docs/tasks/TASK-031.md) | U-22 A-min 로컬 자막 calibration vertical slice | Lean Root Author | 각 coherent 구현 HEAD의 작성자와 다른 fresh GPT/Codex Gate H reviewer (R8) | Phase 1a subtitle calibration | **In progress — exact synthetic 8-cell/12-stage fixture·mutation matrix Author 검증 완료, fixed-HEAD Gate H 검토 대기**, target Windows 준비·실측 미착수 |
+| [TASK-031](docs/tasks/TASK-031.md) | U-22 A-min 로컬 자막 calibration vertical slice | Lean Root Author | 각 coherent 구현 HEAD의 작성자와 다른 fresh GPT/Codex Gate H reviewer (R8) | Phase 1a subtitle calibration | **In progress — exact synthetic 8-cell/12-stage fixture·mutation matrix Gate H 승인, PR #59 병합 완료**, timing/NVML·correction/interruption·final ancestry, target Windows 준비·실측은 미착수 |
 | [TASK-012](docs/tasks/TASK-012.md) | Phase 1 계획 기준선 확립 | Claude Code 주 세션 | TASK-013~017 / REVIEW-005~009 (사람 오너의 예외 승인) | Phase 1 planning / 1a 진입 | **Done** — REVIEW-009 승인 후 PR #5 병합 (`10d34b4a4545f9ae8894c8038e7f1cc9a7706d61`) |
 | [TASK-013](docs/tasks/TASK-013.md) | TASK-012 고정 HEAD 독립 검토 | **이 독립 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 review | **In review** (판정: 변경 요청 — [REVIEW-005](docs/reviews/REVIEW-005.md)) |
 | [TASK-014](docs/tasks/TASK-014.md) | TASK-012 M-01·M-02 제한 재검토 | **REVIEW-005를 작성한 동일 GPT Work 리뷰 세션** (사람 오너 예외 승인) | 없음 (§3.2 — 재귀적 리뷰 없음) | Phase 1 planning / TASK-012 limited rereview | **In review** (M-01·M-02 부분 해소 · 판정: 변경 요청 — [REVIEW-006](docs/reviews/REVIEW-006.md)) |
@@ -404,6 +404,24 @@ Codex·Codex Cloud·GitHub `@codex review`는 **당시 미래 역할·배정·�
 - 이는 manifest/report evidence spine만 완료한다. TASK-031은 계속 `In progress`이며 exact synthetic
   8-cell/12-stage validation, timing/NVML, Windows 실행 준비와 실제 model snapshot·실측은 남아 있다.
 
+
+### 3.31 TASK-031 manifest 정합화와 exact synthetic matrix 승인·병합 (PR #57·#59)
+
+- PR #57은 PR #56의 manifest/report evidence spine 병합 상태를 정합화했고 merge commit은
+  `ec7cdb93e97a3e823d8745e447edc4b83c7862d7`이다.
+- 작성자와 다른 fresh GPT/Codex reviewer는 PR #59 fixed HEAD
+  `15a6e9b37fa7b0254f32a62fc4737419ef6d9825`(tree
+  `6f71b5251f74b40b9bb508402920d5a43497e0bb`, reviewed base
+  `ec7cdb93e97a3e823d8745e447edc4b83c7862d7`)를 Gate H로 승인했다.
+- 사람 제품 오너가 같은 PR·HEAD·base의 Ready 전환과 병합을 승인했고, PR #59는 merge commit
+  `557b52f4d25ae377aa492b3cb176dd174e7a4fb9`로 병합됐다. merge 부모는 reviewed base와 승인 HEAD이며
+  merge tree는 승인 tree와 같다.
+- 병합된 범위는 production TASK-028 runtime/CAS 위의 정확한 8 logical run·12 unique candidate-stage
+  cache-miss attempt와 fail-closed mutation matrix다. fixture/report는 계속 `incomplete`이며 Windows/RTX,
+  model snapshot, timing/NVML, correction/interruption, final ancestry 또는 모델 채택을 주장하지 않는다.
+- TASK-031은 계속 `In progress`다. 새 ASR 후보 screening이나 시각 향상은 이 병합에 포함되지 않았고
+  각각 별도 계약·검토 없이 현재 exact 8-cell/12-stage 닫힌 집합을 바꾸지 않는다.
+
 ---
 
 ## 4. 다음 작업
@@ -412,7 +430,7 @@ Codex·Codex Cloud·GitHub `@codex review`는 **당시 미래 역할·배정·�
 
 | TASK | 내용 | Owner |
 |---|---|---|
-| [TASK-031](docs/tasks/TASK-031.md) | 고정 10분 pack에서 ASR 2종 × 번역 2종의 실제 로컬 자막 vertical slice와 resume calibration — exact synthetic 8-cell/12-stage fixture·mutation matrix Author 검증 완료, fixed-HEAD Gate H 검토 대기 | Lean Root Author |
+| [TASK-031](docs/tasks/TASK-031.md) | 고정 10분 pack에서 ASR 2종 × 번역 2종의 실제 로컬 자막 vertical slice와 resume calibration — exact synthetic 8-cell/12-stage fixture·mutation matrix Gate H 승인, PR #59 병합 완료; 실제 evidence 축은 계속 구현 | Lean Root Author |
 
 > **판정과 반영 상태는 서로 다른 사실입니다. 섞지 마십시오.**
 >
@@ -451,7 +469,7 @@ Codex·Codex Cloud·GitHub `@codex review`는 **당시 미래 역할·배정·�
 | TASK-006 코드 구현 | schema·validator·fixture | TASK-006 계약 승인·병합 | **Done — PR #28** |
 | **TASK-028** | 공용 artifact/cache/resume runtime | TASK-006 완료 | **Done — REVIEW-022 승인, PR #36 병합** |
 | **TASK-029** | 자막 spine 기계 계약 정본화 | TASK-028 완료와 별도 TASK 계약 | **Done — Gate H 승인, PR #45 병합 (`6f94705598c1ef57a4d25682938cbcbbaf044732`)** |
-| **TASK-031** | U-22 A-min 10분 로컬 자막 calibration | TASK-029 완료와 제품 오너 A-min 결정 | **In progress — exact synthetic 8-cell/12-stage fixture·mutation matrix Author 검증 완료, fixed-HEAD Gate H 검토 대기. target Windows 준비·실측 미착수** |
+| **TASK-031** | U-22 A-min 10분 로컬 자막 calibration | TASK-029 완료와 제품 오너 A-min 결정 | **In progress — exact synthetic 8-cell/12-stage fixture·mutation matrix Gate H 승인, PR #59 병합 완료. timing/NVML·correction/interruption·final ancestry, target Windows 준비·실측 미착수** |
 
 > **TASK-005 평가 하네스 설계와 TASK-006 평가 실행 계약은 완료됐습니다.** TASK-006 계약은 PR #27,
 > schema·validator·fixture 구현은 Gate H REVIEW-017 승인 뒤 PR #28로 병합됐습니다.
