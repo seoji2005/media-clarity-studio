@@ -1,0 +1,313 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://media-clarity-studio.local/schemas/asr-screen-preparation-v1.schema.json",
+  "title": "TASK-032 typed preparation evidence",
+  "$defs": {
+    "screen_configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "status",
+        "candidate_order",
+        "source_id_policy",
+        "vad",
+        "language_hint",
+        "chunking",
+        "normalization",
+        "claims"
+      ],
+      "properties": {
+        "schema_version": {"$ref": "common-v1.schema.json#/$defs/schema_version"},
+        "kind": {"const": "AsrScreenConfiguration/v1"},
+        "status": {"enum": ["proposed", "frozen"]},
+        "candidate_order": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {"$ref": "common-v1.schema.json#/$defs/identifier"}
+        },
+        "source_id_policy": {"$ref": "#/$defs/source_id_policy"},
+        "vad": {"$ref": "#/$defs/vad_policy"},
+        "language_hint": {"$ref": "#/$defs/language_hint_policy"},
+        "chunking": {"$ref": "#/$defs/chunking_policy"},
+        "normalization": {"$ref": "#/$defs/normalization_policy"},
+        "claims": {"$ref": "#/$defs/preparation_claims"}
+      }
+    },
+    "source_id_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "definition",
+        "same_recording_session_shares_id",
+        "derived_clips_share_id",
+        "primary_reserve_disjoint"
+      ],
+      "properties": {
+        "definition": {"const": "one-id-per-original-recording-session"},
+        "same_recording_session_shares_id": {"const": true},
+        "derived_clips_share_id": {"const": true},
+        "primary_reserve_disjoint": {"const": true}
+      }
+    },
+    "vad_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "boundary_source", "silence_probe_policy", "identical_across_candidates"],
+      "properties": {
+        "mode": {"enum": ["disabled", "frozen_common_boundaries"]},
+        "boundary_source": {"enum": ["whole_clip", "pack_speech_mask"]},
+        "silence_probe_policy": {"const": "bypass-vad"},
+        "identical_across_candidates": {"const": true}
+      }
+    },
+    "language_hint_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "value_source",
+        "allowed_tags",
+        "code_switch_policy",
+        "identical_across_candidates"
+      ],
+      "properties": {
+        "mode": {"enum": ["none", "per_clip_dominant"]},
+        "value_source": {"enum": ["none", "pack_clip_language_hint"]},
+        "allowed_tags": {
+          "type": "array",
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {"enum": ["ja", "en"]}
+        },
+        "code_switch_policy": {"const": "single-dominant-hint-only"},
+        "identical_across_candidates": {"const": true}
+      }
+    },
+    "chunking_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "max_clip_seconds", "overlap_seconds", "stitching", "identical_across_candidates"],
+      "properties": {
+        "mode": {"enum": ["one_clip_per_unit", "fixed_windows"]},
+        "max_clip_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 300},
+        "overlap_seconds": {"type": "number", "minimum": 0},
+        "stitching": {"enum": ["none", "frozen_overlap_dedup"]},
+        "identical_across_candidates": {"const": true}
+      }
+    },
+    "normalization_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_id",
+        "unicode_form",
+        "latin_case",
+        "punctuation",
+        "whitespace",
+        "numbers",
+        "raw_output_preserved",
+        "identical_across_candidates"
+      ],
+      "properties": {
+        "policy_id": {"$ref": "common-v1.schema.json#/$defs/identifier"},
+        "unicode_form": {"enum": ["NFC", "NFKC"]},
+        "latin_case": {"enum": ["preserve", "casefold"]},
+        "punctuation": {"enum": ["preserve", "remove_unicode_punctuation"]},
+        "whitespace": {"enum": ["preserve", "collapse_and_trim"]},
+        "numbers": {"enum": ["preserve_surface", "reference_canonical"]},
+        "raw_output_preserved": {"const": true},
+        "identical_across_candidates": {"const": true}
+      }
+    },
+    "preparation_claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_output_generated", "paid_cost_usd", "target_windows_compatibility"],
+      "properties": {
+        "candidate_output_generated": {"const": false},
+        "paid_cost_usd": {"const": 0},
+        "target_windows_compatibility": {"const": "not_evaluated"}
+      }
+    },
+    "access_license_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "candidate_id",
+        "official_model_id",
+        "revision",
+        "observed_license",
+        "gated",
+        "source_uri",
+        "metadata_ref",
+        "metadata_hash",
+        "observed_at",
+        "access_status",
+        "acceptance_status",
+        "credentials_stored",
+        "raw_token_recorded"
+      ],
+      "properties": {
+        "schema_version": {"$ref": "common-v1.schema.json#/$defs/schema_version"},
+        "kind": {"const": "AsrScreenAccessLicenseReceipt/v1"},
+        "candidate_id": {"$ref": "common-v1.schema.json#/$defs/identifier"},
+        "official_model_id": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "observed_license": {"enum": ["Apache-2.0", "MIT"]},
+        "gated": {"type": "boolean"},
+        "source_uri": {"type": "string", "minLength": 1},
+        "metadata_ref": {"$ref": "common-v1.schema.json#/$defs/ArtifactRef"},
+        "metadata_hash": {"$ref": "common-v1.schema.json#/$defs/content_hash"},
+        "observed_at": {"$ref": "common-v1.schema.json#/$defs/timestamp"},
+        "access_status": {"enum": ["public_metadata_only", "blocked_access", "accepted"]},
+        "acceptance_status": {"enum": ["not_required", "not_accepted", "owner_accepted"]},
+        "credentials_stored": {"const": false},
+        "raw_token_recorded": {"const": false}
+      }
+    },
+    "model_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "candidate_id",
+        "official_model_id",
+        "revision",
+        "source_uri",
+        "access_receipt_hash",
+        "files",
+        "file_count",
+        "total_bytes",
+        "file_manifest_hash",
+        "download_complete",
+        "offline_load_status",
+        "weights_in_git"
+      ],
+      "properties": {
+        "schema_version": {"$ref": "common-v1.schema.json#/$defs/schema_version"},
+        "kind": {"const": "AsrScreenModelReceipt/v1"},
+        "candidate_id": {"$ref": "common-v1.schema.json#/$defs/identifier"},
+        "official_model_id": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "source_uri": {"type": "string", "minLength": 1},
+        "access_receipt_hash": {"$ref": "common-v1.schema.json#/$defs/content_hash"},
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/model_file"}
+        },
+        "file_count": {"type": "integer", "minimum": 1},
+        "total_bytes": {"type": "integer", "minimum": 1},
+        "file_manifest_hash": {"$ref": "common-v1.schema.json#/$defs/content_hash"},
+        "download_complete": {"type": "boolean"},
+        "offline_load_status": {"enum": ["not_tested", "verified", "failed"]},
+        "weights_in_git": {"const": false}
+      }
+    },
+    "model_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relative_path", "content_hash", "byte_size"],
+      "properties": {
+        "relative_path": {"type": "string", "minLength": 1, "pattern": "^[^/\\\\](?:.*[^/\\\\])?$"},
+        "content_hash": {"$ref": "common-v1.schema.json#/$defs/content_hash"},
+        "byte_size": {"type": "integer", "minimum": 1}
+      }
+    },
+    "dependency_lock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "lock_id",
+        "target_environment",
+        "python_version",
+        "platform_system",
+        "platform_architecture",
+        "lock_format",
+        "resolver",
+        "candidate_order",
+        "candidates",
+        "lock_file_ref",
+        "fully_hashed",
+        "network_scope",
+        "paid_cost_usd"
+      ],
+      "properties": {
+        "schema_version": {"$ref": "common-v1.schema.json#/$defs/schema_version"},
+        "kind": {"const": "AsrScreenDependencyLock/v1"},
+        "lock_id": {"$ref": "common-v1.schema.json#/$defs/identifier"},
+        "target_environment": {"const": "work-cpu"},
+        "python_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "platform_system": {"type": "string", "minLength": 1},
+        "platform_architecture": {"type": "string", "minLength": 1},
+        "lock_format": {"enum": ["requirements-with-hashes", "uv-lock"]},
+        "resolver": {"$ref": "#/$defs/resolver_identity"},
+        "candidate_order": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {"$ref": "common-v1.schema.json#/$defs/identifier"}
+        },
+        "candidates": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {"$ref": "#/$defs/dependency_candidate"}
+        },
+        "lock_file_ref": {"$ref": "common-v1.schema.json#/$defs/ArtifactRef"},
+        "fully_hashed": {"const": true},
+        "network_scope": {"const": "fixed-model-and-dependency-preparation-only"},
+        "paid_cost_usd": {"const": 0}
+      }
+    },
+    "resolver_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "source_hash"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "source_hash": {"$ref": "common-v1.schema.json#/$defs/content_hash"}
+      }
+    },
+    "dependency_candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_id", "revision", "direct_packages"],
+      "properties": {
+        "candidate_id": {"$ref": "common-v1.schema.json#/$defs/identifier"},
+        "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "direct_packages": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/direct_package"}
+        }
+      }
+    },
+    "direct_package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "artifact_hashes"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+        "version": {"type": "string", "minLength": 1},
+        "artifact_hashes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "common-v1.schema.json#/$defs/content_hash"}
+        }
+      }
+    }
+  }
+}

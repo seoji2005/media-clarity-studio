@@ -1,15 +1,15 @@
 """TASK-032 frozen-pack, decision-rule, and preflight contracts.
 
-This first slice is deliberately stdlib-only.  It validates immutable screening
-inputs and honest preparation blockers; it does not download a model, transcribe
-audio, or claim target Windows/GPU compatibility.
+This module is deliberately stdlib-only.  It validates immutable screening
+inputs, typed preparation evidence, and honest blockers; it does not download a
+model, transcribe audio, or claim target Windows/GPU compatibility.
 """
 
 from __future__ import annotations
 
 import math
 from collections import Counter
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Sequence
 
 from media_clarity.artifact_store import (
@@ -18,7 +18,7 @@ from media_clarity.artifact_store import (
     cas_relative_uri,
     digest_of,
 )
-from media_clarity.job_runtime import canonical_json_bytes
+from media_clarity.job_runtime import canonical_hash, canonical_json_bytes
 from media_clarity.schema_core import (
     COMMON_SCHEMA_FILE,
     DEFAULT_SCHEMA_DIR,
@@ -34,13 +34,19 @@ from media_clarity.schema_core import (
 PREFLIGHT_SCHEMA_FILE = "asr-screen-preflight-v1.schema.json"
 PACK_SCHEMA_FILE = "asr-screen-pack-manifest-v1.schema.json"
 DECISION_RULE_SCHEMA_FILE = "asr-screen-decision-rule-v1.schema.json"
+PREPARATION_SCHEMA_FILE = "asr-screen-preparation-v1.schema.json"
 SCHEMA_FILES = (
     COMMON_SCHEMA_FILE,
     PREFLIGHT_SCHEMA_FILE,
     PACK_SCHEMA_FILE,
     DECISION_RULE_SCHEMA_FILE,
+    PREPARATION_SCHEMA_FILE,
 )
 WORK_CPU_RECEIPT_POINTER = "/$defs/work_cpu_receipt"
+SCREEN_CONFIGURATION_POINTER = "/$defs/screen_configuration"
+ACCESS_LICENSE_RECEIPT_POINTER = "/$defs/access_license_receipt"
+MODEL_RECEIPT_POINTER = "/$defs/model_receipt"
+DEPENDENCY_LOCK_POINTER = "/$defs/dependency_lock"
 
 CANDIDATES: tuple[dict[str, Any], ...] = (
     {
@@ -103,6 +109,12 @@ ERROR_CODES = (
     "E_DECISION_RULE_POLICY",
     "E_DECISION_RULE_BINDING",
     "E_WORK_CPU_RECEIPT",
+    "E_PREPARATION_ARTIFACT",
+    "E_CONFIGURATION_POLICY",
+    "E_CONFIGURATION_BINDING",
+    "E_ACCESS_RECEIPT_BINDING",
+    "E_MODEL_RECEIPT_BINDING",
+    "E_DEPENDENCY_LOCK_BINDING",
     "E_RESUME_EVIDENCE",
     "E_ACCESS_RECEIPT",
     "E_CONFIGURATION_PENDING",
@@ -157,6 +169,7 @@ def _verify_cas_ref(
     location: str,
     expected_kind: str | None = None,
     expected_media_type: str | None = None,
+    error_code: str = "E_PACK_ARTIFACT",
 ) -> list[Finding]:
     findings = _schema_findings(
         ref,
@@ -169,26 +182,26 @@ def _verify_cas_ref(
     try:
         expected_uri = cas_relative_uri(digest_of(ref["content_hash"]))
     except (ContractViolation, KeyError, TypeError):
-        return [_finding(location, "E_PACK_ARTIFACT", "content hash cannot form a canonical CAS URI")]
+        return [_finding(location, error_code, "content hash cannot form a canonical CAS URI")]
     if ref.get("uri") != expected_uri:
-        findings.append(_finding(f"{location}/uri", "E_PACK_ARTIFACT", "not a canonical CAS URI"))
+        findings.append(_finding(f"{location}/uri", error_code, "not a canonical CAS URI"))
         return sort_findings(findings)
     cursor = store.project_root
     for segment in Path(expected_uri).parts:
         cursor /= segment
         if cursor.is_symlink():
-            findings.append(_finding(f"{location}/uri", "E_PACK_ARTIFACT", "CAS path contains a symbolic-link alias"))
+            findings.append(_finding(f"{location}/uri", error_code, "CAS path contains a symbolic-link alias"))
             return sort_findings(findings)
     try:
         store.verify_ref(ref, location)
     except (ContractViolation, KeyError, TypeError) as error:
-        findings.append(_finding(location, "E_PACK_ARTIFACT", str(error)))
+        findings.append(_finding(location, error_code, str(error)))
         return sort_findings(findings)
     if expected_kind is not None and ref.get("kind") != expected_kind:
-        findings.append(_finding(f"{location}/kind", "E_PACK_ARTIFACT", f"kind must be {expected_kind}"))
+        findings.append(_finding(f"{location}/kind", error_code, f"kind must be {expected_kind}"))
     if expected_media_type is not None and ref.get("media_type") != expected_media_type:
         findings.append(
-            _finding(f"{location}/media_type", "E_PACK_ARTIFACT", f"media type must be {expected_media_type}")
+            _finding(f"{location}/media_type", error_code, f"media type must be {expected_media_type}")
         )
     return sort_findings(findings)
 
@@ -198,6 +211,7 @@ def _load_json_ref(
     *,
     store: ArtifactStore,
     location: str,
+    error_code: str = "E_PACK_ARTIFACT",
 ) -> tuple[Mapping[str, Any] | None, list[Finding]]:
     findings = _verify_cas_ref(
         ref,
@@ -205,6 +219,7 @@ def _load_json_ref(
         location=location,
         expected_kind="text",
         expected_media_type="application/json",
+        error_code=error_code,
     )
     if findings or not isinstance(ref, Mapping):
         return None, findings
@@ -212,14 +227,14 @@ def _load_json_ref(
         payload = store.absolute(ref["uri"], f"{location}/uri").read_bytes()
         document = loads_strict(payload.decode("utf-8"))
     except (ContractViolation, JsonInputError, UnicodeDecodeError, OSError, KeyError, TypeError):
-        return None, [_finding(location, "E_PACK_ARTIFACT", "JSON CAS evidence cannot be read strictly")]
+        return None, [_finding(location, error_code, "JSON CAS evidence cannot be read strictly")]
     if not isinstance(document, Mapping):
-        return None, [_finding(location, "E_PACK_ARTIFACT", "JSON CAS evidence root must be an object")]
+        return None, [_finding(location, error_code, "JSON CAS evidence root must be an object")]
     try:
         if payload != canonical_json_bytes(document):
-            return None, [_finding(location, "E_PACK_ARTIFACT", "JSON CAS evidence is not canonical")]
+            return None, [_finding(location, error_code, "JSON CAS evidence is not canonical")]
     except (TypeError, ValueError, UnicodeEncodeError):
-        return None, [_finding(location, "E_PACK_ARTIFACT", "JSON CAS evidence cannot be canonicalized")]
+        return None, [_finding(location, error_code, "JSON CAS evidence cannot be canonicalized")]
     return document, []
 
 
@@ -328,6 +343,16 @@ def validate_pack_manifest(
                         expected_media_type="application/json",
                     )
                 )
+            if "speech_mask_ref" in clip:
+                findings.extend(
+                    _verify_cas_ref(
+                        clip["speech_mask_ref"],
+                        store=store,
+                        location=f"{where}/speech_mask_ref",
+                        expected_kind="text",
+                        expected_media_type="application/json",
+                    )
+                )
     return sort_findings(findings)
 
 
@@ -364,6 +389,30 @@ def validate_pack_pair(
         findings.append(
             _finding(location, "E_PACK_STRUCTURE", "primary and reserve evaluated audio must be disjoint")
         )
+    primary_sources = {clip["source_id"] for clip in primary["clips"]}
+    reserve_sources = {clip["source_id"] for clip in reserve["clips"]}
+    if primary_sources & reserve_sources:
+        findings.append(
+            _finding(location, "E_PACK_STRUCTURE", "primary and reserve source IDs must be disjoint")
+        )
+    for role, pack in (("primary", primary), ("reserve", reserve)):
+        source_metadata: dict[str, tuple[Any, ...]] = {}
+        for clip in pack["clips"]:
+            identity = (
+                clip["source_class"],
+                clip["source_kind"],
+                clip["license_id"],
+                clip["tts_engine_id"],
+            )
+            prior = source_metadata.setdefault(clip["source_id"], identity)
+            if prior != identity:
+                findings.append(
+                    _finding(
+                        f"{location}/{role}/clips",
+                        "E_PACK_STRUCTURE",
+                        "one source_id cannot describe conflicting source metadata",
+                    )
+                )
     return sort_findings(findings)
 
 
@@ -414,6 +463,292 @@ def validate_decision_rule(
     return sort_findings(findings)
 
 
+def _expected_candidate(candidate_id: str) -> Mapping[str, Any] | None:
+    return next((candidate for candidate in CANDIDATES if candidate["candidate_id"] == candidate_id), None)
+
+
+def validate_screen_configuration(
+    document: Any,
+    *,
+    location: str = "screen_configuration",
+    schema_dir: Path | None = None,
+) -> list[Finding]:
+    findings = _schema_findings(
+        document,
+        PREPARATION_SCHEMA_FILE,
+        location,
+        pointer=SCREEN_CONFIGURATION_POINTER,
+        schema_dir=schema_dir,
+    )
+    if findings or not isinstance(document, Mapping):
+        return sort_findings(findings)
+    if tuple(document["candidate_order"]) != CANDIDATE_ORDER:
+        findings.append(
+            _finding(f"{location}/candidate_order", "E_CONFIGURATION_BINDING", "candidate order differs from TASK-032")
+        )
+
+    vad = document["vad"]
+    expected_boundary = "whole_clip" if vad["mode"] == "disabled" else "pack_speech_mask"
+    if vad["boundary_source"] != expected_boundary:
+        findings.append(
+            _finding(f"{location}/vad/boundary_source", "E_CONFIGURATION_POLICY", "VAD mode and boundary source disagree")
+        )
+
+    hint = document["language_hint"]
+    if hint["mode"] == "none":
+        valid_hint = hint["value_source"] == "none" and hint["allowed_tags"] == []
+    else:
+        valid_hint = (
+            hint["value_source"] == "pack_clip_language_hint"
+            and hint["allowed_tags"] == ["ja", "en"]
+        )
+    if not valid_hint:
+        findings.append(
+            _finding(f"{location}/language_hint", "E_CONFIGURATION_POLICY", "language-hint fields do not form a closed policy")
+        )
+
+    chunking = document["chunking"]
+    if chunking["mode"] == "one_clip_per_unit":
+        valid_chunking = chunking["overlap_seconds"] == 0 and chunking["stitching"] == "none"
+    else:
+        valid_chunking = (
+            chunking["overlap_seconds"] < chunking["max_clip_seconds"]
+            and chunking["stitching"] == "frozen_overlap_dedup"
+        )
+    if not valid_chunking:
+        findings.append(
+            _finding(f"{location}/chunking", "E_CONFIGURATION_POLICY", "chunking fields do not form a closed policy")
+        )
+    return sort_findings(findings)
+
+
+def validate_configuration_pack_binding(
+    configuration: Mapping[str, Any],
+    primary: Mapping[str, Any],
+    reserve: Mapping[str, Any],
+    *,
+    location: str = "configuration_pack_binding",
+) -> list[Finding]:
+    findings: list[Finding] = []
+    clips = list(primary["clips"]) + list(reserve["clips"])
+    hint_mode = configuration["language_hint"]["mode"]
+    for index, clip in enumerate(clips):
+        where = f"{location}/clips/{index}"
+        has_hint = "language_hint" in clip
+        if hint_mode == "none" and has_hint:
+            findings.append(_finding(f"{where}/language_hint", "E_CONFIGURATION_BINDING", "hint is forbidden by frozen configuration"))
+        if hint_mode == "per_clip_dominant":
+            if clip["source_kind"] == "non_speech" and has_hint:
+                findings.append(_finding(f"{where}/language_hint", "E_CONFIGURATION_BINDING", "non-speech clip must not carry a language hint"))
+            if clip["source_kind"] != "non_speech" and not has_hint:
+                findings.append(_finding(f"{where}/language_hint", "E_CONFIGURATION_BINDING", "speech clip requires a frozen dominant-language hint"))
+        if configuration["vad"]["mode"] == "frozen_common_boundaries" and "speech_mask_ref" not in clip:
+            findings.append(_finding(f"{where}/speech_mask_ref", "E_CONFIGURATION_BINDING", "common VAD requires a frozen speech mask"))
+        if (
+            configuration["chunking"]["mode"] == "one_clip_per_unit"
+            and clip["duration_seconds"] > configuration["chunking"]["max_clip_seconds"]
+        ):
+            findings.append(_finding(f"{where}/duration_seconds", "E_CONFIGURATION_BINDING", "clip exceeds one-unit duration limit"))
+    return sort_findings(findings)
+
+
+def validate_access_license_receipt(
+    document: Any,
+    *,
+    candidate_id: str | None = None,
+    store: ArtifactStore | None = None,
+    location: str = "access_license_receipt",
+    schema_dir: Path | None = None,
+) -> list[Finding]:
+    findings = _schema_findings(
+        document,
+        PREPARATION_SCHEMA_FILE,
+        location,
+        pointer=ACCESS_LICENSE_RECEIPT_POINTER,
+        schema_dir=schema_dir,
+    )
+    if findings or not isinstance(document, Mapping):
+        return sort_findings(findings)
+    expected = _expected_candidate(candidate_id or document["candidate_id"])
+    if expected is None:
+        findings.append(_finding(f"{location}/candidate_id", "E_ACCESS_RECEIPT_BINDING", "unknown candidate"))
+        return sort_findings(findings)
+    for field in ("candidate_id", "official_model_id", "revision", "observed_license", "gated"):
+        if document[field] != expected[field]:
+            findings.append(_finding(f"{location}/{field}", "E_ACCESS_RECEIPT_BINDING", "receipt identity differs from TASK-032"))
+    source_uri = document["source_uri"]
+    if (
+        not source_uri.startswith("https://huggingface.co/")
+        or expected["official_model_id"] not in source_uri
+        or expected["revision"] not in source_uri
+    ):
+        findings.append(_finding(f"{location}/source_uri", "E_ACCESS_RECEIPT_BINDING", "receipt source does not bind model and revision"))
+    if expected["gated"]:
+        valid_state = (
+            (document["access_status"] == "accepted" and document["acceptance_status"] == "owner_accepted")
+            or (document["access_status"] == "blocked_access" and document["acceptance_status"] == "not_accepted")
+        )
+    else:
+        valid_state = (
+            document["access_status"] == "public_metadata_only"
+            and document["acceptance_status"] == "not_required"
+        )
+    if not valid_state:
+        findings.append(
+            _finding(f"{location}/access_status", "E_ACCESS_RECEIPT_BINDING", "access and acceptance states are inconsistent")
+        )
+    if document["metadata_hash"] != document["metadata_ref"].get("content_hash"):
+        findings.append(
+            _finding(f"{location}/metadata_hash", "E_ACCESS_RECEIPT_BINDING", "metadata hash does not bind metadata ref")
+        )
+    if store is None:
+        findings.append(
+            _finding(f"{location}/metadata_ref", "E_ACCESS_RECEIPT_BINDING", "metadata snapshot requires CAS verification")
+        )
+    else:
+        findings.extend(
+            _verify_cas_ref(
+                document["metadata_ref"],
+                store=store,
+                location=f"{location}/metadata_ref",
+                expected_kind="text",
+                expected_media_type="application/json",
+                error_code="E_PREPARATION_ARTIFACT",
+            )
+        )
+    return sort_findings(findings)
+
+
+def validate_model_receipt(
+    document: Any,
+    *,
+    candidate_id: str | None = None,
+    access_receipt_ref: Mapping[str, Any] | None = None,
+    location: str = "model_receipt",
+    schema_dir: Path | None = None,
+) -> list[Finding]:
+    findings = _schema_findings(
+        document,
+        PREPARATION_SCHEMA_FILE,
+        location,
+        pointer=MODEL_RECEIPT_POINTER,
+        schema_dir=schema_dir,
+    )
+    if findings or not isinstance(document, Mapping):
+        return sort_findings(findings)
+    expected = _expected_candidate(candidate_id or document["candidate_id"])
+    if expected is None:
+        findings.append(_finding(f"{location}/candidate_id", "E_MODEL_RECEIPT_BINDING", "unknown candidate"))
+        return sort_findings(findings)
+    for field in ("candidate_id", "official_model_id", "revision"):
+        if document[field] != expected[field]:
+            findings.append(_finding(f"{location}/{field}", "E_MODEL_RECEIPT_BINDING", "receipt identity differs from TASK-032"))
+    source_uri = document["source_uri"]
+    if (
+        not source_uri.startswith("https://huggingface.co/")
+        or expected["official_model_id"] not in source_uri
+        or expected["revision"] not in source_uri
+    ):
+        findings.append(_finding(f"{location}/source_uri", "E_MODEL_RECEIPT_BINDING", "snapshot source does not bind model and revision"))
+    if access_receipt_ref is not None and document["access_receipt_hash"] != access_receipt_ref.get("content_hash"):
+        findings.append(
+            _finding(f"{location}/access_receipt_hash", "E_MODEL_RECEIPT_BINDING", "model receipt does not bind access receipt")
+        )
+    files = document["files"]
+    paths = [item["relative_path"] for item in files]
+    if paths != sorted(paths) or len(paths) != len(set(paths)):
+        findings.append(_finding(f"{location}/files", "E_MODEL_RECEIPT_BINDING", "model file paths must be unique and sorted"))
+    for index, path in enumerate(paths):
+        parsed = PurePosixPath(path)
+        if (
+            parsed.is_absolute()
+            or ".." in parsed.parts
+            or "\\" in path
+            or path in (".", "")
+            or path != parsed.as_posix()
+        ):
+            findings.append(
+                _finding(f"{location}/files/{index}/relative_path", "E_MODEL_RECEIPT_BINDING", "model file path is not portable")
+            )
+    if document["file_count"] != len(files):
+        findings.append(_finding(f"{location}/file_count", "E_MODEL_RECEIPT_BINDING", "file count does not match inventory"))
+    if document["total_bytes"] != sum(item["byte_size"] for item in files):
+        findings.append(_finding(f"{location}/total_bytes", "E_MODEL_RECEIPT_BINDING", "byte total does not match inventory"))
+    if document["file_manifest_hash"] != canonical_hash(files):
+        findings.append(_finding(f"{location}/file_manifest_hash", "E_MODEL_RECEIPT_BINDING", "file inventory hash mismatch"))
+    if document["offline_load_status"] == "verified" and not document["download_complete"]:
+        findings.append(
+            _finding(f"{location}/offline_load_status", "E_MODEL_RECEIPT_BINDING", "offline verification requires a complete snapshot")
+        )
+    return sort_findings(findings)
+
+
+def validate_dependency_lock(
+    document: Any,
+    *,
+    store: ArtifactStore | None = None,
+    work_cpu_receipt: Mapping[str, Any] | None = None,
+    location: str = "dependency_lock",
+    schema_dir: Path | None = None,
+) -> list[Finding]:
+    findings = _schema_findings(
+        document,
+        PREPARATION_SCHEMA_FILE,
+        location,
+        pointer=DEPENDENCY_LOCK_POINTER,
+        schema_dir=schema_dir,
+    )
+    if findings or not isinstance(document, Mapping):
+        return sort_findings(findings)
+    if tuple(document["candidate_order"]) != CANDIDATE_ORDER:
+        findings.append(
+            _finding(f"{location}/candidate_order", "E_DEPENDENCY_LOCK_BINDING", "candidate order differs from TASK-032")
+        )
+    for index, (actual, expected) in enumerate(zip(document["candidates"], CANDIDATES, strict=True)):
+        where = f"{location}/candidates/{index}"
+        if actual["candidate_id"] != expected["candidate_id"] or actual["revision"] != expected["revision"]:
+            findings.append(_finding(where, "E_DEPENDENCY_LOCK_BINDING", "dependency candidate identity differs from TASK-032"))
+        names = [package["name"].lower().replace("_", "-") for package in actual["direct_packages"]]
+        if names != sorted(names) or len(names) != len(set(names)):
+            findings.append(_finding(f"{where}/direct_packages", "E_DEPENDENCY_LOCK_BINDING", "direct packages must be unique and sorted"))
+        for package_index, package in enumerate(actual["direct_packages"]):
+            if package["artifact_hashes"] != sorted(package["artifact_hashes"]):
+                findings.append(
+                    _finding(
+                        f"{where}/direct_packages/{package_index}/artifact_hashes",
+                        "E_DEPENDENCY_LOCK_BINDING",
+                        "package artifact hashes must be sorted",
+                    )
+                )
+    if store is None:
+        findings.append(_finding(f"{location}/lock_file_ref", "E_DEPENDENCY_LOCK_BINDING", "lock file requires CAS verification"))
+    else:
+        findings.extend(
+            _verify_cas_ref(
+                document["lock_file_ref"],
+                store=store,
+                location=f"{location}/lock_file_ref",
+                expected_kind="text",
+                expected_media_type="text/plain",
+                error_code="E_PREPARATION_ARTIFACT",
+            )
+        )
+    if work_cpu_receipt is not None:
+        expected_platform = (
+            work_cpu_receipt["python"]["version"],
+            work_cpu_receipt["host"]["os"],
+            work_cpu_receipt["host"]["architecture"],
+        )
+        actual_platform = (
+            document["python_version"],
+            document["platform_system"],
+            document["platform_architecture"],
+        )
+        if actual_platform != expected_platform:
+            findings.append(_finding(location, "E_DEPENDENCY_LOCK_BINDING", "lock target does not match Work CPU receipt"))
+    return sort_findings(findings)
+
+
 def _slot_findings(
     slot: Mapping[str, Any],
     *,
@@ -442,7 +777,10 @@ def expected_preflight_blockers(document: Mapping[str, Any]) -> tuple[tuple[str,
             blockers.add(("E_ACCESS_RECEIPT", candidate_id))
         if candidate["model_receipt_status"] != "verified":
             blockers.add(("E_MODEL_RECEIPT_PENDING", candidate_id))
-    if any(value != "frozen" for value in document["configuration_status"].values()):
+    if (
+        any(value != "frozen" for value in document["configuration_status"].values())
+        or document["evidence"]["screen_configuration"]["status"] != "verified"
+    ):
         blockers.add(("E_CONFIGURATION_PENDING", "screen-configuration"))
     evidence_codes = {
         "primary_pack": ("E_PACK_PENDING", "primary-pack"),
@@ -493,22 +831,159 @@ def validate_preflight(
         if actual["gated"] and actual["access_status"] == "public_metadata_only":
             findings.append(_finding(f"{where}/access_status", "E_ACCESS_RECEIPT", "gated candidate cannot be treated as public"))
 
+        access_document: Mapping[str, Any] | None = None
+        model_document: Mapping[str, Any] | None = None
+        if store is not None and actual["access_license_receipt_status"] == "verified":
+            access_document, access_findings = _load_json_ref(
+                actual["access_license_receipt_ref"],
+                store=store,
+                location=f"{where}/access_license_receipt_ref",
+                error_code="E_PREPARATION_ARTIFACT",
+            )
+            findings.extend(access_findings)
+            if access_document is not None:
+                findings.extend(
+                    validate_access_license_receipt(
+                        access_document,
+                        candidate_id=actual["candidate_id"],
+                        store=store,
+                        location=f"{where}/access_license_receipt",
+                    )
+                )
+                if access_document.get("access_status") != actual["access_status"]:
+                    findings.append(
+                        _finding(
+                            f"{where}/access_status",
+                            "E_ACCESS_RECEIPT_BINDING",
+                            "preflight access status differs from receipt",
+                        )
+                    )
+        if store is not None and actual["model_receipt_status"] == "verified":
+            model_document, model_findings = _load_json_ref(
+                actual["model_receipt_ref"],
+                store=store,
+                location=f"{where}/model_receipt_ref",
+                error_code="E_PREPARATION_ARTIFACT",
+            )
+            findings.extend(model_findings)
+            if model_document is not None:
+                access_ref = actual.get("access_license_receipt_ref")
+                findings.extend(
+                    validate_model_receipt(
+                        model_document,
+                        candidate_id=actual["candidate_id"],
+                        access_receipt_ref=access_ref if isinstance(access_ref, Mapping) else None,
+                        location=f"{where}/model_receipt",
+                    )
+                )
+                if not model_document.get("download_complete") or model_document.get("offline_load_status") != "verified":
+                    findings.append(
+                        _finding(
+                            f"{where}/model_receipt",
+                            "E_MODEL_RECEIPT_BINDING",
+                            "verified model slot requires a complete offline-load-verified snapshot",
+                        )
+                    )
     for name, slot in document["evidence"].items():
         findings.extend(_slot_findings(slot, store=store, location=f"{location}/evidence/{name}"))
+
+    evidence_documents: dict[str, Mapping[str, Any]] = {}
+    if store is not None:
+        for name, slot in document["evidence"].items():
+            if slot["status"] != "verified":
+                continue
+            loaded, load_findings = _load_json_ref(
+                slot["ref"],
+                store=store,
+                location=f"{location}/evidence/{name}/ref",
+                error_code="E_PREPARATION_ARTIFACT",
+            )
+            findings.extend(load_findings)
+            if loaded is not None:
+                evidence_documents[name] = loaded
+
+    configuration = evidence_documents.get("screen_configuration")
+    configuration_valid = False
+    if configuration is not None:
+        configuration_findings = validate_screen_configuration(
+            configuration, location=f"{location}/screen_configuration"
+        )
+        findings.extend(configuration_findings)
+        configuration_valid = not configuration_findings
+        if configuration_valid and (configuration.get("status") != "frozen" or any(
+            value != "frozen" for value in document["configuration_status"].values()
+        )):
+            findings.append(
+                _finding(
+                    f"{location}/configuration_status",
+                    "E_CONFIGURATION_BINDING",
+                    "verified screen configuration and status flags must all be frozen",
+                )
+            )
+
+    primary = evidence_documents.get("primary_pack")
+    reserve = evidence_documents.get("reserve_pack")
+    packs_valid = False
+    if primary is not None and reserve is not None:
+        pack_findings = validate_pack_pair(primary, reserve, store=store, location=f"{location}/packs")
+        findings.extend(pack_findings)
+        packs_valid = not pack_findings
+        if configuration_valid and packs_valid:
+            findings.extend(
+                validate_configuration_pack_binding(
+                    configuration,
+                    primary,
+                    reserve,
+                    location=f"{location}/configuration_pack_binding",
+                )
+            )
+
+    decision_rule = evidence_documents.get("decision_rule")
+    if decision_rule is not None:
+        primary_slot = document["evidence"]["primary_pack"]
+        reserve_slot = document["evidence"]["reserve_pack"]
+        primary_ref = primary_slot.get("ref") if primary_slot["status"] == "verified" else None
+        reserve_ref = reserve_slot.get("ref") if reserve_slot["status"] == "verified" else None
+        findings.extend(
+            validate_decision_rule(
+                decision_rule,
+                primary_pack_ref=primary_ref if isinstance(primary_ref, Mapping) else None,
+                reserve_pack_ref=reserve_ref if isinstance(reserve_ref, Mapping) else None,
+                location=f"{location}/decision_rule",
+            )
+        )
+
+    work_cpu = evidence_documents.get("work_cpu_environment")
+    work_cpu_valid = False
+    if work_cpu is not None:
+        work_cpu_findings = validate_work_cpu_receipt(work_cpu, location=f"{location}/work_cpu_environment")
+        findings.extend(work_cpu_findings)
+        work_cpu_valid = not work_cpu_findings
+
+    dependency_lock = evidence_documents.get("dependency_lock")
+    if dependency_lock is not None:
+        findings.extend(
+            validate_dependency_lock(
+                dependency_lock,
+                store=store,
+                work_cpu_receipt=work_cpu if work_cpu_valid else None,
+                location=f"{location}/dependency_lock",
+            )
+        )
 
     declared = tuple(sorted((item["code"], item["subject"]) for item in document["blockers"]))
     expected = expected_preflight_blockers(document)
     if declared != expected:
         findings.append(_finding(f"{location}/blockers", "E_PREFLIGHT_STATE", "declared blockers do not equal recomputed blockers"))
-    # This slice validates preparation evidence but intentionally has no model/file,
-    # dependency, or candidate-run adapter validator.  It therefore cannot authorize
-    # the first candidate output even if a caller forges all slots to "verified".
+    # Typed preparation evidence is validated above, but candidate-run adapters are
+    # intentionally absent.  Therefore no collection of preparation receipts can
+    # authorize the first candidate output in this slice.
     if document["status"] != "blocked":
         findings.append(
             _finding(
                 f"{location}/status",
                 "E_PREFLIGHT_STATE",
-                "first-slice preflight cannot authorize candidate output",
+                "preflight has no candidate-run authorization",
             )
         )
     return sort_findings(findings)

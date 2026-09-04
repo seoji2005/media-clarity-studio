@@ -63,6 +63,7 @@
     "dependency_lock": {"status": "pending"},
     "primary_pack": {"status": "pending"},
     "reserve_pack": {"status": "pending"},
+    "screen_configuration": {"status": "pending"},
     "work_cpu_environment": {"status": "pending"}
   },
   "execution_policy": {

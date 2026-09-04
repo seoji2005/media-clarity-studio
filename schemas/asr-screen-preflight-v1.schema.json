@@ -122,8 +122,9 @@
     "evidence": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["primary_pack", "reserve_pack", "decision_rule", "dependency_lock", "work_cpu_environment"],
+      "required": ["screen_configuration", "primary_pack", "reserve_pack", "decision_rule", "dependency_lock", "work_cpu_environment"],
       "properties": {
+        "screen_configuration": {"$ref": "#/$defs/evidence_slot"},
         "primary_pack": {"$ref": "#/$defs/evidence_slot"},
         "reserve_pack": {"$ref": "#/$defs/evidence_slot"},
         "decision_rule": {"$ref": "#/$defs/evidence_slot"},

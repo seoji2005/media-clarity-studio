@@ -71,6 +71,8 @@
         "license_id": {"type": "string", "minLength": 1},
         "upload_classification": {"const": "work_allowed_non_sensitive"},
         "tts_engine_id": {"type": "string"},
+        "language_hint": {"enum": ["ja", "en"]},
+        "speech_mask_ref": {"$ref": "common-v1.schema.json#/$defs/ArtifactRef"},
         "original_audio_ref": {"$ref": "common-v1.schema.json#/$defs/ArtifactRef"},
         "evaluated_audio_ref": {"$ref": "common-v1.schema.json#/$defs/ArtifactRef"},
         "reference_transcript_ref": {"$ref": "common-v1.schema.json#/$defs/ArtifactRef"},

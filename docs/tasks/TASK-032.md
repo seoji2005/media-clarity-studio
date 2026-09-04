@@ -1,6 +1,6 @@
 # TASK-032 — 공개·합성 frozen target pack 기반 3-ASR Work-CPU screening
 
-- **Status:** In progress — 첫 구현 slice(schema·synthetic CAS/recovery fixture·무료 Work-CPU preflight) Gate H 승인·PR #63 병합; 모델 실행 미착수
+- **Status:** In progress — 첫 구현 slice는 PR #63 병합; typed configuration·access/model/dependency receipt CAS binding 준비 slice 작성·검증 완료, fresh Gate H review 대기; 실제 값 고정·모델 실행 미착수
 - **Gate:** H (새 모델·dependency/network 경계와 후속 후보 선택에 영향을 주는 평가 계약)
 - **Created:** 2026-09-03
 - **Base:** `main@0c0f40ea318aff8b69180c9c6f510a627b0e0b9c`
@@ -277,6 +277,7 @@ hard gate를 통과한 후보 사이에서는 속도가 아니라 frozen pack �
 - [ ] report가 `top_two`, `inconclusive`, `blocked` 중 하나만 내고, 범위를 넘어선 우월성·Windows 주장을 하지 않는다.
 - [ ] 한 setup/model-snapshot 명령과 한 약 10분 winner/fallback local ASR 명령·expected artifacts·오류 catalog가 준비된다.
 - [ ] TASK-031 exact 8/12 계약, models, dependencies, network, cost는 별도 amendment/approval 없이 바뀌지 않는다.
+- [ ] typed preparation evidence가 configuration·pack·decision rule·Work CPU·dependency lock·후보별 access/model receipt의 실제 kind·identity·CAS를 교차 검증하고, ref 교환·source-group 누출·inventory/platform 위조를 fail-closed로 거부한다.
 - [x] fixed HEAD `0945cf31411e6b3c5cc149518e55cfff34087ce0`가 fresh GPT/Codex Gate H review에서 승인되고, 제품 오너가 PR #61의 exact HEAD/base를 별도 승인해 `dd3e78645e9ece7fffd8843c10ba37abcdde0a8e`로 병합됐다.
 - [x] 첫 구현 fixed HEAD `907ae37d635be06ea17e1774ed594102df885808`가 fresh GPT/Codex Gate H review에서 승인되고, 제품 오너가 PR #63의 exact HEAD/base를 별도 승인해 `9180090e348cd3e4a61489214dd47fec54768a70`로 병합됐다.
 
