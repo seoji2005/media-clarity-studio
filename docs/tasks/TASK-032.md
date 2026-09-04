@@ -1,6 +1,6 @@
 # TASK-032 — 공개·합성 frozen target pack 기반 3-ASR Work-CPU screening
 
-- **Status:** In progress — Gate H 승인, PR #61 계약 병합; 첫 구현 slice 미착수
+- **Status:** In progress — 첫 구현 slice(schema·synthetic CAS/recovery fixture·무료 Work-CPU preflight) 작성·검증 완료; fresh Gate H review 대기, 모델 실행 미착수
 - **Gate:** H (새 모델·dependency/network 경계와 후속 후보 선택에 영향을 주는 평가 계약)
 - **Created:** 2026-09-03
 - **Base:** `main@0c0f40ea318aff8b69180c9c6f510a627b0e0b9c`

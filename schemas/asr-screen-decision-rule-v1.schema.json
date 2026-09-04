@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://media-clarity-studio.local/schemas/asr-screen-decision-rule-v1.schema.json",
+  "title": "TASK-032 hash-locked ASR screen decision rule",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "candidate_order",
+    "primary_pack_hash",
+    "reserve_pack_hash",
+    "primary_metric",
+    "denominator",
+    "tier_order",
+    "source_cluster_key",
+    "bootstrap",
+    "mpe",
+    "pairwise_policy",
+    "reserve_policy"
+  ],
+  "properties": {
+    "schema_version": {"$ref": "common-v1.schema.json#/$defs/schema_version"},
+    "kind": {"const": "AsrScreenDecisionRule/v1"},
+    "candidate_order": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {"$ref": "common-v1.schema.json#/$defs/identifier"}
+    },
+    "primary_pack_hash": {"$ref": "common-v1.schema.json#/$defs/content_hash"},
+    "reserve_pack_hash": {"$ref": "common-v1.schema.json#/$defs/content_hash"},
+    "primary_metric": {"const": "fatal_clip_rate"},
+    "denominator": {"const": "all_scored_clips"},
+    "tier_order": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "fatal_rate_and_safety_cells",
+          "human_correction_seconds_per_audio_minute",
+          "japanese_cer_and_english_wer",
+          "mixed_and_names_numbers_terms_error_rate"
+        ]
+      }
+    },
+    "source_cluster_key": {"const": "source_id"},
+    "bootstrap": {"$ref": "#/$defs/bootstrap"},
+    "mpe": {"$ref": "#/$defs/mpe"},
+    "pairwise_policy": {"$ref": "#/$defs/pairwise_policy"},
+    "reserve_policy": {"$ref": "#/$defs/reserve_policy"}
+  },
+  "$defs": {
+    "bootstrap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "iterations", "seed", "confidence_level", "sidedness", "minimum_source_groups"],
+      "properties": {
+        "method": {"const": "percentile_cluster_bootstrap"},
+        "iterations": {"const": 10000},
+        "seed": {"const": 32061},
+        "confidence_level": {"const": 0.95},
+        "sidedness": {"const": "bilateral"},
+        "minimum_source_groups": {"const": 5}
+      }
+    },
+    "mpe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fatal_clip_rate", "correction_time", "text_error_rates", "safety_cell_event_count"],
+      "properties": {
+        "fatal_clip_rate": {"$ref": "#/$defs/fatal_mpe"},
+        "correction_time": {"$ref": "#/$defs/correction_mpe"},
+        "text_error_rates": {"const": 0.01},
+        "safety_cell_event_count": {"const": 1}
+      }
+    },
+    "fatal_mpe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["formula", "event_numerator", "absolute_floor", "denominator_key"],
+      "properties": {
+        "formula": {"const": "max(event_numerator/eligible_clip_count,absolute_floor)"},
+        "event_numerator": {"const": 1},
+        "absolute_floor": {"const": 0.01},
+        "denominator_key": {"const": "eligible_clip_count"}
+      }
+    },
+    "correction_mpe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["formula", "absolute_seconds_per_audio_minute", "slower_mean_fraction"],
+      "properties": {
+        "formula": {"const": "max(absolute_seconds_per_audio_minute,slower_mean_fraction*pairwise_slower_mean)"},
+        "absolute_seconds_per_audio_minute": {"const": 3.0},
+        "slower_mean_fraction": {"const": 0.05}
+      }
+    },
+    "pairwise_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "difference",
+        "materially_better",
+        "equivalent",
+        "indeterminate",
+        "fatal_safety_veto",
+        "tier_descent",
+        "text_tier_win",
+        "unique_bottom"
+      ],
+      "properties": {
+        "difference": {"const": "A-minus-B-lower-is-better"},
+        "materially_better": {"const": "ci_upper_lt_negative_mpe"},
+        "equivalent": {"const": "whole_ci_within_plus_minus_mpe"},
+        "indeterminate": {"const": "otherwise_or_ci_missing_or_source_groups_below_minimum"},
+        "fatal_safety_veto": {"const": "A_safety_cells_must_all_be_lte_B"},
+        "tier_descent": {"const": "equivalent_only_and_fatal_safety_cells_equal"},
+        "text_tier_win": {"const": "all_applicable_ci_upper_lte_mpe_and_one_ci_upper_lt_negative_mpe"},
+        "unique_bottom": {"const": "exactly_one_candidate_loses_to_each_other_candidate"}
+      }
+    },
+    "reserve_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trigger", "participants", "primary_verdict", "combined_rule", "unresolved_verdict"],
+      "properties": {
+        "trigger": {"const": "no_unique_bottom_on_primary"},
+        "participants": {"const": "all_three_candidates"},
+        "primary_verdict": {"const": "reserve_required"},
+        "combined_rule": {"const": "same_rule_on_primary_plus_reserve"},
+        "unresolved_verdict": {"const": "inconclusive"}
+      }
+    }
+  }
+}

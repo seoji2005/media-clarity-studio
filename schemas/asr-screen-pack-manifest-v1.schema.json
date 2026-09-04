@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://media-clarity-studio.local/schemas/asr-screen-pack-manifest-v1.schema.json",
+  "title": "TASK-032 frozen ASR screen pack manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "pack_id",
+    "role",
+    "purpose",
+    "total_duration_seconds",
+    "clips"
+  ],
+  "properties": {
+    "schema_version": {"$ref": "common-v1.schema.json#/$defs/schema_version"},
+    "kind": {"const": "AsrScreenPackManifest/v1"},
+    "pack_id": {"$ref": "common-v1.schema.json#/$defs/identifier"},
+    "role": {"enum": ["primary", "reserve"]},
+    "purpose": {"enum": ["synthetic_fixture", "frozen_evaluation"]},
+    "total_duration_seconds": {"type": "number", "exclusiveMinimum": 0},
+    "clips": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/clip"}
+    }
+  },
+  "$defs": {
+    "clip": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clip_id",
+        "source_id",
+        "stratum",
+        "duration_seconds",
+        "source_class",
+        "source_kind",
+        "license_id",
+        "upload_classification",
+        "tts_engine_id",
+        "original_audio_ref",
+        "evaluated_audio_ref",
+        "reference_transcript_ref",
+        "language_spans_ref",
+        "item_annotations_ref",
+        "degradation_recipe",
+        "original_hash",
+        "evaluated_hash"
+      ],
+      "properties": {
+        "clip_id": {"$ref": "common-v1.schema.json#/$defs/identifier"},
+        "source_id": {"$ref": "common-v1.schema.json#/$defs/identifier"},
+        "stratum": {
+          "enum": [
+            "clean_japanese",
+            "clean_english",
+            "code_switch_names_numbers_terms",
+            "fast_conversation_weak_overlap",
+            "music_noise_compression",
+            "silence_non_speech"
+          ]
+        },
+        "duration_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "source_class": {
+          "enum": ["public_licensed", "consented_non_sensitive", "synthetic_non_sensitive"]
+        },
+        "source_kind": {"enum": ["real_human", "tts", "non_speech"]},
+        "license_id": {"type": "string", "minLength": 1},
+        "upload_classification": {"const": "work_allowed_non_sensitive"},
+        "tts_engine_id": {"type": "string"},
+        "original_audio_ref": {"$ref": "common-v1.schema.json#/$defs/ArtifactRef"},
+        "evaluated_audio_ref": {"$ref": "common-v1.schema.json#/$defs/ArtifactRef"},
+        "reference_transcript_ref": {"$ref": "common-v1.schema.json#/$defs/ArtifactRef"},
+        "language_spans_ref": {"$ref": "common-v1.schema.json#/$defs/ArtifactRef"},
+        "item_annotations_ref": {"$ref": "common-v1.schema.json#/$defs/ArtifactRef"},
+        "degradation_recipe": {"type": "string", "minLength": 1},
+        "original_hash": {"$ref": "common-v1.schema.json#/$defs/content_hash"},
+        "evaluated_hash": {"$ref": "common-v1.schema.json#/$defs/content_hash"}
+      }
+    }
+  }
+}
