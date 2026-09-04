@@ -99,7 +99,7 @@ test-task-031-matrix:
 # Exact coverage/mutation matrix + previously merged TASK-031 evidence ladders
 verify-task-031-matrix: test-task-031-matrix verify-task-031-manifest-report
 
-# TASK-032 first implementation slice — closed preparation contract, no model/network use
+# TASK-032 closed typed preparation contract, no model/network use
 preflight-task-032:
 	$(PYTHON) -m media_clarity.asr_screen validate
 

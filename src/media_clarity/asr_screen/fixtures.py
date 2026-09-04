@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -19,10 +20,12 @@ from media_clarity.job_runtime import (
 from media_clarity.schema_core import load_strict
 
 from .contracts import (
+    CANDIDATES,
     CANDIDATE_ORDER,
     STRATA,
     load_pack_ref,
     validate_decision_rule,
+    validate_preflight,
     validate_pack_pair,
     validate_recovery_fixture_report,
 )
@@ -228,6 +231,222 @@ def build_contract_fixture(root: Path) -> dict[str, Any]:
         "decision_rule_ref": dict(rule_ref),
         "candidate_output_generated": False,
         "target_windows_compatibility": "not_evaluated",
+    }
+
+
+def _fixture_access_receipt(
+    candidate: Mapping[str, Any], metadata_ref: Mapping[str, Any]
+) -> dict[str, Any]:
+    gated = bool(candidate["gated"])
+    return {
+        "schema_version": "1.0.0",
+        "kind": "AsrScreenAccessLicenseReceipt/v1",
+        "candidate_id": candidate["candidate_id"],
+        "official_model_id": candidate["official_model_id"],
+        "revision": candidate["revision"],
+        "observed_license": candidate["observed_license"],
+        "gated": gated,
+        "source_uri": f"https://huggingface.co/{candidate['official_model_id']}/commit/{candidate['revision']}",
+        "metadata_ref": dict(metadata_ref),
+        "metadata_hash": metadata_ref["content_hash"],
+        "observed_at": "2026-09-04T00:00:00Z",
+        "access_status": "accepted" if gated else "public_metadata_only",
+        "acceptance_status": "owner_accepted" if gated else "not_required",
+        "credentials_stored": False,
+        "raw_token_recorded": False,
+    }
+
+
+def _fixture_configuration() -> dict[str, Any]:
+    return {
+        "schema_version": "1.0.0",
+        "kind": "AsrScreenConfiguration/v1",
+        "status": "frozen",
+        "candidate_order": list(CANDIDATE_ORDER),
+        "source_id_policy": {
+            "definition": "one-id-per-original-recording-session",
+            "same_recording_session_shares_id": True,
+            "derived_clips_share_id": True,
+            "primary_reserve_disjoint": True,
+        },
+        "vad": {
+            "mode": "disabled",
+            "boundary_source": "whole_clip",
+            "silence_probe_policy": "bypass-vad",
+            "identical_across_candidates": True,
+        },
+        "language_hint": {
+            "mode": "none",
+            "value_source": "none",
+            "allowed_tags": [],
+            "code_switch_policy": "single-dominant-hint-only",
+            "identical_across_candidates": True,
+        },
+        "chunking": {
+            "mode": "one_clip_per_unit",
+            "max_clip_seconds": 30.0,
+            "overlap_seconds": 0,
+            "stitching": "none",
+            "identical_across_candidates": True,
+        },
+        "normalization": {
+            "policy_id": "task032-synthetic-normalization",
+            "unicode_form": "NFC",
+            "latin_case": "preserve",
+            "punctuation": "preserve",
+            "whitespace": "preserve",
+            "numbers": "preserve_surface",
+            "raw_output_preserved": True,
+            "identical_across_candidates": True,
+        },
+        "claims": {
+            "candidate_output_generated": False,
+            "paid_cost_usd": 0,
+            "target_windows_compatibility": "not_evaluated",
+        },
+    }
+
+
+def build_preparation_fixture(root: Path, preflight: Mapping[str, Any]) -> dict[str, Any]:
+    """Build typed synthetic preparation evidence and a fully bound blocked preflight."""
+
+    contract = build_contract_fixture(root)
+    fixture = _FixtureStore(root)
+    configuration_ref = fixture.json("preparation-configuration.json", _fixture_configuration())
+
+    access_refs: dict[str, Mapping[str, Any]] = {}
+    model_refs: dict[str, Mapping[str, Any]] = {}
+    for candidate in CANDIDATES:
+        candidate_id = candidate["candidate_id"]
+        metadata_ref = fixture.json(
+            f"preparation-{candidate_id}-metadata.json",
+            {"fixture": "metadata", "candidate": candidate_id},
+        )
+        access_ref = fixture.json(
+            f"preparation-{candidate_id}-access.json",
+            _fixture_access_receipt(candidate, metadata_ref),
+        )
+        files = [
+            {
+                "relative_path": "config.json",
+                "content_hash": canonical_hash({"fixture": candidate_id, "file": "config.json"}),
+                "byte_size": 17,
+            },
+            {
+                "relative_path": "weights.bin",
+                "content_hash": canonical_hash({"fixture": candidate_id, "file": "weights.bin"}),
+                "byte_size": 23,
+            },
+        ]
+        model = {
+            "schema_version": "1.0.0",
+            "kind": "AsrScreenModelReceipt/v1",
+            "candidate_id": candidate_id,
+            "official_model_id": candidate["official_model_id"],
+            "revision": candidate["revision"],
+            "source_uri": f"https://huggingface.co/{candidate['official_model_id']}/tree/{candidate['revision']}",
+            "access_receipt_hash": access_ref["content_hash"],
+            "files": files,
+            "file_count": len(files),
+            "total_bytes": sum(item["byte_size"] for item in files),
+            "file_manifest_hash": canonical_hash(files),
+            "download_complete": True,
+            "offline_load_status": "verified",
+            "weights_in_git": False,
+        }
+        access_refs[candidate_id] = access_ref
+        model_refs[candidate_id] = fixture.json(f"preparation-{candidate_id}-model.json", model)
+
+    work_cpu = {
+        "schema_version": "1.0.0",
+        "kind": "AsrScreenWorkCpuReceipt/v1",
+        "captured_at": "2026-09-04T00:00:00Z",
+        "probe_implementation_hash": canonical_hash({"fixture": "work-cpu-probe"}),
+        "host": {"os": "linux", "release": "fixture", "architecture": "x86_64"},
+        "python": {"implementation": "cpython", "version": "3.12.0"},
+        "cpu": {"logical_count": 1},
+        "memory": {"total_bytes": 1},
+        "claims": {
+            "candidate_output_generated": False,
+            "paid_cost_usd": 0,
+            "target_windows_compatibility": "not_evaluated",
+            "target_gpu_compatibility": "not_evaluated",
+        },
+    }
+    work_cpu_ref = fixture.json("preparation-work-cpu.json", work_cpu)
+    lock_file_ref = fixture.bytes(
+        "preparation-requirements.lock",
+        b"# synthetic fixture only\n",
+        kind="text",
+        media_type="text/plain",
+    )
+    dependency_lock = {
+        "schema_version": "1.0.0",
+        "kind": "AsrScreenDependencyLock/v1",
+        "lock_id": "task032-synthetic-work-cpu-lock",
+        "target_environment": "work-cpu",
+        "python_version": "3.12.0",
+        "platform_system": "linux",
+        "platform_architecture": "x86_64",
+        "lock_format": "requirements-with-hashes",
+        "resolver": {
+            "name": "synthetic-resolver",
+            "version": "1.0.0",
+            "source_hash": canonical_hash({"fixture": "resolver"}),
+        },
+        "candidate_order": list(CANDIDATE_ORDER),
+        "candidates": [
+            {
+                "candidate_id": candidate["candidate_id"],
+                "revision": candidate["revision"],
+                "direct_packages": [
+                    {
+                        "name": f"fixture-{candidate['candidate_id']}",
+                        "version": "1.0.0",
+                        "artifact_hashes": [canonical_hash({"fixture": candidate["candidate_id"], "package": 1})],
+                    }
+                ],
+            }
+            for candidate in CANDIDATES
+        ],
+        "lock_file_ref": dict(lock_file_ref),
+        "fully_hashed": True,
+        "network_scope": "fixed-model-and-dependency-preparation-only",
+        "paid_cost_usd": 0,
+    }
+    dependency_lock_ref = fixture.json("preparation-dependency-lock.json", dependency_lock)
+
+    bound = copy.deepcopy(preflight)
+    for field in bound["configuration_status"]:
+        bound["configuration_status"][field] = "frozen"
+    bound["evidence"] = {
+        "screen_configuration": {"status": "verified", "ref": dict(configuration_ref)},
+        "primary_pack": {"status": "verified", "ref": contract["primary_pack_ref"]},
+        "reserve_pack": {"status": "verified", "ref": contract["reserve_pack_ref"]},
+        "decision_rule": {"status": "verified", "ref": contract["decision_rule_ref"]},
+        "dependency_lock": {"status": "verified", "ref": dict(dependency_lock_ref)},
+        "work_cpu_environment": {"status": "verified", "ref": dict(work_cpu_ref)},
+    }
+    for candidate in bound["candidates"]:
+        candidate_id = candidate["candidate_id"]
+        candidate["access_license_receipt_status"] = "verified"
+        candidate["access_license_receipt_ref"] = dict(access_refs[candidate_id])
+        candidate["model_receipt_status"] = "verified"
+        candidate["model_receipt_ref"] = dict(model_refs[candidate_id])
+        if candidate["gated"]:
+            candidate["access_status"] = "accepted"
+    bound["blockers"] = []
+    findings = validate_preflight(bound, store=fixture.store)
+    if findings:
+        raise SyntheticFixtureError(findings[0].as_line())
+    return {
+        "preflight": bound,
+        "store": fixture.store,
+        "configuration_ref": dict(configuration_ref),
+        "access_refs": {key: dict(value) for key, value in access_refs.items()},
+        "model_refs": {key: dict(value) for key, value in model_refs.items()},
+        "dependency_lock_ref": dict(dependency_lock_ref),
+        "work_cpu_ref": dict(work_cpu_ref),
     }
 
 
