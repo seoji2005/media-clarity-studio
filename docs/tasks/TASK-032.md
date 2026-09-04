@@ -1,9 +1,10 @@
 # TASK-032 — 공개·합성 frozen target pack 기반 3-ASR Work-CPU screening
 
-- **Status:** In review — G61-01~03 제한 수정 후 fresh Gate H 재검토 대기
+- **Status:** In progress — Gate H 승인, PR #61 계약 병합; 첫 구현 slice 미착수
 - **Gate:** H (새 모델·dependency/network 경계와 후속 후보 선택에 영향을 주는 평가 계약)
 - **Created:** 2026-09-03
 - **Base:** `main@0c0f40ea318aff8b69180c9c6f510a627b0e0b9c`
+- **Contract merge:** PR #61, `dd3e78645e9ece7fffd8843c10ba37abcdde0a8e` (approved fixed HEAD `0945cf31411e6b3c5cc149518e55cfff34087ce0`)
 - **Parent work:** TASK-031의 후보 결정을 돕는 별도 screening. TASK-031 계약 자체는 이 TASK에서 수정하지 않음
 - **Owner / Author:** Lean Root / GPT-Codex
 - **Reviewer:** 이 fixed HEAD를 작성하지 않은 fresh GPT/Codex Gate H reviewer
@@ -275,12 +276,12 @@ hard gate를 통과한 후보 사이에서는 속도가 아니라 frozen pack �
 - [ ] report가 `top_two`, `inconclusive`, `blocked` 중 하나만 내고, 범위를 넘어선 우월성·Windows 주장을 하지 않는다.
 - [ ] 한 setup/model-snapshot 명령과 한 약 10분 winner/fallback local ASR 명령·expected artifacts·오류 catalog가 준비된다.
 - [ ] TASK-031 exact 8/12 계약, models, dependencies, network, cost는 별도 amendment/approval 없이 바뀌지 않는다.
-- [ ] fixed HEAD가 fresh GPT/Codex Gate H review에서 승인되고, 제품 오너가 exact PR/HEAD/base를 별도 승인한다.
+- [x] fixed HEAD `0945cf31411e6b3c5cc149518e55cfff34087ce0`가 fresh GPT/Codex Gate H review에서 승인되고, 제품 오너가 PR #61의 exact HEAD/base를 별도 승인해 `dd3e78645e9ece7fffd8843c10ba37abcdde0a8e`로 병합됐다.
 
 ## 11. rollback과 다음 허용 행동
 
-rollback unit은 TASK-032 branch/PR 전체다. contract가 거절되면 네 문서 변경만 되돌리며 TASK-031과 기존
-CAS evidence는 그대로 남는다.
+계약 checkpoint의 rollback unit은 PR #61 전체다. 병합 전 거절 시 네 문서 변경만 되돌리는 범위였으며,
+병합 뒤 rollback이 필요해도 TASK-031과 기존 CAS evidence는 그대로 보존한다.
 
 - contract 승인·병합 뒤: deterministic schema/fixture/harness와 무료 Work-CPU preflight를 첫 구현 slice로 만든다.
 - CPU 실행 가능: 후보별 interrupted/resumed sentinel → primary → 필요 시 세 후보 reserve 순서로 진행한다.
