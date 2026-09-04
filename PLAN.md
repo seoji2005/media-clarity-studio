@@ -2,7 +2,7 @@
 
 `media-clarity-studio`의 로드맵입니다.
 
-마지막 갱신: 2026-09-04 (TASK-032 계약 승인·PR #61 병합)
+마지막 갱신: 2026-09-04 (TASK-032 첫 구현 slice Gate H 승인·PR #63 병합)
 상태: **제안됨 (Proposed) 유지** — PR #5 병합은 계획 기준선 작업을 완료했지만,
 제안됨 ADR·실행 순서·미해결 U-XX를 자동 승인하거나 해결하지 않습니다
 
@@ -207,7 +207,7 @@ TASK-029  자막 spine 기계 계약·schema·validator·fixture — 완료 (PR 
 TASK-031  고정 10분 A-min 로컬 자막 calibration vertical slice — exact synthetic 8-cell/12-stage validation 병합 완료
    │
    ▼
-TASK-032  공개·허가·합성 frozen pack 3-ASR Work-CPU screening — 계약 승인·병합, 첫 구현 slice 대기
+TASK-032  공개·허가·합성 frozen pack 3-ASR Work-CPU screening — 첫 구현 slice 승인·병합, 실행 준비 evidence 대기
    │
    ▼
 TASK-031  screening 상위 2종만 별도 후보 amendment/review 뒤 local 2×2로 복귀
@@ -223,7 +223,7 @@ TASK-031  screening 상위 2종만 별도 후보 amendment/review 뒤 local 2×2
 | **TASK-028** | 공용 storage·orchestrator 실행 기반 | TASK-006 완료 | **Done — REVIEW-022 승인, PR #36 병합** |
 | **TASK-029** | 자막 spine 기계 계약과 기계 정본 구현 | TASK-028 완료와 별도 TASK 계약 | **Done — Gate H 승인, PR #45 병합 (`6f94705598c1ef57a4d25682938cbcbbaf044732`)** |
 | **TASK-031** | U-22 A-min 실제 자막 vertical slice와 calibration | TASK-029 완료, 제품 오너 A-min 결정, 별도 dependency/model/network gate | **In progress — exact synthetic 8-cell/12-stage validation은 Gate H 승인 뒤 PR #59로 병합. 실제 evidence 축과 target Windows 실측은 후속** |
-| **TASK-032** | 공개·합성 frozen pack 3-ASR Work-CPU screening | PR #60 상태 정합화 merge, 제품 오너 Work-CPU·비민감 자료·비용 0 gate | **In progress — Gate H 승인, PR #61 계약 병합 (`dd3e78645e9ece7fffd8843c10ba37abcdde0a8e`); deterministic schema/fixture/harness와 무료 Work-CPU preflight가 다음 slice. TASK-031 8/12 closed set은 불변** |
+| **TASK-032** | 공개·합성 frozen pack 3-ASR Work-CPU screening | PR #60 상태 정합화 merge, 제품 오너 Work-CPU·비민감 자료·비용 0 gate | **In progress — 계약 PR #61과 첫 구현 slice PR #63 병합 (`9180090e348cd3e4a61489214dd47fec54768a70`); 다음은 source_id·VAD·language hint·chunking·normalization, dependency lock과 pack/model/access receipt 고정. TASK-031 8/12 closed set은 불변** |
 
 **왜 이렇게 보수적으로 두는가**
 
@@ -244,7 +244,9 @@ TASK-031  screening 상위 2종만 별도 후보 amendment/review 뒤 local 2×2
 > PR #54 병합 상태 정합화는 PR #55로, manifest/report evidence spine은 G56-01 remediation과 Gate H 승인 뒤
 > PR #56으로 병합됐습니다. exact synthetic 8-cell/12-stage fail-closed validation은 Gate H 승인 뒤
 > PR #59로 병합됐고 상태 정합화는 PR #60으로 병합됐습니다. 별도 TASK-032 계약은 Gate H 승인 뒤
-> PR #61로 병합됐습니다. 공개·허가·합성 자료로 세 ASR 후보를 Work CPU에서 먼저 screen하고,
+> PR #61로 병합됐고, 닫힌 preflight/schema·synthetic CAS/recovery harness 첫 구현 slice는 Gate H 승인 뒤
+> PR #63 merge commit `9180090e348cd3e4a61489214dd47fec54768a70`로 병합됐습니다. 공개·허가·합성 자료로 세 ASR
+> 후보를 Work CPU에서 먼저 screen하고,
 > 상위 2종만 별도 TASK-031 후보 amendment/review 뒤
 > local 2×2에 올립니다. 유료 provider/GPU의 현재 지출 상한은 0이며, target Windows 접근 뒤
 > hash lock·environment evidence·exact model receipt를 준비하고 실제 calibration으로 진행합니다.
