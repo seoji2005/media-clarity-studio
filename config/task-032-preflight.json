@@ -1,0 +1,83 @@
+{
+  "blockers": [
+    {"code": "E_ACCESS_RECEIPT", "subject": "cohere-transcribe-03-2026"},
+    {"code": "E_ACCESS_RECEIPT", "subject": "faster-whisper-large-v3"},
+    {"code": "E_ACCESS_RECEIPT", "subject": "qwen3-asr-1.7b"},
+    {"code": "E_CONFIGURATION_PENDING", "subject": "screen-configuration"},
+    {"code": "E_DECISION_RULE_PENDING", "subject": "decision-rule"},
+    {"code": "E_DEPENDENCY_LOCK_PENDING", "subject": "work-cpu-lock"},
+    {"code": "E_MODEL_RECEIPT_PENDING", "subject": "cohere-transcribe-03-2026"},
+    {"code": "E_MODEL_RECEIPT_PENDING", "subject": "faster-whisper-large-v3"},
+    {"code": "E_MODEL_RECEIPT_PENDING", "subject": "qwen3-asr-1.7b"},
+    {"code": "E_PACK_PENDING", "subject": "primary-pack"},
+    {"code": "E_PACK_PENDING", "subject": "reserve-pack"},
+    {"code": "E_WORK_CPU_EVIDENCE_PENDING", "subject": "work-cpu-environment"}
+  ],
+  "candidate_order": [
+    "qwen3-asr-1.7b",
+    "cohere-transcribe-03-2026",
+    "faster-whisper-large-v3"
+  ],
+  "candidate_output_authorization": "not_implemented_in_first_slice",
+  "candidates": [
+    {
+      "access_license_receipt_status": "pending",
+      "access_status": "public_metadata_only",
+      "candidate_id": "qwen3-asr-1.7b",
+      "gated": false,
+      "model_receipt_status": "pending",
+      "observed_license": "Apache-2.0",
+      "official_model_id": "Qwen/Qwen3-ASR-1.7B",
+      "revision": "7278e1e70fe206f11671096ffdd38061171dd6e5"
+    },
+    {
+      "access_license_receipt_status": "pending",
+      "access_status": "blocked_access",
+      "candidate_id": "cohere-transcribe-03-2026",
+      "gated": true,
+      "model_receipt_status": "pending",
+      "observed_license": "Apache-2.0",
+      "official_model_id": "CohereLabs/cohere-transcribe-03-2026",
+      "revision": "b1eacc2686a3d08ceaae5f24a88b1d519620bc09"
+    },
+    {
+      "access_license_receipt_status": "pending",
+      "access_status": "public_metadata_only",
+      "candidate_id": "faster-whisper-large-v3",
+      "gated": false,
+      "model_receipt_status": "pending",
+      "observed_license": "MIT",
+      "official_model_id": "Systran/faster-whisper-large-v3",
+      "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478"
+    }
+  ],
+  "configuration_status": {
+    "chunking": "pending",
+    "language_hint": "pending",
+    "normalization": "pending",
+    "source_id_definition": "pending",
+    "vad": "pending"
+  },
+  "evidence": {
+    "decision_rule": {"status": "pending"},
+    "dependency_lock": {"status": "pending"},
+    "primary_pack": {"status": "pending"},
+    "reserve_pack": {"status": "pending"},
+    "work_cpu_environment": {"status": "pending"}
+  },
+  "execution_policy": {
+    "batch_size": 1,
+    "compute_scope": "work_cpu_free",
+    "deterministic_decoding_required": true,
+    "model_weights_in_git_allowed": false,
+    "paid_provider_allowed": false,
+    "private_media_allowed": false,
+    "quantization": "none",
+    "spending_cap_usd": 0,
+    "target_windows_compatibility": "not_evaluated"
+  },
+  "kind": "AsrScreenPreflight/v1",
+  "schema_version": "1.0.0",
+  "status": "blocked",
+  "task_id": "TASK-032"
+}

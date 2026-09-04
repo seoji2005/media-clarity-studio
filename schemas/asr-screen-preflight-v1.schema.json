@@ -1,0 +1,216 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://media-clarity-studio.local/schemas/asr-screen-preflight-v1.schema.json",
+  "title": "TASK-032 free Work-CPU screening preflight",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "task_id",
+    "status",
+    "candidate_output_authorization",
+    "candidate_order",
+    "candidates",
+    "execution_policy",
+    "configuration_status",
+    "evidence",
+    "blockers"
+  ],
+  "properties": {
+    "schema_version": {"$ref": "common-v1.schema.json#/$defs/schema_version"},
+    "kind": {"const": "AsrScreenPreflight/v1"},
+    "task_id": {"const": "TASK-032"},
+    "status": {"enum": ["blocked", "ready_for_candidate_output"]},
+    "candidate_output_authorization": {"const": "not_implemented_in_first_slice"},
+    "candidate_order": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {"$ref": "common-v1.schema.json#/$defs/identifier"}
+    },
+    "candidates": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {"$ref": "#/$defs/candidate"}
+    },
+    "execution_policy": {"$ref": "#/$defs/execution_policy"},
+    "configuration_status": {"$ref": "#/$defs/configuration_status"},
+    "evidence": {"$ref": "#/$defs/evidence"},
+    "blockers": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/blocker"}
+    }
+  },
+  "$defs": {
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "official_model_id",
+        "revision",
+        "observed_license",
+        "gated",
+        "access_status",
+        "access_license_receipt_status",
+        "model_receipt_status"
+      ],
+      "properties": {
+        "candidate_id": {"$ref": "common-v1.schema.json#/$defs/identifier"},
+        "official_model_id": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "observed_license": {"enum": ["Apache-2.0", "MIT"]},
+        "gated": {"type": "boolean"},
+        "access_status": {"enum": ["public_metadata_only", "blocked_access", "accepted"]},
+        "access_license_receipt_status": {"enum": ["pending", "verified"]},
+        "access_license_receipt_ref": {"$ref": "common-v1.schema.json#/$defs/ArtifactRef"},
+        "model_receipt_status": {"enum": ["pending", "verified"]},
+        "model_receipt_ref": {"$ref": "common-v1.schema.json#/$defs/ArtifactRef"}
+      }
+    },
+    "execution_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "compute_scope",
+        "paid_provider_allowed",
+        "spending_cap_usd",
+        "private_media_allowed",
+        "model_weights_in_git_allowed",
+        "batch_size",
+        "quantization",
+        "deterministic_decoding_required",
+        "target_windows_compatibility"
+      ],
+      "properties": {
+        "compute_scope": {"const": "work_cpu_free"},
+        "paid_provider_allowed": {"const": false},
+        "spending_cap_usd": {"const": 0},
+        "private_media_allowed": {"const": false},
+        "model_weights_in_git_allowed": {"const": false},
+        "batch_size": {"const": 1},
+        "quantization": {"const": "none"},
+        "deterministic_decoding_required": {"const": true},
+        "target_windows_compatibility": {"const": "not_evaluated"}
+      }
+    },
+    "configuration_status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id_definition", "vad", "language_hint", "chunking", "normalization"],
+      "properties": {
+        "source_id_definition": {"enum": ["pending", "frozen"]},
+        "vad": {"enum": ["pending", "frozen"]},
+        "language_hint": {"enum": ["pending", "frozen"]},
+        "chunking": {"enum": ["pending", "frozen"]},
+        "normalization": {"enum": ["pending", "frozen"]}
+      }
+    },
+    "evidence_slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["pending", "verified"]},
+        "ref": {"$ref": "common-v1.schema.json#/$defs/ArtifactRef"}
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary_pack", "reserve_pack", "decision_rule", "dependency_lock", "work_cpu_environment"],
+      "properties": {
+        "primary_pack": {"$ref": "#/$defs/evidence_slot"},
+        "reserve_pack": {"$ref": "#/$defs/evidence_slot"},
+        "decision_rule": {"$ref": "#/$defs/evidence_slot"},
+        "dependency_lock": {"$ref": "#/$defs/evidence_slot"},
+        "work_cpu_environment": {"$ref": "#/$defs/evidence_slot"}
+      }
+    },
+    "blocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "subject"],
+      "properties": {
+        "code": {
+          "enum": [
+            "E_ACCESS_RECEIPT",
+            "E_CONFIGURATION_PENDING",
+            "E_DECISION_RULE_PENDING",
+            "E_DEPENDENCY_LOCK_PENDING",
+            "E_MODEL_RECEIPT_PENDING",
+            "E_PACK_PENDING",
+            "E_WORK_CPU_EVIDENCE_PENDING"
+          ]
+        },
+        "subject": {"$ref": "common-v1.schema.json#/$defs/identifier"}
+      }
+    },
+    "work_cpu_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "captured_at", "probe_implementation_hash", "host", "python", "cpu", "memory", "claims"],
+      "properties": {
+        "schema_version": {"$ref": "common-v1.schema.json#/$defs/schema_version"},
+        "kind": {"const": "AsrScreenWorkCpuReceipt/v1"},
+        "captured_at": {"$ref": "common-v1.schema.json#/$defs/timestamp"},
+        "probe_implementation_hash": {"$ref": "common-v1.schema.json#/$defs/content_hash"},
+        "host": {"$ref": "#/$defs/work_cpu_host"},
+        "python": {"$ref": "#/$defs/work_cpu_python"},
+        "cpu": {"$ref": "#/$defs/work_cpu_cpu"},
+        "memory": {"$ref": "#/$defs/work_cpu_memory"},
+        "claims": {"$ref": "#/$defs/work_cpu_claims"}
+      }
+    },
+    "work_cpu_host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "release", "architecture"],
+      "properties": {
+        "os": {"type": "string", "minLength": 1},
+        "release": {"type": "string", "minLength": 1},
+        "architecture": {"type": "string", "minLength": 1}
+      }
+    },
+    "work_cpu_python": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implementation", "version"],
+      "properties": {
+        "implementation": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1}
+      }
+    },
+    "work_cpu_cpu": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["logical_count"],
+      "properties": {
+        "logical_count": {"type": "integer", "minimum": 1}
+      }
+    },
+    "work_cpu_memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total_bytes"],
+      "properties": {
+        "total_bytes": {"type": "integer", "minimum": 1}
+      }
+    },
+    "work_cpu_claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_output_generated", "paid_cost_usd", "target_windows_compatibility", "target_gpu_compatibility"],
+      "properties": {
+        "candidate_output_generated": {"const": false},
+        "paid_cost_usd": {"const": 0},
+        "target_windows_compatibility": {"const": "not_evaluated"},
+        "target_gpu_compatibility": {"const": "not_evaluated"}
+      }
+    }
+  }
+}

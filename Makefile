@@ -8,7 +8,9 @@ export PYTHONPATH := src
 	preflight-task-031 test-task-031-preflight verify-task-031-preflight \
 	test-task-031-evidence verify-task-031-evidence \
 	test-task-031-manifest-report verify-task-031-manifest-report \
-	test-task-031-matrix verify-task-031-matrix
+	test-task-031-matrix verify-task-031-matrix \
+	preflight-task-032 probe-task-032-work-cpu fixtures-task-032 \
+	test-task-032-preflight verify-task-032-preflight
 
 static:
 	$(PYTHON) -m compileall -q src tests scripts
@@ -96,3 +98,21 @@ test-task-031-matrix:
 
 # Exact coverage/mutation matrix + previously merged TASK-031 evidence ladders
 verify-task-031-matrix: test-task-031-matrix verify-task-031-manifest-report
+
+# TASK-032 first implementation slice — closed preparation contract, no model/network use
+preflight-task-032:
+	$(PYTHON) -m media_clarity.asr_screen validate
+
+# Honest current Work CPU receipt; explicitly makes no Windows/GPU compatibility claim
+probe-task-032-work-cpu:
+	$(PYTHON) -m media_clarity.asr_screen probe-work-cpu
+
+# Tiny synthetic CAS and controlled interruption/resume fixtures (no evaluation media)
+fixtures-task-032:
+	$(PYTHON) scripts/task_032_fixture.py
+
+test-task-032-preflight:
+	$(PYTHON) -m unittest discover -s tests -p 'test_task032_preflight.py'
+
+verify-task-032-preflight: preflight-task-032 probe-task-032-work-cpu \
+	fixtures-task-032 test-task-032-preflight static
