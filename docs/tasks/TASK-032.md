@@ -1,10 +1,11 @@
 # TASK-032 — 공개·합성 frozen target pack 기반 3-ASR Work-CPU screening
 
-- **Status:** In progress — 첫 구현 slice(schema·synthetic CAS/recovery fixture·무료 Work-CPU preflight) 작성·검증 완료; fresh Gate H review 대기, 모델 실행 미착수
+- **Status:** In progress — 첫 구현 slice(schema·synthetic CAS/recovery fixture·무료 Work-CPU preflight) Gate H 승인·PR #63 병합; 모델 실행 미착수
 - **Gate:** H (새 모델·dependency/network 경계와 후속 후보 선택에 영향을 주는 평가 계약)
 - **Created:** 2026-09-03
 - **Base:** `main@0c0f40ea318aff8b69180c9c6f510a627b0e0b9c`
 - **Contract merge:** PR #61, `dd3e78645e9ece7fffd8843c10ba37abcdde0a8e` (approved fixed HEAD `0945cf31411e6b3c5cc149518e55cfff34087ce0`)
+- **First implementation merge:** PR #63, `9180090e348cd3e4a61489214dd47fec54768a70` (approved fixed HEAD `907ae37d635be06ea17e1774ed594102df885808`)
 - **Parent work:** TASK-031의 후보 결정을 돕는 별도 screening. TASK-031 계약 자체는 이 TASK에서 수정하지 않음
 - **Owner / Author:** Lean Root / GPT-Codex
 - **Reviewer:** 이 fixed HEAD를 작성하지 않은 fresh GPT/Codex Gate H reviewer
@@ -277,13 +278,16 @@ hard gate를 통과한 후보 사이에서는 속도가 아니라 frozen pack �
 - [ ] 한 setup/model-snapshot 명령과 한 약 10분 winner/fallback local ASR 명령·expected artifacts·오류 catalog가 준비된다.
 - [ ] TASK-031 exact 8/12 계약, models, dependencies, network, cost는 별도 amendment/approval 없이 바뀌지 않는다.
 - [x] fixed HEAD `0945cf31411e6b3c5cc149518e55cfff34087ce0`가 fresh GPT/Codex Gate H review에서 승인되고, 제품 오너가 PR #61의 exact HEAD/base를 별도 승인해 `dd3e78645e9ece7fffd8843c10ba37abcdde0a8e`로 병합됐다.
+- [x] 첫 구현 fixed HEAD `907ae37d635be06ea17e1774ed594102df885808`가 fresh GPT/Codex Gate H review에서 승인되고, 제품 오너가 PR #63의 exact HEAD/base를 별도 승인해 `9180090e348cd3e4a61489214dd47fec54768a70`로 병합됐다.
 
 ## 11. rollback과 다음 허용 행동
 
 계약 checkpoint의 rollback unit은 PR #61 전체다. 병합 전 거절 시 네 문서 변경만 되돌리는 범위였으며,
 병합 뒤 rollback이 필요해도 TASK-031과 기존 CAS evidence는 그대로 보존한다.
+첫 구현 slice의 rollback unit은 PR #63 전체이며, 병합된 tree는 승인된 fixed HEAD tree와 같다.
 
-- contract 승인·병합 뒤: deterministic schema/fixture/harness와 무료 Work-CPU preflight를 첫 구현 slice로 만든다.
+- 완료된 전이: deterministic schema/fixture/harness와 무료 Work-CPU preflight 첫 구현 slice는 PR #63으로 병합됐다.
+- 다음 준비 slice: source_id·VAD·language hint·chunking·normalization, dependency lock과 pack/model/access receipt를 출력 전에 고정한다.
 - CPU 실행 가능: 후보별 interrupted/resumed sentinel → primary → 필요 시 세 후보 reserve 순서로 진행한다.
 - CPU 실행 불가능: 준비 tooling을 끝낸 뒤 provider·GPU·지출 상한 decision gate만 제품 오너에게 요청한다.
 - top two가 명확함: TASK-031 후보 identity amendment를 별도 Gate H로 제안한다.
